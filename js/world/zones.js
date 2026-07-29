@@ -68,10 +68,10 @@ export const ZONES = {
       return 'w';
     },
     props: [
-      { type: 'citywindow', x: 1, y: 1 },
-      { type: 'citywindow', x: 3, y: 1 },
-      { type: 'citywindow', x: 5, y: 1 },
-      { type: 'citywindow', x: 7, y: 1 },
+      { type: 'wallwindow', x: 1, y: 0 },
+      { type: 'wallwindow', x: 3, y: 0 },
+      { type: 'wallwindow', x: 5, y: 0 },
+      { type: 'wallwindow', x: 7, y: 0 },
       { type: 'executivedesk', x: 3, y: 3, nameplate: true },
       { type: 'clientchair', x: 3, y: 5 },
       { type: 'clientchair', x: 6, y: 5 },
@@ -99,9 +99,9 @@ export const ZONES = {
       return 'w';
     },
     props: [
-      { type: 'citywindow', x: 1, y: 1 },
-      { type: 'citywindow', x: 3, y: 1 },
-      { type: 'citywindow', x: 5, y: 1 },
+      { type: 'wallwindow', x: 1, y: 0 },
+      { type: 'wallwindow', x: 3, y: 0 },
+      { type: 'wallwindow', x: 5, y: 0 },
       { type: 'executivedesk', x: 3, y: 3, nameplate: true },
       { type: 'bookshelf', x: 6, y: 4, full: true },
       { type: 'plant', x: 1, y: 5 },
@@ -191,6 +191,9 @@ export const ZONES = {
       { type: 'cabinet', x: 1, y: 4,
         interact: { label: 'Furniture Catalog', action: 'shop_apartment' } },
       { type: 'homedesk', x: 8, y: 6, visible: () => hasUpgrade('homedesk') },
+      { type: 'wallwindow', x: 3, y: 0, visible: () => hasUpgrade('cityview') },
+      { type: 'tv', x: 5, y: 3, visible: () => hasUpgrade('cityview') },
+      { type: 'sofa', x: 3, y: 5, visible: () => hasUpgrade('cityview') },
       { type: 'plant', x: 1, y: 6 },
     ],
     portals: [

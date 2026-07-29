@@ -12,6 +12,8 @@ const arizonaPath = path.join(
   projectRoot,
   'Ethics Agents/ethics-check-az/references/rpc.md',
 );
+const californiaDir = path.join(projectRoot, 'California References');
+const californiaPath = path.join(californiaDir, 'rpc.md');
 const outputPath = path.join(projectRoot, 'js/data/rules.js');
 
 function normalizeRuleText(text) {
@@ -77,9 +79,59 @@ function parseArizona(source) {
   return rows;
 }
 
-const [nevadaSource, arizonaSource] = await Promise.all([
+function parseCalifornia(source) {
+  const tocStart = source.indexOf('Rule 1.0 Purpose and Function');
+  const tocEnd = source.indexOf('#### Page 6');
+  const titleMap = new Map();
+  let current = null;
+  for (const rawLine of source.slice(tocStart, tocEnd).split('\n')) {
+    const line = rawLine.trim();
+    const heading = line.match(/^Rule\s+(\d+(?:\.\d+)+)\s+(.+)$/);
+    if (heading) {
+      current = { number: heading[1], parts: [heading[2]] };
+      titleMap.set(current.number, current);
+    } else if (
+      current
+      && line
+      && !/^(?:####|RULES OF|2023|TABLE|CROSS-|Current Rules|CHAPTER)/.test(line)
+    ) {
+      current.parts.push(line);
+    }
+  }
+
+  const actualRulesAt = source.indexOf('#### Page 13');
+  if (actualRulesAt < 0) throw new Error('Could not locate the California rule-text section.');
+  const ruleText = source.slice(actualRulesAt);
+  const pattern = /^Rule\s+(\d+(?:\.\d+)+)\s+(.+)$/gm;
+  const matches = [...ruleText.matchAll(pattern)];
+
+  return matches.map((match, index) => {
+    const bodyStart = match.index + match[0].length;
+    const bodyEnd = matches[index + 1]?.index ?? ruleText.length;
+    const text = normalizeRuleText(ruleText.slice(bodyStart, bodyEnd))
+      .replace(/^RULES OF PROFESSIONAL CONDUCT\s*$/gm, '')
+      .replace(/^\d+\s+CURRENT RULES 2023\s*$/gm, '')
+      .replace(/^2023 CURRENT RULES\s+\d+\s*$/gm, '')
+      .replace(/^An asterisk.*$/gm, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
+    return {
+      number: match[1],
+      title: (titleMap.get(match[1])?.parts.join(' ') || match[2])
+        .replace(/\*?\s+\d+$/, '')
+        .replace(/\*$/, '')
+        .trim(),
+      text,
+      url: 'https://www.calbar.ca.gov/index.php/legal-professionals/rules/rules-professional-conduct/current-rules-professional-conduct',
+    };
+  });
+}
+
+const [nevadaSource, arizonaSource, californiaSource] = await Promise.all([
   readFile(nevadaPath, 'utf8'),
   readFile(arizonaPath, 'utf8'),
+  readFile(californiaPath, 'utf8'),
 ]);
 
 const library = [
@@ -100,6 +152,43 @@ const library = [
     officialUrl: 'https://www.azbar.org/for-legal-professionals/lawyer-regulation/resources/rules-of-professional-conduct/',
     note: 'The local corpus contains a complete rule index and full text for selected rules. Open the official rule link for current text when a card is marked index-only.',
     rules: parseArizona(arizonaSource),
+  },
+  {
+    id: 'california',
+    tabLabel: 'California CRPC',
+    title: 'California Legal Ethics References',
+    citation: 'CRPC',
+    snapshot: 'Local corpus includes the 2023 California Rules of Professional Conduct and COPRAC opinions through 2024-209',
+    officialUrl: 'https://www.calbar.ca.gov/index.php/legal-professionals/rules/rules-professional-conduct/current-rules-professional-conduct',
+    note: 'The bundled reference files are an authoring corpus. Confirm current rules and later amendments through the State Bar before relying on them.',
+    rules: parseCalifornia(californiaSource),
+    resources: [
+      {
+        title: 'California Rules of Professional Conduct',
+        description: 'Full 2023 rule text and cross-reference tables.',
+        href: 'California References/rpc.md',
+      },
+      {
+        title: 'COPRAC Formal Opinions Index',
+        description: 'Searchable navigation index for the bundled California ethics opinions.',
+        href: 'California References/opinions-index.md',
+      },
+      {
+        title: 'COPRAC Formal Opinions — Full Text',
+        description: 'Complete local opinion corpus from 1965 through Opinion 2024-209.',
+        href: 'California References/opinions-full.md',
+      },
+      {
+        title: 'Admissions, Discipline, Trust Accounts, IOLTA, and CLE',
+        description: 'Reference pointer to the controlling California sources.',
+        href: 'California References/admission-discipline.md',
+      },
+      {
+        title: 'State Bar Disciplinary Procedure',
+        description: 'Reference pointer and procedural framework for State Bar Court matters.',
+        href: 'California References/disciplinary-procedure.md',
+      },
+    ],
   },
 ];
 

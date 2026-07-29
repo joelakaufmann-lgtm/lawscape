@@ -30,14 +30,28 @@ test('partner offices and conference room contain their defining fixtures', () =
   assert.equal(ZONES.corner_office.npcs[0].name, 'Jim Hardsell, Managing Partner');
   assert.equal(ZONES.corner_office.npcs[0].talk, 'jim');
   assert.ok(ZONES.corner_office.props.some((prop) => prop.type === 'executivedesk'));
-  assert.ok(ZONES.corner_office.props.filter((prop) => prop.type === 'citywindow').length >= 3);
+  const jimWindows = ZONES.corner_office.props.filter((prop) => prop.type === 'wallwindow');
+  assert.ok(jimWindows.length >= 3);
+  assert.ok(jimWindows.every((prop) => prop.y === 0));
 
   assert.equal(ZONES.linda_office.npcs[0].name, 'Linda Firestone, Partner');
   assert.equal(ZONES.linda_office.npcs[0].talk, 'linda');
   assert.ok(ZONES.linda_office.props.some((prop) => prop.type === 'executivedesk'));
+  const lindaWindows = ZONES.linda_office.props.filter((prop) => prop.type === 'wallwindow');
+  assert.ok(lindaWindows.length >= 3);
+  assert.ok(lindaWindows.every((prop) => prop.y === 0));
 
   assert.ok(ZONES.conference_room.props.some((prop) => prop.type === 'tv'));
   assert.ok(ZONES.conference_room.props.some((prop) => prop.type === 'conftable'));
+});
+
+test('the City View Apartment upgrade adds its wall window, television, and sofa', () => {
+  const cityViewProps = ZONES.apartment.props.filter(
+    (prop) => ['wallwindow', 'tv', 'sofa'].includes(prop.type),
+  );
+  assert.deepEqual(cityViewProps.map((prop) => prop.type), ['wallwindow', 'tv', 'sofa']);
+  assert.equal(cityViewProps.find((prop) => prop.type === 'wallwindow').y, 0);
+  assert.ok(cityViewProps.every((prop) => typeof prop.visible === 'function'));
 });
 
 test('the courtroom is furnished and intentionally empty', () => {

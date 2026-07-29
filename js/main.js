@@ -22,6 +22,8 @@ import {
   DOC_REVIEW_CYCLE_MS,
   DOC_REVIEW_REWARD,
   LINDA_TIP_COST,
+  RILEY_HINT_COST,
+  rileyHintEligible,
 } from './data/work.js';
 
 const $ = (id) => document.getElementById(id);
@@ -307,6 +309,7 @@ function openTravelMenu() {
 // BarMail — the ethics email minigame
 // ---------------------------------------------------------------------------
 let currentScenario = null;
+let hintPurchasedForCurrent = false;
 
 function currentDifficulty() {
   if (state.casesDone < 5) return 1;
@@ -329,8 +332,8 @@ function pickScenario() {
 function openEmail() {
   if (docReview.active) stopDocumentReview(false);
   currentScenario = pickScenario();
+  hintPurchasedForCurrent = false;
   const s = currentScenario;
-  const b = bonuses(state.upgrades);
 
   $('email-subject').textContent = s.subject;
   $('email-from').textContent = `From: ${s.from} — ${s.role}`;
@@ -348,12 +351,17 @@ function openEmail() {
   }
 
   const ruleEl = $('email-rule');
-  if (b.showRule) {
-    ruleEl.textContent = `⚖ ${s.rule}`;
-    ruleEl.classList.remove('hidden');
-  } else {
-    ruleEl.classList.add('hidden');
-  }
+  ruleEl.textContent = '';
+  ruleEl.classList.add('hidden');
+
+  const hintEl = $('email-hint');
+  const canAskRiley = rileyHintEligible(state.upgrades);
+  hintEl.textContent = `Ask Riley for Hint · ${RILEY_HINT_COST} gold`;
+  hintEl.disabled = state.gold < RILEY_HINT_COST;
+  hintEl.title = hintEl.disabled
+    ? `You need ${RILEY_HINT_COST} gold for Riley to research this rule.`
+    : 'Pay Riley to research the relevant rule before you answer.';
+  hintEl.classList.toggle('hidden', !canAskRiley);
 
   const wrap = $('email-choices');
   wrap.innerHTML = '';
@@ -372,6 +380,29 @@ function openEmail() {
   hoverLabel(null);
 }
 
+function buyEthicsHint() {
+  if (!currentScenario || hintPurchasedForCurrent) return;
+  if (!rileyHintEligible(state.upgrades)) {
+    toast('Riley needs both the Paralegal Upgrade and Ethics Treatise Shelf.');
+    return;
+  }
+  if (state.gold < RILEY_HINT_COST) {
+    toast(`You need ${RILEY_HINT_COST} gold for an ethics hint.`);
+    return;
+  }
+  state.gold -= RILEY_HINT_COST;
+  state.hintsPurchased++;
+  hintPurchasedForCurrent = true;
+  save();
+  updateHUD();
+  $('email-hint').classList.add('hidden');
+  $('email-rule').textContent = `Riley’s research: ${currentScenario.rule}`;
+  $('email-rule').classList.remove('hidden');
+  toast(`Riley finds the relevant rule. −${RILEY_HINT_COST} gold.`);
+}
+
+$('email-hint').addEventListener('click', buyEthicsHint);
+
 function answerEmail(choice) {
   const s = currentScenario;
   const b = bonuses(state.upgrades);
@@ -380,6 +411,7 @@ function answerEmail(choice) {
   const deltaEl = $('email-delta');
   let disbarred = false;
 
+  $('email-hint').classList.add('hidden');
   state.casesDone++;
   if (choice.grade === 'correct') {
     const earned = Math.round(s.gold * b.goldMult + b.goldFlat);
@@ -431,10 +463,10 @@ function appendScenarioSource(container, scenario) {
   source.className = 'scenario-source';
   source.append('Source note: ');
   const local = document.createElement('a');
-  local.href = 'MPRE_Associate_Email_Scenarios.md';
+  local.href = scenario.localSourceFile || 'MPRE_Associate_Email_Scenarios.md';
   local.target = '_blank';
   local.rel = 'noopener';
-  local.textContent = 'MPRE Associate Email Scenarios';
+  local.textContent = scenario.localSourceFile || 'MPRE Associate Email Scenarios';
   source.append(local, ' · ');
   const official = document.createElement('a');
   official.href = scenario.sourceUrl;
@@ -520,6 +552,30 @@ function openRuleLibrary() {
     note.textContent = `${set.snapshot}. ${set.note}`;
     body.appendChild(note);
 
+    if (set.resources?.length) {
+      const heading = document.createElement('h3');
+      heading.className = 'rule-resource-heading';
+      heading.textContent = 'California reference files';
+      body.appendChild(heading);
+
+      const resources = document.createElement('div');
+      resources.className = 'rule-resources';
+      for (const resource of set.resources) {
+        const link = document.createElement('a');
+        link.className = 'rule-resource-link';
+        link.href = resource.href;
+        link.target = '_blank';
+        link.rel = 'noopener';
+        const title = document.createElement('strong');
+        title.textContent = resource.title;
+        const description = document.createElement('span');
+        description.textContent = resource.description;
+        link.append(title, description);
+        resources.appendChild(link);
+      }
+      body.appendChild(resources);
+    }
+
     const results = document.createElement('div');
     body.appendChild(results);
 
@@ -554,7 +610,9 @@ function openRuleLibrary() {
         } else {
           const indexOnly = document.createElement('div');
           indexOnly.className = 'rule-index-only';
-          indexOnly.textContent = 'This local authoring file contains the rule index but not this rule’s full text. ';
+          indexOnly.textContent = rule.title === '[Reserved]'
+            ? 'This rule is reserved.'
+            : 'This local authoring file contains the rule index but not this rule’s full text. ';
           card.appendChild(indexOnly);
         }
 
@@ -577,7 +635,8 @@ function openRuleLibrary() {
   for (const set of RULE_LIBRARY) {
     const button = document.createElement('button');
     button.dataset.set = set.id;
-    button.textContent = set.id === 'nevada' ? 'Nevada NRPC' : 'Arizona ER';
+    button.textContent = set.tabLabel
+      || (set.id === 'nevada' ? 'Nevada NRPC' : 'Arizona ER');
     button.onclick = () => selectSet(set);
     tabs.appendChild(button);
   }
@@ -670,6 +729,7 @@ function openRecord() {
     <div class="row-item"><div class="grow"><h4>Current streak</h4></div><div class="meta">x${state.streak}</div></div>
     <div class="row-item"><div class="grow"><h4>Document-review cycles</h4></div><div class="meta">${state.documentsReviewed}</div></div>
     <div class="row-item"><div class="grow"><h4>Linda’s ethics tips</h4></div><div class="meta">${state.tipsPurchased}</div></div>
+    <div class="row-item"><div class="grow"><h4>Riley’s rule hints</h4></div><div class="meta">${state.hintsPurchased}</div></div>
     <div class="row-item"><div class="grow"><h4>Gold</h4></div><div class="meta">🪙 ${Math.floor(state.gold)}</div></div>
     <div class="row-item"><div class="grow"><h4>Ethics</h4></div><div class="meta">⚖ ${state.ethics}/${maxEthics()}</div></div>
     <div class="row-item"><div class="grow"><h4>Upgrades owned</h4></div><div class="meta">${state.upgrades.length}</div></div>`;

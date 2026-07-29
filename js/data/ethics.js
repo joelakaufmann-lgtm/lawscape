@@ -15,6 +15,7 @@
 // rule, shown to the player when they lose Ethics.
 
 import { MPRE_SCENARIOS } from './mpre.js';
+import { ADDITIONAL_MPRE_SCENARIOS } from './mpre-additional.js';
 
 export const WRONG_DMG = 10;
 export const VERY_WRONG_DMG = 25;
@@ -459,4 +460,5 @@ export const SCENARIOS = [
     sourceType: 'lawscape',
   })),
   ...MPRE_SCENARIOS,
+  ...ADDITIONAL_MPRE_SCENARIOS,
 ];

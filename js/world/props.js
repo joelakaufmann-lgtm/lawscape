@@ -258,32 +258,58 @@ export const PROPS = {
       ctx.strokeRect(c.x - 8, c.y - 48, 21, 13);
     },
   },
-  citywindow: {
-    w: 2, h: 1, solid: true,
+  wallwindow: {
+    w: 2, h: 1, solid: false, noShadow: true,
     draw(ctx, ox, oy, prop, t) {
-      const c = p(ox, oy, 0.5, 0);
-      const top = c.y - 78;
+      // This parallelogram follows the y=0 wall plane. Unlike the former
+      // front-facing rectangle, it reads as part of the isometric wall.
+      const leftBottom = { x: ox - 24, y: oy + 4 };
+      const rightBottom = { x: ox + 24, y: oy + 28 };
+      const leftTop = { x: leftBottom.x, y: leftBottom.y - 60 };
+      const rightTop = { x: rightBottom.x, y: rightBottom.y - 60 };
       ctx.fillStyle = '#152a43';
-      ctx.fillRect(c.x - 48, top, 96, 60);
+      quad(ctx,
+        leftTop.x, leftTop.y, rightTop.x, rightTop.y,
+        rightBottom.x, rightBottom.y, leftBottom.x, leftBottom.y);
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(leftTop.x, leftTop.y);
+      ctx.lineTo(rightTop.x, rightTop.y);
+      ctx.lineTo(rightBottom.x, rightBottom.y);
+      ctx.lineTo(leftBottom.x, leftBottom.y);
+      ctx.closePath();
+      ctx.clip();
+
       const glow = 0.55 + Math.sin(t * 0.7 + prop.x) * 0.08;
-      const buildings = [
-        [-44, 26], [-32, 38], [-18, 30], [-3, 45], [14, 34], [29, 48], [42, 28],
-      ];
+      const buildings = [[-23, 25], [-12, 38], [0, 30], [11, 46], [22, 34]];
       ctx.fillStyle = '#0e1828';
-      for (const [x, height] of buildings) ctx.fillRect(c.x + x, top + 60 - height, 12, height);
+      for (const [x, height] of buildings) {
+        ctx.fillRect(ox + x, oy + 26 - height, 9, height + 18);
+      }
       ctx.fillStyle = `rgba(217,182,86,${glow})`;
-      for (let x = -40; x < 44; x += 16) {
-        for (let y = 13; y < 51; y += 13) {
-          if ((x + y + prop.x) % 3) ctx.fillRect(c.x + x, top + y, 3, 3);
+      for (let x = -19; x < 24; x += 11) {
+        for (let y = -42; y < 18; y += 12) {
+          if ((x + y + prop.x) % 3) ctx.fillRect(ox + x, oy + y, 2, 3);
         }
       }
+      ctx.restore();
+
       ctx.strokeStyle = PAL.brass;
-      ctx.lineWidth = 4;
-      ctx.strokeRect(c.x - 50, top - 2, 100, 64);
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(leftTop.x, leftTop.y);
+      ctx.lineTo(rightTop.x, rightTop.y);
+      ctx.lineTo(rightBottom.x, rightBottom.y);
+      ctx.lineTo(leftBottom.x, leftBottom.y);
+      ctx.closePath();
+      ctx.stroke();
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(c.x, top); ctx.lineTo(c.x, top + 60);
-      ctx.moveTo(c.x - 48, top + 29); ctx.lineTo(c.x + 48, top + 29);
+      ctx.moveTo((leftTop.x + rightTop.x) / 2, (leftTop.y + rightTop.y) / 2);
+      ctx.lineTo((leftBottom.x + rightBottom.x) / 2, (leftBottom.y + rightBottom.y) / 2);
+      ctx.moveTo(leftTop.x, leftTop.y + 30);
+      ctx.lineTo(rightTop.x, rightTop.y + 30);
       ctx.stroke();
     },
   },

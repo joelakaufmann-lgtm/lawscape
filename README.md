@@ -29,10 +29,10 @@ Your progress is stored only in that browser.
 
 ## What is playable
 
-- 29 legal-ethics scenarios involving trust accounting, conflicts, candor,
+- 49 legal-ethics scenarios involving trust accounting, conflicts, candor,
   confidentiality, the no-contact rule, solicitation, fee splitting,
   spoliation, and reporting misconduct.
-- Three progressive difficulty tiers, including eight original MPRE-style
+- Three progressive difficulty tiers, including 28 original MPRE-style
   workplace-email scenarios with source notes and official NCBE preparation
   links.
 - Character creation with appearance options.
@@ -40,13 +40,18 @@ Your progress is stored only in that browser.
   Firestone’s office, a conference room, an apartment, and a furnished but
   intentionally empty courtroom.
 - One-minute document-review cycles at the filing cabinet that earn five gold.
-- A searchable ethics-treatise reader built from the project’s local Nevada and
-  Arizona rule material, with links to the current official sources.
+- A searchable ethics-treatise reader built from the project’s local Nevada,
+  Arizona, and California material. The California shelf also links the bundled
+  opinions, discipline, admissions, trust-account, and CLE references.
 - Office characters Liz Loza, Riley Readsalot, Jim Hardsell, and Linda
   Firestone, each with a distinct role or interaction.
 - Gold, Ethics health, answer streaks, rest, upgrades, and persistent saves.
 - Purchasable coffee that restores two Ethics points per drink and five-gold
   ethics tips from Linda.
+- Optional relevant-rule hints cost 100 gold and require both Riley Readsalot
+  and the Ethics Treatise Shelf; buying the shelf alone never reveals a rule.
+- The City View Apartment upgrade adds a wall-mounted skyline window, couch,
+  and television.
 - A professional record, NPC conversations, travel, minimap, and responsive
   desktop/mobile controls.
 - Disbarment at zero Ethics, which resets the saved game.
@@ -76,12 +81,12 @@ npm test
 `js/lawscape.bundle.js` is generated and committed so players can open the game
 from disk. Edit the source modules rather than the bundle.
 
-When the local rule-authoring Markdown changes, regenerate the public,
-browser-readable snapshot before building:
+Normal builds regenerate the public rule snapshot and additional-question
+module automatically. To refresh either source independently:
 
 ```sh
 npm run rules:build
-npm run build
+npm run mpre:build
 ```
 
 ## Publish on GitHub Pages
@@ -114,15 +119,17 @@ tests/                     Node test suite
 See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines and
 [SECURITY.md](SECURITY.md) for the project’s security model.
 
-Local authoring corpora and packaged ethics-agent archives are intentionally
-excluded from the public repository. The generated, player-readable rule
-snapshot is committed as `js/data/rules.js`; gameplay scenarios live in
-`js/data/ethics.js` and `js/data/mpre.js`.
+Packaged ethics-agent archives are intentionally excluded from the public
+repository. The generated player-readable rule snapshot and supplied
+`California References/` bundle are committed for the treatise shelf; gameplay
+scenarios live in `js/data/ethics.js`, `js/data/mpre.js`, and generated
+`js/data/mpre-additional.js`.
 
 The MPRE-style scenarios are original LawScape adaptations for educational
 practice. They are not official NCBE questions and do not reproduce secure
 exam content. See [MPRE_Associate_Email_Scenarios.md](MPRE_Associate_Email_Scenarios.md)
-for the local scenario notes and the official NCBE preparation link.
+and [the additional 20-question set](MPRE_Associate_Email_Scenarios_Additional_20.md)
+for local scenario notes and official reference links.
 
 ## Educational disclaimer
 

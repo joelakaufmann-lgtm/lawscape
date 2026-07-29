@@ -211,6 +211,18 @@ button:focus-visible, input:focus-visible, summary:focus-visible, #world:focus-v
   padding: 9px 11px; margin-bottom: 10px; border-left: 4px solid var(--brass);
   background: #fff9e9; font-size: 12px; line-height: 1.45;
 }
+.rule-resource-heading { margin: 14px 0 7px; font-size: 15px; color: var(--navy); }
+.rule-resources {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 7px; margin-bottom: 14px;
+}
+.rule-resource-link {
+  display: flex; flex-direction: column; gap: 3px; padding: 9px 10px;
+  background: var(--parchment-dark); border: 1px solid var(--brass);
+  border-radius: 5px; color: var(--navy); text-decoration: none;
+}
+.rule-resource-link:hover { background: #fff4ce; }
+.rule-resource-link span { color: #625d54; font-size: 11px; line-height: 1.35; }
 .rule-card {
   margin-bottom: 8px; border: 1px solid #c7b47d; border-radius: 6px;
   background: #fffaf0; overflow: hidden;
@@ -293,6 +305,12 @@ button:focus-visible, input:focus-visible, summary:focus-visible, #world:focus-v
   margin-left: auto; background: var(--parchment); border: 1px solid var(--brass);
   border-radius: 4px; padding: 2px 8px; font-size: 11px; color: var(--navy); font-weight: bold;
 }
+#email-hint {
+  margin-left: auto; padding: 3px 8px; font: bold 10px/1.2 Verdana, sans-serif;
+  background: var(--green); border-color: var(--brass); white-space: nowrap;
+}
+#email-hint:disabled { opacity: 0.5; cursor: not-allowed; }
+#email-hint:not(.hidden) + #email-rule { margin-left: 0; }
 #email-difficulty, #email-source {
   border-radius: 4px; padding: 2px 7px; font-size: 10px; font-weight: bold;
 }

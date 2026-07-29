@@ -5,8 +5,10 @@
   "description": "A browser-based legal ethics RPG.",
   "type": "module",
   "scripts": {
+    "prebuild": "npm run rules:build && npm run mpre:build",
     "build": "node scripts/build.mjs && node scripts/package-site.mjs",
     "check": "node scripts/check.mjs",
+    "mpre:build": "node scripts/build-mpre-questions.mjs",
     "rules:build": "node scripts/build-rule-library.mjs",
     "start": "node scripts/serve.mjs",
     "test": "node --test && npm run check"

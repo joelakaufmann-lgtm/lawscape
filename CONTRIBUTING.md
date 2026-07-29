@@ -12,9 +12,10 @@ Thanks for helping improve LawScape.
 `js/lawscape.bundle.js` is generated. Please edit the source modules rather
 than the bundle.
 
-If you change a local ethics-rule authoring file, run `npm run rules:build`
-before the normal build. Review the generated `js/data/rules.js` for snapshot
-dates, source labels, and official links.
+If you change a local ethics-rule authoring file, run `npm run rules:build`.
+If you edit the additional 20-question Markdown source, run
+`npm run mpre:build`. A normal `npm run build` refreshes both generated modules.
+Review generated files for snapshot dates, source labels, and official links.
 
 ## Scenario contributions
 
@@ -31,8 +32,9 @@ or materially changing a scenario.
 
 MPRE-style contributions must be original adaptations, clearly identified as
 unofficial practice material, and linked to NCBE’s public preparation page.
-Do not copy secure, recalled, or live examination questions. Place new
-adaptations in `js/data/mpre.js`.
+Do not copy secure, recalled, or live examination questions. Hand-authored
+adaptations live in `js/data/mpre.js`; the additional source set generates
+`js/data/mpre-additional.js`.
 
 ## Pull requests
 

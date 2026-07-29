@@ -143,7 +143,7 @@ export class WorldRenderer {
         this.drawWall(d, zone);
       } else if (d.kind === 'prop') {
         const s = gridToScreen(d.prop.x, d.prop.y);
-        shadow(ctx, s.x, s.y, d.def.w, d.def.h);
+        if (!d.def.noShadow) shadow(ctx, s.x, s.y, d.def.w, d.def.h);
         d.def.draw(ctx, s.x, s.y, d.prop, t);
       } else if (d.kind === 'npc') {
         const s = gridToScreen(d.npc.actor.x, d.npc.actor.y);

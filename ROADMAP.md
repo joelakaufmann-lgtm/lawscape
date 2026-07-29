@@ -19,16 +19,18 @@ disbarred.
   the tribunal, the no-contact rule, confidentiality, solicitation and
   advertising, fee splitting, subordinate-lawyer duties, spoliation,
   reporting misconduct, and more.
-- Three progressive difficulty tiers with original **MPRE-style** workplace
+- Three progressive difficulty tiers with 28 original **MPRE-style** workplace
   emails clearly labeled as adaptations and linked to NCBE’s public preparation
   page.
 - Repeatable **Document Review** at the filing cabinet: the attorney sits for a
   one-minute work cycle and earns five gold.
-- A searchable **Ethics Treatise Rule Library** generated from local Nevada and
-  Arizona authoring files, with official-source links and snapshot warnings.
+- A searchable **Ethics Treatise Rule Library** generated from local Nevada,
+  Arizona, and California files, including the California rules, formal-opinion
+  corpus, and discipline/admissions reference pointers.
 - Office NPCs and upgrades: Liz Loza’s reminders, Riley Readsalot’s paralegal
   protection, Jim Hardsell’s studied silence, Linda Firestone’s five-gold
-  ethics tips, and a coffee machine that restores two Ethics points.
+  ethics tips, a coffee machine that restores two Ethics points, and optional
+  100-gold relevant-rule research from Riley when both upgrades are owned.
 - Gold rewards for correct answers, Ethics-bar damage (with a rule-cited
   explanation) for wrong ones, streak healing for two correct in a row,
   and permadeath: **YOU GOT DISBARRED — GAME OVER** wipes the save.

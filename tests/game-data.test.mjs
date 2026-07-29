@@ -8,12 +8,14 @@ import {
   DOC_REVIEW_CYCLE_MS,
   DOC_REVIEW_REWARD,
   LINDA_TIP_COST,
+  RILEY_HINT_COST,
+  rileyHintEligible,
 } from '../js/data/work.js';
 import { state, reset, damageEthics, healEthics } from '../js/state.js';
 
 test('ethics scenario identifiers are unique and every scenario is playable', () => {
   assert.equal(new Set(SCENARIOS.map((scenario) => scenario.id)).size, SCENARIOS.length);
-  assert.equal(SCENARIOS.length, 29);
+  assert.equal(SCENARIOS.length, 49);
 
   for (const scenario of SCENARIOS) {
     assert.ok(scenario.subject);
@@ -41,18 +43,39 @@ test('ethics scenario identifiers are unique and every scenario is playable', ()
 test('difficulty tiers and MPRE-style practice are available', () => {
   assert.deepEqual(
     [1, 2, 3].map((difficulty) => SCENARIOS.filter((scenario) => scenario.difficulty === difficulty).length),
-    [7, 13, 9],
+    [7, 23, 19],
   );
-  assert.equal(SCENARIOS.filter((scenario) => scenario.sourceType === 'mpre-style').length, 8);
+  assert.equal(SCENARIOS.filter((scenario) => scenario.sourceType === 'mpre-style').length, 28);
+  assert.equal(
+    SCENARIOS.filter((scenario) => scenario.localSourceFile === 'MPRE_Associate_Email_Scenarios_Additional_20.md').length,
+    20,
+  );
 });
 
-test('the treatise library includes the local Nevada and Arizona rule collections', () => {
+test('the treatise library includes Nevada, Arizona, and the California reference bundle', () => {
   const nevada = RULE_LIBRARY.find((set) => set.id === 'nevada');
   const arizona = RULE_LIBRARY.find((set) => set.id === 'arizona');
+  const california = RULE_LIBRARY.find((set) => set.id === 'california');
   assert.equal(nevada.rules.length, 66);
   assert.equal(nevada.rules.every((rule) => rule.text.length > 0), true);
   assert.equal(arizona.rules.length, 59);
   assert.equal(arizona.rules.filter((rule) => rule.text.length > 0).length, 3);
+  assert.equal(california.rules.length, 79);
+  assert.equal(california.rules.filter((rule) => rule.text.length > 0).length, 72);
+  assert.equal(
+    california.rules.filter((rule) => !rule.text).every((rule) => rule.title === '[Reserved]'),
+    true,
+  );
+  assert.deepEqual(
+    california.resources.map((resource) => resource.href),
+    [
+      'California References/rpc.md',
+      'California References/opinions-index.md',
+      'California References/opinions-full.md',
+      'California References/admission-discipline.md',
+      'California References/disciplinary-procedure.md',
+    ],
+  );
 });
 
 test('office economy values match the player-facing launch rules', () => {
@@ -60,6 +83,11 @@ test('office economy values match the player-facing launch rules', () => {
   assert.equal(DOC_REVIEW_REWARD, 5);
   assert.equal(COFFEE_ETHICS_RESTORE, 2);
   assert.equal(LINDA_TIP_COST, 5);
+  assert.equal(RILEY_HINT_COST, 100);
+  assert.equal(rileyHintEligible([]), false);
+  assert.equal(rileyHintEligible(['subscription']), false);
+  assert.equal(rileyHintEligible(['paralegal']), false);
+  assert.equal(rileyHintEligible(['subscription', 'paralegal']), true);
 });
 
 test('reset keeps a stable state reference and restores a new attorney', () => {
@@ -72,6 +100,7 @@ test('reset keeps a stable state reference and restores a new attorney', () => {
   assert.equal(state.ethics, 100);
   assert.equal(state.documentsReviewed, 0);
   assert.equal(state.tipsPurchased, 0);
+  assert.equal(state.hintsPurchased, 0);
 });
 
 test('ethics health remains within its allowed range', () => {

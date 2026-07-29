@@ -10,6 +10,8 @@ const files = [
   'index.html',
   'LICENSE',
   'MPRE_Associate_Email_Scenarios.md',
+  'MPRE_Associate_Email_Scenarios_Additional_20.md',
+  'California References',
   'README.md',
   '.nojekyll',
   'css/style.css',
@@ -24,7 +26,7 @@ for (const relativePath of files) {
   const source = path.join(projectRoot, relativePath);
   const destination = path.join(staging, relativePath);
   await mkdir(path.dirname(destination), { recursive: true });
-  await cp(source, destination);
+  await cp(source, destination, { recursive: true });
 }
 
 // Social crawlers expect an absolute preview-image URL. GitHub Actions provides

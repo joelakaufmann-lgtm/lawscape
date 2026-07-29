@@ -25,6 +25,7 @@ export function freshState() {
     correctDone: 0,        // total answered correctly
     documentsReviewed: 0,  // completed one-minute document-review cycles
     tipsPurchased: 0,      // ethics tips purchased from Linda Firestone
+    hintsPurchased: 0,     // 100-gold relevant-rule research from Riley
     seen: [],              // scenario ids already served this cycle
     upgrades: [],
     zone: 'office',
