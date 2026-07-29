@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="LawScape is a free browser RPG about legal ethics. Build your attorney, answer professional-responsibility dilemmas, and protect your license.">
+<meta name="theme-color" content="#17233b">
+<meta property="og:type" content="website">
+<meta property="og:title" content="LawScape — Legal Ethics RPG">
+<meta property="og:description" content="Answer the rule. Protect your license. A free browser RPG about legal ethics.">
+<meta property="og:image" content="assets/og-lawscape.png">
+<meta name="twitter:card" content="summary_large_image">
+<title>LawScape — Legal Ethics RPG</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <a class="skip-link" href="#title-screen">Skip to game controls</a>
+  <div id="game">
+    <canvas id="world" tabindex="0" aria-label="LawScape game world. Click or tap the floor to walk and objects to interact."></canvas>
+
+    <!-- HUD -->
+    <div id="hud" class="hidden" aria-label="Game status and quick actions">
+      <div id="hud-stats">
+        <span class="stat" id="stat-gold" title="Gold">🪙 <b>0</b></span>
+        <span class="stat ethics" title="Ethics">
+          ⚖️
+          <span id="ethics-bar"><span id="ethics-fill" class="ok"></span></span>
+          <span id="ethics-num">100/100</span>
+        </span>
+        <span class="stat" id="stat-streak" title="Correct-answer streak">🔥 <b>x0</b></span>
+      </div>
+      <div id="hud-zone">Your Law Office</div>
+      <div id="hud-buttons" aria-label="Quick actions">
+        <button id="btn-mail" class="hud-action" aria-label="Open BarMail" aria-keyshortcuts="B"><span aria-hidden="true">✉</span><span>BarMail</span></button>
+        <button id="btn-record" class="hud-action" aria-label="Open professional record" aria-keyshortcuts="R"><span aria-hidden="true">▣</span><span>Record</span></button>
+        <button id="btn-travel" class="hud-action" aria-label="Open travel menu" aria-keyshortcuts="T"><span aria-hidden="true">↗</span><span>Travel</span></button>
+        <button id="btn-help" class="hud-action" aria-label="How to play" aria-keyshortcuts="H"><span aria-hidden="true">?</span><span>Help</span></button>
+      </div>
+      <canvas id="minimap" width="150" height="120"></canvas>
+      <div id="control-hint">Click or tap to walk · WASD/Arrows move · B opens BarMail</div>
+    </div>
+
+    <div id="toast" class="hidden" role="status" aria-live="polite"></div>
+    <div id="hoverlabel" class="hidden"></div>
+
+    <!-- Dialogue (OSRS-style chatbox) -->
+    <div id="dialogue" class="hidden" role="dialog" aria-live="polite" aria-labelledby="dialogue-name">
+      <div id="dialogue-name"></div>
+      <div id="dialogue-text"></div>
+      <div id="dialogue-choices"></div>
+    </div>
+
+    <!-- Panels (shops, record, help) -->
+    <div id="panel" class="hidden" role="dialog" aria-modal="true" aria-labelledby="panel-title">
+      <div id="panel-inner">
+        <div id="panel-header">
+          <span id="panel-title"></span>
+          <button id="panel-close" aria-label="Close panel">✕</button>
+        </div>
+        <div id="panel-tabs"></div>
+        <div id="panel-body"></div>
+      </div>
+    </div>
+
+    <!-- BarMail: the in-game computer screen -->
+    <div id="email" class="hidden" role="dialog" aria-modal="true" aria-labelledby="email-appname">
+      <div id="email-window">
+        <div id="email-titlebar">
+          <span class="email-dot"></span><span class="email-dot"></span><span class="email-dot"></span>
+          <span id="email-appname">BarMail — Secure Attorney Inbox</span>
+          <button id="email-close" aria-label="Close BarMail">✕</button>
+        </div>
+        <div id="email-toolbar">
+          <span>📥 Inbox (1)</span><span>📤 Sent</span><span>🗑 Trash</span>
+          <span id="email-rule" class="hidden"></span>
+        </div>
+        <div id="email-body">
+          <div id="email-head">
+            <div id="email-subject"></div>
+            <div id="email-from"></div>
+          </div>
+          <div id="email-text"></div>
+          <div id="email-replies">
+            <div class="reply-label">Choose your reply:</div>
+            <div id="email-choices"></div>
+          </div>
+          <div id="email-result" class="hidden">
+            <div id="email-verdict"></div>
+            <div id="email-explain"></div>
+            <div id="email-delta"></div>
+            <button id="email-continue">Back to Inbox</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Disbarment -->
+    <div id="gameover" class="hidden">
+      <div id="gameover-inner">
+        <h1>YOU GOT DISBARRED</h1>
+        <h2>GAME OVER</h2>
+        <p id="gameover-text">Your Ethics reached zero. The Presiding Disciplinary Judge has
+        entered an order of disbarment. Your license, your office, your gold, and your
+        upgrades are forfeit.</p>
+        <button id="gameover-restart">Start Over From Nothing</button>
+      </div>
+    </div>
+
+    <!-- Title screen -->
+    <div id="title-screen">
+      <div class="title-card">
+        <div class="brand-eyebrow">CASE FILE · BROWSER EDITION</div>
+        <div class="brand-seal" aria-hidden="true">§</div>
+        <h1>LawScape</h1>
+        <p class="tagline">Answer the rule. Build your practice. Protect your license.</p>
+        <div class="title-features" aria-label="Game features">
+          <span><b>21</b> ethics dilemmas</span>
+          <span><b>2</b> explorable locations</span>
+          <span><b>0</b> downloads</span>
+        </div>
+        <button id="btn-new" class="primary">Create an Attorney</button>
+        <button id="btn-continue" class="hidden">Continue Your Practice</button>
+        <details class="how-to">
+          <summary>How to play</summary>
+          <p>Click or tap the floor to walk. Select people and office objects to interact. Open BarMail, choose the ethical response, earn gold, and upgrade your office and apartment.</p>
+          <p><b>Keyboard:</b> WASD or arrow keys move. B opens BarMail, R opens your record, T opens travel, and Escape closes a window.</p>
+        </details>
+        <button id="btn-reset" class="hidden small danger-link">Reset saved game</button>
+        <p class="disclaimer">LawScape is a fictional educational game. It is not legal advice
+        and does not create an attorney-client relationship. Rules cited (Arizona ERs, Nevada
+        NRPC) are simplified for gameplay — always read the operative text.</p>
+      </div>
+    </div>
+
+    <!-- Attorney creator -->
+    <div id="creator" class="hidden">
+      <div class="title-card wide">
+        <button id="btn-creator-back" class="text-button" aria-label="Return to title screen">← Back</button>
+        <div class="brand-eyebrow">STATE BAR ADMISSION FORM</div>
+        <h2>Create Your Attorney</h2>
+        <p class="creator-intro">Choose your appearance. Your progress stays in this browser.</p>
+        <div class="creator-flex">
+          <div class="creator-grid">
+            <label>Name
+              <input id="c-name" type="text" maxlength="24" placeholder="Alex Barrister">
+            </label>
+            <div class="creator-field">
+              <span class="field-label">Gender</span>
+              <div id="c-gender" class="pill-row" role="group" aria-label="Gender"></div>
+            </div>
+            <div class="creator-field">
+              <span class="field-label">Skin Tone</span>
+              <div id="c-skins" class="swatch-row" role="group" aria-label="Skin tone"></div>
+            </div>
+            <div class="creator-field">
+              <span class="field-label">Hair Style</span>
+              <div id="c-hairstyles" class="pill-row" role="group" aria-label="Hair style"></div>
+            </div>
+            <div class="creator-field">
+              <span class="field-label">Hair Color</span>
+              <div id="c-haircolors" class="swatch-row" role="group" aria-label="Hair color"></div>
+            </div>
+            <div class="creator-field">
+              <span class="field-label">Eye Color</span>
+              <div id="c-eyes" class="swatch-row" role="group" aria-label="Eye color"></div>
+            </div>
+            <div class="creator-field">
+              <span class="field-label">Suit Color</span>
+              <div id="c-suits" class="swatch-row" role="group" aria-label="Suit color"></div>
+            </div>
+          </div>
+          <div class="creator-preview">
+            <canvas id="c-preview" width="150" height="190"></canvas>
+            <span>Your attorney</span>
+          </div>
+        </div>
+        <button id="btn-start" class="primary">Pass the Bar &amp; Begin</button>
+      </div>
+    </div>
+  </div>
+  <noscript>
+    <div class="noscript">LawScape needs JavaScript enabled to play.</div>
+  </noscript>
+  <script defer src="js/lawscape.bundle.js"></script>
+</body>
+</html>

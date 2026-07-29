@@ -1,0 +1,7 @@
+.DS_Store
+.claude/
+.dist-staging/
+dist/
+Ethics Agents/
+node_modules/
+npm-debug.log*
