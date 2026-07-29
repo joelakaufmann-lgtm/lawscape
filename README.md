@@ -14,6 +14,8 @@ tracking, external assets, or runtime dependencies.
 
 ## Play now
 
+Play LawScape  (https://joelakaufmann-lgtm.github.io/lawscape/)
+
 Double-click [`index.html`](index.html). It launches directly in a modern
 browser—no installation or local server is required.
 
