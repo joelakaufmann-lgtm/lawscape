@@ -103,6 +103,27 @@ button:focus-visible, input:focus-visible, summary:focus-visible, #world:focus-v
   border: 1px solid rgba(184, 145, 47, 0.55); border-radius: 4px;
   padding: 4px 8px; font: 11px/1.2 Verdana, sans-serif;
 }
+#work-status {
+  position: absolute; right: 14px; bottom: 14px; z-index: 9;
+  width: min(340px, calc(100% - 28px));
+  background: var(--parchment); border: 2px solid var(--brass);
+  border-radius: 7px; padding: 10px 12px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+}
+.work-status-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin-bottom: 7px; font-size: 13px;
+}
+.work-status-head button { padding: 3px 9px; font-size: 12px; }
+#review-progress {
+  height: 10px; border-radius: 5px; overflow: hidden;
+  background: #2b2b33; border: 1px solid #15161b;
+}
+#review-progress-fill {
+  display: block; height: 100%; width: 0;
+  background: linear-gradient(90deg, var(--burgundy), var(--brass));
+}
+#review-time { margin-top: 5px; font: 11px/1.2 Verdana, sans-serif; color: #5e594f; }
 
 /* ---------- floating labels / toast ---------- */
 /* OSRS-style yellow action text */
@@ -173,6 +194,38 @@ button:focus-visible, input:focus-visible, summary:focus-visible, #world:focus-v
   margin-bottom: 12px; padding: 10px 12px; border-radius: 6px;
   background: #fff9e9; border: 1px solid var(--brass); line-height: 1.45;
 }
+.rule-tools {
+  position: sticky; top: -12px; z-index: 2;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px;
+  margin: -12px -16px 12px; padding: 12px 16px;
+  background: var(--parchment); border-bottom: 1px solid var(--brass);
+}
+.rule-tools input {
+  min-width: 0; padding: 8px 10px; border: 2px solid var(--brass);
+  border-radius: 4px; background: #fff; color: var(--ink); font: 14px Georgia, serif;
+}
+.rule-tools a, .rule-source-link {
+  display: inline-flex; align-items: center; color: var(--navy); font-size: 12px;
+}
+.rule-library-note {
+  padding: 9px 11px; margin-bottom: 10px; border-left: 4px solid var(--brass);
+  background: #fff9e9; font-size: 12px; line-height: 1.45;
+}
+.rule-card {
+  margin-bottom: 8px; border: 1px solid #c7b47d; border-radius: 6px;
+  background: #fffaf0; overflow: hidden;
+}
+.rule-card summary {
+  cursor: pointer; padding: 9px 11px; color: var(--navy);
+  font-weight: bold; line-height: 1.35;
+}
+.rule-card[open] summary { border-bottom: 1px solid #d8c89d; background: #f1e6c9; }
+.rule-text {
+  max-height: 48vh; overflow-y: auto; padding: 11px;
+  white-space: pre-wrap; font: 12px/1.55 Verdana, sans-serif; color: #333;
+}
+.rule-index-only { padding: 11px; font-size: 12px; color: #625d54; }
+.rule-empty { padding: 28px 10px; text-align: center; color: #625d54; }
 
 /* task / shop rows */
 .row-item {
@@ -240,6 +293,11 @@ button:focus-visible, input:focus-visible, summary:focus-visible, #world:focus-v
   margin-left: auto; background: var(--parchment); border: 1px solid var(--brass);
   border-radius: 4px; padding: 2px 8px; font-size: 11px; color: var(--navy); font-weight: bold;
 }
+#email-difficulty, #email-source {
+  border-radius: 4px; padding: 2px 7px; font-size: 10px; font-weight: bold;
+}
+#email-difficulty { background: var(--navy); color: var(--parchment); }
+#email-source { background: #fff4ce; border: 1px solid var(--brass); color: var(--burgundy); }
 #email-body { background: #fff; overflow-y: auto; padding: 16px 20px; flex: 1; }
 #email-subject { font-size: 18px; font-weight: bold; color: #222; margin-bottom: 4px; }
 #email-from { font-size: 12px; color: #666; border-bottom: 1px solid #ddd; padding-bottom: 8px; margin-bottom: 12px; }
@@ -262,6 +320,11 @@ button:focus-visible, input:focus-visible, summary:focus-visible, #world:focus-v
   background: #f8f6f0; border-left: 4px solid var(--brass);
   padding: 10px 12px; margin-bottom: 10px;
 }
+.scenario-source {
+  margin-top: 9px; padding-top: 8px; border-top: 1px solid #d8cdb5;
+  color: #625d54; font-size: 11px; line-height: 1.45;
+}
+.scenario-source a { color: var(--navy); }
 #email-delta { font-size: 14px; margin-bottom: 14px; }
 #email-delta .gain { color: #2e6b36; font-weight: bold; }
 #email-delta .loss { color: #9c2b1d; font-weight: bold; }
@@ -446,6 +509,7 @@ button:focus-visible, input:focus-visible, summary:focus-visible, #world:focus-v
   .hud-action { min-height: 42px; }
   #control-hint { display: none; }
   #toast { top: 126px; width: calc(100% - 24px); text-align: center; font-size: 14px; }
+  #work-status { right: 8px; bottom: 8px; width: calc(100% - 16px); }
 
   #dialogue { bottom: 8px; width: calc(100% - 16px); padding: 11px 12px; }
   #dialogue-text { font-size: 14px; }
@@ -466,6 +530,8 @@ button:focus-visible, input:focus-visible, summary:focus-visible, #world:focus-v
   .email-choice { min-height: 48px; padding: 10px; }
   #gameover-inner { padding: 26px 18px; }
   #gameover-inner h1 { font-size: 31px; }
+  .rule-tools { grid-template-columns: 1fr; }
+  .rule-tools a { min-height: 32px; }
 }
 
 @media (pointer: coarse) {

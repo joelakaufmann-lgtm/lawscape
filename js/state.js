@@ -23,10 +23,12 @@ export function freshState() {
     streak: 0,             // consecutive correct answers
     casesDone: 0,          // total scenarios answered
     correctDone: 0,        // total answered correctly
+    documentsReviewed: 0,  // completed one-minute document-review cycles
+    tipsPurchased: 0,      // ethics tips purchased from Linda Firestone
     seen: [],              // scenario ids already served this cycle
     upgrades: [],
     zone: 'office',
-    pos: { x: 6, y: 9 },
+    pos: { x: 6, y: 10 },
     lastRestAt: 0,
   };
 }

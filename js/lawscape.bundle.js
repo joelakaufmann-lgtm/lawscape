@@ -9,7 +9,7 @@
   "js/main.js": (exports, require) => {
     // LawScape — main game module. Boots the title flow, runs the world loop
     // (click-to-walk, OSRS style), and owns every interaction: the BarMail
-    // ethics minigame, shops, rest, wardrobe, travel (court is closed), and
+    // ethics minigame, document review, shops, rest, rule research, travel, and
     // disbarment.
 
     const { state, save, load, hasSave, reset, hasUpgrade, maxEthics, healEthics, damageEthics } = require("js/state.js");
@@ -24,6 +24,8 @@
     const { showDialogue, hideDialogue, dialogueOpen } = require("js/ui/dialogue.js");
     const { SCENARIOS, WRONG_DMG, STREAK_HEAL } = require("js/data/ethics.js");
     const { OFFICE_UPGRADES, APARTMENT_UPGRADES, bonuses } = require("js/data/upgrades.js");
+    const { RULE_LIBRARY } = require("js/data/rules.js");
+    const { COFFEE_ETHICS_RESTORE, DOC_REVIEW_CYCLE_MS, DOC_REVIEW_REWARD, LINDA_TIP_COST, } = require("js/data/work.js");
 
     const $ = (id) => document.getElementById(id);
 
@@ -39,6 +41,7 @@
     let hover = null;         // { tiles, label, run } — current mouse target
     let clickFx = null;       // { x, y, at } — OSRS yellow X on click
     let inGame = false;
+    const docReview = { active: false, cycleStartedAt: 0 };
 
     function currentZone() { return ZONES[state.zone] || ZONES.office; }
 
@@ -63,6 +66,7 @@
     }
 
     function enterZone(id, pos = null) {
+      if (docReview.active) stopDocumentReview(false);
       state.zone = id;
       zone = currentZone();
       const p = pos || zone.spawn;
@@ -125,7 +129,9 @@
               label: portal.label,
               walkOnto: true,
               approach: { x: cx, y: cy },
-              run: () => openTravelMenu(),
+              run: () => portal.to
+                ? enterZone(portal.to, portal.dest || null)
+                : openTravelMenu(),
             };
           }
         }
@@ -144,6 +150,11 @@
 
     canvas.addEventListener('click', (e) => {
       if (!inGame || overlayOpen()) return;
+      if (docReview.active) {
+        stopDocumentReview();
+        toast('Document review stopped. Click again to move.');
+        return;
+      }
       if (dialogueOpen()) hideDialogue();
       const target = targetAt(e.offsetX, e.offsetY);
       if (!target) return;
@@ -176,7 +187,7 @@
     }
 
     function moveBy(dx, dy) {
-      if (!inGame || overlayOpen() || dialogueOpen() || player.walking) return;
+      if (!inGame || overlayOpen() || dialogueOpen() || player.walking || docReview.active) return;
       const dest = { x: player.tileX + dx, y: player.tileY + dy };
       if (!isWalkable(dest.x, dest.y)) return;
       player.setPath([dest]);
@@ -196,51 +207,87 @@
     function runAction(action) {
       switch (action) {
         case 'email': openEmail(); break;
+        case 'doc_review': startDocumentReview(); break;
+        case 'rules': openRuleLibrary(); break;
         case 'shop_office': openShop('Office Upgrades', OFFICE_UPGRADES); break;
         case 'shop_apartment': openShop('Apartment Upgrades', APARTMENT_UPGRADES); break;
         case 'record': openRecord(); break;
         case 'rest': doRest(); break;
         case 'wardrobe': openWardrobe(); break;
-        case 'flavor_books':
-          showDialogue({
-            name: 'Ethics Treatises',
-            text: hasUpgrade('subscription')
-              ? 'Rows of well-thumbed professional-responsibility treatises. BarMail now shows you which rule each scenario implicates.'
-              : 'A mostly empty shelf: a bar directory and one lonely pamphlet, "So You Passed: Now Don’t Get Disbarred." The Ethics Treatise Shelf upgrade would fill this.',
-          });
-          break;
         case 'flavor_coffee':
-          showDialogue({
-            name: 'Coffee Machine',
-            text: 'It hums with quiet integrity. Streak heals restore +5 extra Ethics while you own it.',
-          });
+          drinkCoffee();
           break;
         default: break;
       }
     }
 
     function talkTo(def) {
-      if (def.talk === 'partner') {
+      if (def.talk === 'jim') {
+        toast('Jim Hardsell does not look up from his work.');
+      } else if (def.talk === 'linda') {
+        talkToLinda(def);
+      } else if (def.talk === 'secretary') {
         const lines = [
-          'Check your BarMail, associate. The inbox never sleeps, and neither does the disciplinary judge.',
-          'Gold pays the rent. Ethics keeps the license that earns the gold. Lose the second and the first is decor.',
-          'Some of my emails are... tests. Some are me on a bad day. Answer the rule, not the sender.',
+          'Get back to work.',
+          'You have emails to answer and documents to review.',
+          'Mr. Johnson called regarding his case.',
         ];
         showDialogue({ name: def.name, text: lines[Math.floor(Math.random() * lines.length)] });
       } else if (def.talk === 'paralegal') {
         showDialogue({
           name: def.name,
-          text: 'I read everything before it goes out. If you send something truly catastrophic, I’ll soften the blow — that’s why very wrong answers only cost you 15 Ethics now.',
+          text: 'Riley Readsalot here. I read everything before it goes out. Truly catastrophic answers cost 15 Ethics instead of 25 while I am on the team.',
         });
       } else {
         showDialogue({ name: def.name, text: '...' });
       }
     }
 
+    const ETHICS_TIPS = [
+      'Client consent to a conflict usually must be informed and confirmed in writing. A signature without an explanation of material risks is not enough.',
+      'Advance fees belong in trust until earned. Calling money “nonrefundable” does not transform unearned money into the firm’s property.',
+      'Confidentiality is broader than attorney-client privilege. Do not use the two concepts as synonyms.',
+      'With an unrepresented person whose interests may conflict with your client’s, the safest legal advice is: get your own lawyer.',
+      'Candor to the tribunal can require correcting a false statement even when correction hurts the client’s position.',
+      'A subordinate lawyer remains responsible for a clear ethics violation even when a supervisor ordered it.',
+      'Reporting misconduct requires a substantial question about honesty, trustworthiness, or fitness—not every technical rule violation.',
+      'When client and third-party claims to funds conflict, keep the disputed portion separate while promptly releasing any undisputed portion.',
+    ];
+
+    function talkToLinda(def) {
+      if (state.gold < LINDA_TIP_COST) {
+        showDialogue({
+          name: def.name,
+          text: `Linda keeps typing. “I am extremely busy. Come back with ${LINDA_TIP_COST} gold if you want an ethics tip.”`,
+        });
+        return;
+      }
+      showDialogue({
+        name: def.name,
+        text: `Linda glances at the clock. “I do not have time to chat. ${LINDA_TIP_COST} gold buys one concise ethics tip.”`,
+        choices: [
+          {
+            label: `Pay ${LINDA_TIP_COST} gold for a tip`,
+            fn: () => {
+              if (state.gold < LINDA_TIP_COST) return;
+              state.gold -= LINDA_TIP_COST;
+              state.tipsPurchased++;
+              save();
+              updateHUD();
+              const tip = ETHICS_TIPS[Math.floor(Math.random() * ETHICS_TIPS.length)];
+              showDialogue({ name: 'Linda Firestone — Ethics Tip', text: tip });
+            },
+          },
+          { label: 'Let her work' },
+        ],
+      });
+    }
+
     // ---------------------------------------------------------------------------
-    // Travel menu — the world beyond is Office, Apartment, and a closed courthouse
+    // Travel menu — the world beyond is the office complex, apartment, and court
     // ---------------------------------------------------------------------------
     function openTravelMenu() {
+      if (docReview.active) stopDocumentReview(false);
       const choices = [];
       if (state.zone !== 'office') {
         choices.push({ label: 'Go to the Law Office', fn: () => enterZone('office') });
@@ -248,19 +295,12 @@
       if (state.zone !== 'apartment') {
         choices.push({ label: 'Go to the Apartment', fn: () => enterZone('apartment') });
       }
-      choices.push({
-        label: 'Go to Court',
-        fn: () => showDialogue({
-          name: 'Courthouse Doors',
-          text: 'The courthouse is CLOSED. A brass sign reads: "Court is not in session. '
-            + 'No hearings today, counselor." (Court simulation is planned for a future '
-            + 'edition — see ROADMAP.md.)',
-          choices: [{ label: 'Head back' }],
-        }),
-      });
+      if (state.zone !== 'courtroom') {
+        choices.push({ label: 'Go to the Empty Courtroom', fn: () => enterZone('courtroom') });
+      }
       choices.push({ label: 'Stay here', fn: () => {} });
       showDialogue({
-        name: state.zone === 'office' ? 'Leaving the Office' : 'Leaving the Apartment',
+        name: 'Where to, counselor?',
         text: 'You step out to the street. Where to?',
         choices,
       });
@@ -271,13 +311,26 @@
     // ---------------------------------------------------------------------------
     let currentScenario = null;
 
+    function currentDifficulty() {
+      if (state.casesDone < 5) return 1;
+      if (state.casesDone < 12) return 2;
+      return 3;
+    }
+
     function pickScenario() {
-      let pool = SCENARIOS.filter((s) => !state.seen.includes(s.id));
-      if (!pool.length) { state.seen = []; pool = SCENARIOS; }
+      const difficulty = currentDifficulty();
+      let pool = SCENARIOS.filter(
+        (scenario) => scenario.difficulty === difficulty && !state.seen.includes(scenario.id),
+      );
+      if (!pool.length) {
+        state.seen = [];
+        pool = SCENARIOS.filter((scenario) => scenario.difficulty === difficulty);
+      }
       return pool[Math.floor(Math.random() * pool.length)];
     }
 
     function openEmail() {
+      if (docReview.active) stopDocumentReview(false);
       currentScenario = pickScenario();
       const s = currentScenario;
       const b = bonuses(state.upgrades);
@@ -285,6 +338,17 @@
       $('email-subject').textContent = s.subject;
       $('email-from').textContent = `From: ${s.from} — ${s.role}`;
       $('email-text').textContent = s.body;
+      const levelNames = { 1: 'FOUNDATION', 2: 'PRACTICE', 3: 'MPRE+' };
+      $('email-difficulty').textContent = `LEVEL ${s.difficulty} · ${levelNames[s.difficulty]}`;
+
+      const sourceEl = $('email-source');
+      if (s.sourceType === 'mpre-style') {
+        sourceEl.textContent = 'MPRE-STYLE';
+        sourceEl.title = s.sourceNote;
+        sourceEl.classList.remove('hidden');
+      } else {
+        sourceEl.classList.add('hidden');
+      }
 
       const ruleEl = $('email-rule');
       if (b.showRule) {
@@ -350,6 +414,8 @@
         deltaEl.innerHTML = `<span class="loss">−${dmg} Ethics</span> &nbsp; <span class="muted">streak reset</span>`;
       }
 
+      if (s.sourceType === 'mpre-style') appendScenarioSource(explainEl, s);
+
       if (!state.seen.includes(s.id)) state.seen.push(s.id);
       updateHUD();
       save();
@@ -363,6 +429,25 @@
       else $('email-continue').textContent = 'Next Email';
     }
 
+    function appendScenarioSource(container, scenario) {
+      const source = document.createElement('div');
+      source.className = 'scenario-source';
+      source.append('Source note: ');
+      const local = document.createElement('a');
+      local.href = 'MPRE_Associate_Email_Scenarios.md';
+      local.target = '_blank';
+      local.rel = 'noopener';
+      local.textContent = 'MPRE Associate Email Scenarios';
+      source.append(local, ' · ');
+      const official = document.createElement('a');
+      official.href = scenario.sourceUrl;
+      official.target = '_blank';
+      official.rel = 'noopener';
+      official.textContent = 'NCBE preparation page';
+      source.append(official, document.createElement('br'), scenario.sourceNote);
+      container.appendChild(source);
+    }
+
     function closeEmail() {
       $('email').classList.add('hidden');
       currentScenario = null;
@@ -373,6 +458,7 @@
     // Disbarment
     // ---------------------------------------------------------------------------
     function gameOver() {
+      stopDocumentReview(false);
       inGame = false;
       $('hud').classList.add('hidden');
       hideDialogue();
@@ -390,6 +476,7 @@
     // Shops, record, rest, wardrobe, help
     // ---------------------------------------------------------------------------
     function openPanel(title) {
+      if (docReview.active) stopDocumentReview(false);
       $('panel-title').textContent = title;
       $('panel-tabs').innerHTML = '';
       $('panel-body').innerHTML = '';
@@ -398,6 +485,150 @@
       return $('panel-body');
     }
     $('panel-close').addEventListener('click', () => $('panel').classList.add('hidden'));
+
+    function openRuleLibrary() {
+      if (!hasUpgrade('subscription')) {
+        showDialogue({
+          name: 'Ethics Treatise Shelf',
+          text: 'The shelf holds only a bar directory. Buy the Ethics Treatise Shelf upgrade to unlock the searchable rule library.',
+        });
+        return;
+      }
+
+      const body = openPanel('Ethics Treatise Rule Library');
+      const tabs = $('panel-tabs');
+
+      function selectSet(set) {
+        for (const button of tabs.querySelectorAll('button')) {
+          button.classList.toggle('active', button.dataset.set === set.id);
+        }
+        body.innerHTML = '';
+
+        const tools = document.createElement('div');
+        tools.className = 'rule-tools';
+        const search = document.createElement('input');
+        search.type = 'search';
+        search.placeholder = `Search ${set.citation} rules`;
+        search.setAttribute('aria-label', `Search ${set.title}`);
+        const official = document.createElement('a');
+        official.href = set.officialUrl;
+        official.target = '_blank';
+        official.rel = 'noopener';
+        official.textContent = 'Current official source ↗';
+        tools.append(search, official);
+        body.appendChild(tools);
+
+        const note = document.createElement('div');
+        note.className = 'rule-library-note';
+        note.textContent = `${set.snapshot}. ${set.note}`;
+        body.appendChild(note);
+
+        const results = document.createElement('div');
+        body.appendChild(results);
+
+        function renderRules() {
+          const query = search.value.trim().toLowerCase();
+          const matching = set.rules.filter((rule) => {
+            if (!query) return true;
+            return `${rule.number} ${rule.title} ${rule.text}`.toLowerCase().includes(query);
+          });
+          results.innerHTML = '';
+
+          if (!matching.length) {
+            const empty = document.createElement('div');
+            empty.className = 'rule-empty';
+            empty.textContent = 'No rules match that search.';
+            results.appendChild(empty);
+            return;
+          }
+
+          for (const rule of matching) {
+            const card = document.createElement('details');
+            card.className = 'rule-card';
+            const summary = document.createElement('summary');
+            summary.textContent = `${set.citation} ${rule.number} — ${rule.title}`;
+            card.appendChild(summary);
+
+            if (rule.text) {
+              const text = document.createElement('div');
+              text.className = 'rule-text';
+              text.textContent = rule.text;
+              card.appendChild(text);
+            } else {
+              const indexOnly = document.createElement('div');
+              indexOnly.className = 'rule-index-only';
+              indexOnly.textContent = 'This local authoring file contains the rule index but not this rule’s full text. ';
+              card.appendChild(indexOnly);
+            }
+
+            const link = document.createElement('a');
+            link.className = 'rule-source-link';
+            link.href = rule.url || set.officialUrl;
+            link.target = '_blank';
+            link.rel = 'noopener';
+            link.textContent = 'Open current official rule ↗';
+            (card.lastElementChild || card).appendChild(link);
+            results.appendChild(card);
+          }
+        }
+
+        search.addEventListener('input', renderRules);
+        renderRules();
+        search.focus();
+      }
+
+      for (const set of RULE_LIBRARY) {
+        const button = document.createElement('button');
+        button.dataset.set = set.id;
+        button.textContent = set.id === 'nevada' ? 'Nevada NRPC' : 'Arizona ER';
+        button.onclick = () => selectSet(set);
+        tabs.appendChild(button);
+      }
+      selectSet(RULE_LIBRARY[0]);
+    }
+
+    function startDocumentReview() {
+      if (state.zone !== 'office') {
+        toast('The active files are in the main office.');
+        return;
+      }
+      hideDialogue();
+      player.stop();
+      player.activity = 'reviewing';
+      docReview.active = true;
+      docReview.cycleStartedAt = performance.now();
+      $('work-status').classList.remove('hidden');
+      updateDocumentReview(docReview.cycleStartedAt);
+      toast(`Document review started. Each one-minute cycle earns ${DOC_REVIEW_REWARD} gold.`);
+    }
+
+    function stopDocumentReview(showMessage = true) {
+      if (!docReview.active) return;
+      docReview.active = false;
+      if (player) player.activity = null;
+      $('work-status').classList.add('hidden');
+      if (showMessage) toast('You close the file and stand up.');
+    }
+
+    function updateDocumentReview(now) {
+      if (!docReview.active) return;
+      let elapsed = now - docReview.cycleStartedAt;
+      while (elapsed >= DOC_REVIEW_CYCLE_MS) {
+        state.gold += DOC_REVIEW_REWARD;
+        state.documentsReviewed++;
+        docReview.cycleStartedAt += DOC_REVIEW_CYCLE_MS;
+        elapsed -= DOC_REVIEW_CYCLE_MS;
+        save();
+        updateHUD();
+        toast(`Document review cycle complete. +${DOC_REVIEW_REWARD} gold.`);
+      }
+      const remainingMs = Math.max(0, DOC_REVIEW_CYCLE_MS - elapsed);
+      const seconds = Math.ceil(remainingMs / 1000);
+      $('review-progress-fill').style.width = `${Math.min(100, (elapsed / DOC_REVIEW_CYCLE_MS) * 100)}%`;
+      $('review-time').textContent = `Next cycle in ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')} · ${state.documentsReviewed} completed`;
+    }
+
+    $('btn-stop-review').addEventListener('click', () => stopDocumentReview());
 
     function openShop(title, catalog) {
       const body = openPanel(title);
@@ -440,6 +671,8 @@
         <div class="row-item"><div class="grow"><h4>Scenarios answered</h4></div><div class="meta">${state.casesDone}</div></div>
         <div class="row-item"><div class="grow"><h4>Answered correctly</h4></div><div class="meta">${state.correctDone} (${acc}%)</div></div>
         <div class="row-item"><div class="grow"><h4>Current streak</h4></div><div class="meta">x${state.streak}</div></div>
+        <div class="row-item"><div class="grow"><h4>Document-review cycles</h4></div><div class="meta">${state.documentsReviewed}</div></div>
+        <div class="row-item"><div class="grow"><h4>Linda’s ethics tips</h4></div><div class="meta">${state.tipsPurchased}</div></div>
         <div class="row-item"><div class="grow"><h4>Gold</h4></div><div class="meta">🪙 ${Math.floor(state.gold)}</div></div>
         <div class="row-item"><div class="grow"><h4>Ethics</h4></div><div class="meta">⚖ ${state.ethics}/${maxEthics()}</div></div>
         <div class="row-item"><div class="grow"><h4>Upgrades owned</h4></div><div class="meta">${state.upgrades.length}</div></div>`;
@@ -465,6 +698,22 @@
       toast(`You rest and reflect on your professional obligations. +${state.ethics - before} Ethics.`);
     }
 
+    function drinkCoffee() {
+      if (!hasUpgrade('coffee')) {
+        toast('The counter is empty. Buy the Coffee Machine from the furniture catalog first.');
+        return;
+      }
+      if (state.ethics >= maxEthics()) {
+        toast('Your Ethics is already full. Save the coffee for a harder day.');
+        return;
+      }
+      const before = state.ethics;
+      healEthics(COFFEE_ETHICS_RESTORE);
+      save();
+      updateHUD();
+      toast(`You drink a strong cup of coffee. +${state.ethics - before} Ethics.`);
+    }
+
     function openWardrobe() {
       if (!hasUpgrade('wardrobe_rack')) {
         toast('A single suit hangs here. The Wardrobe Rack upgrade unlocks more colors.');
@@ -484,10 +733,17 @@
     function openHelp() {
       const body = openPanel('How LawScape Works');
       body.innerHTML = `
-        <div class="help-lede">Your first goal: open <b>BarMail</b>, answer an ethics dilemma, and earn your first gold.</div>
+        <div class="help-lede">Your first goal: answer a <b>BarMail</b> dilemma or complete a one-minute document-review cycle to earn gold.</div>
         <div class="row-item"><div class="grow"><h4>💻 BarMail</h4>
           <p>Click your office computer or use the BarMail quick action. Partners and clients send
-          requests — many of them unethical. Choose your reply.</p></div></div>
+          requests — many of them unethical. Questions advance from Foundation to Practice to MPRE+
+          as your record grows.</p></div></div>
+        <div class="row-item"><div class="grow"><h4>🗄 Document Review</h4>
+          <p>Use the filing cabinet in the main office. Your attorney sits and reviews files;
+          every uninterrupted one-minute cycle earns 5 gold.</p></div></div>
+        <div class="row-item"><div class="grow"><h4>📚 Ethics Treatises</h4>
+          <p>Buy the Ethics Treatise Shelf upgrade, then use the bookshelf to search the bundled
+          Nevada rules and Arizona rule index.</p></div></div>
         <div class="row-item"><div class="grow"><h4>🖱 Movement</h4>
           <p>Click or tap a floor tile to walk. You can also use WASD or the arrow keys. Select
           a highlighted person or object to walk over and interact.</p></div></div>
@@ -501,7 +757,8 @@
           <p>Ethics at zero = YOU GOT DISBARRED — GAME OVER. You restart from nothing: no gold,
           no items, no upgrades.</p></div></div>
         <div class="row-item"><div class="grow"><h4>🏛 Court</h4>
-          <p>Closed for now — court simulation is on the roadmap (ROADMAP.md).</p></div></div>`;
+          <p>The furnished courtroom is open to explore, but no matters or court personnel are
+          on calendar yet.</p></div></div>`;
     }
 
     $('btn-help').addEventListener('click', openHelp);
@@ -683,11 +940,11 @@
       inGame = true;
       if (state.casesDone === 0) {
         showDialogue({
-          name: 'Marcus Hargrove, Senior Partner',
-          text: `Welcome to the firm, ${state.name}. Your inbox is on the computer — BarMail. `
-            + 'Answer well and the gold flows. Answer badly and the Ethics bar drops. '
-            + 'At zero, the Bar takes your license. No pressure.',
-          choices: [{ label: 'Understood.' }],
+          name: 'Liz Loza, Secretary',
+          text: `Welcome to Hardsell & Firestone, ${state.name}. BarMail is on your computer, `
+            + 'the filing cabinet has documents to review, and Mr. Johnson called about his case. '
+            + 'Jim Hardsell is busy. Linda Firestone charges for advice. Get to work.',
+          choices: [{ label: 'On it.' }],
         });
       }
     }
@@ -715,6 +972,7 @@
 
       if (inGame) {
         player.update(dt);
+        updateDocumentReview(now);
         state.pos = { x: player.tileX, y: player.tileY };
         const t = now / 1000;
         renderer.render(zone, player, npcs, hover, t);
@@ -756,6 +1014,8 @@
       get player() { return player; },
       get zone() { return zone; },
       targetAt, isWalkable, renderer,
+      currentDifficulty,
+      get docReview() { return { ...docReview }; },
       get inGame() { return inGame; },
     };
   },
@@ -785,10 +1045,12 @@
         streak: 0,             // consecutive correct answers
         casesDone: 0,          // total scenarios answered
         correctDone: 0,        // total answered correctly
+        documentsReviewed: 0,  // completed one-minute document-review cycles
+        tipsPurchased: 0,      // ethics tips purchased from Linda Firestone
         seen: [],              // scenario ids already served this cycle
         upgrades: [],
         zone: 'office',
-        pos: { x: 6, y: 9 },
+        pos: { x: 6, y: 10 },
         lastRestAt: 0,
       };
     }
@@ -849,9 +1111,8 @@
   },
   "js/world/zones.js": (exports, require) => {
     // Zone definitions: floor tiles, props, portals, NPCs, and interaction nodes.
-    // The world is your upgradeable Law Office and Apartment; leaving either one
-    // opens the travel menu (the courthouse shows up there, permanently closed —
-    // see ROADMAP.md, Court Simulation).
+    // The world is an upgradeable office suite, apartment, and an empty courtroom.
+    // Office portals lead to the partners' offices and conference room.
     //
     // Tile chars: 'w' wood  'r' rug  'x' void (never walkable)
 
@@ -863,10 +1124,10 @@
       // ------------------------------------------------------------------ OFFICE
       office: {
         id: 'office',
-        name: 'Your Law Office',
-        w: 13, h: 11,
+        name: 'Hardsell & Firestone — Main Office',
+        w: 14, h: 12,
         walls: 'wood',
-        spawn: { x: 6, y: 9 },
+        spawn: { x: 6, y: 10 },
         tile(x, y) {
           if (inRect(x, y, 4, 3, 8, 6)) return 'r';
           return 'w';
@@ -878,28 +1139,147 @@
             interact: { label: 'Your Computer — BarMail', action: 'email' } },
           { type: 'caseboard', x: 2, y: 1,
             interact: { label: 'Case Board — Your Record', action: 'record' } },
-          { type: 'bookshelf', x: 9, y: 1, full: () => hasUpgrade('subscription'),
-            interact: { label: 'Ethics Treatises', action: 'flavor_books' } },
+          { type: 'bookshelf', x: 10, y: 1, full: () => hasUpgrade('subscription'),
+            interact: { label: 'Ethics Treatises — Rule Library', action: 'rules' } },
           { type: 'clientchair', x: 5, y: 4 },
-          { type: 'cabinet', x: 11, y: 3,
+          { type: 'cabinet', x: 12, y: 3,
             interact: { label: 'Office Upgrades Catalog', action: 'shop_office' } },
+          { type: 'filingstation', x: 11, y: 6,
+            interact: { label: 'Filing Cabinet — Review Documents', action: 'doc_review' } },
           { type: 'sofa', x: 1, y: 6, visible: () => hasUpgrade('seating') },
-          { type: 'paralegaldesk', x: 9, y: 7, visible: () => hasUpgrade('paralegal') },
-          { type: 'conftable', x: 4, y: 7, visible: () => hasUpgrade('conference') },
+          { type: 'paralegaldesk', x: 1, y: 8 },
+          { type: 'paralegaldesk', x: 9, y: 8, visible: () => hasUpgrade('paralegal') },
           { type: 'plant', x: 1, y: 4 },
         ],
         portals: [
-          { x: 6, y: 10, label: 'Leave the Office', travel: true },
+          { x: 13, y: 2, label: 'Jim Hardsell’s Corner Office', to: 'corner_office' },
+          { x: 13, y: 5, label: 'Linda Firestone’s Office', to: 'linda_office' },
+          { x: 13, y: 9, label: 'Conference Room', to: 'conference_room' },
+          { x: 6, y: 11, label: 'Leave the Office', travel: true },
         ],
         npcs: [
-          { id: 'partner', name: 'Marcus Hargrove, Senior Partner', x: 4, y: 2,
-            look: { suit: '#3a3a42', gender: 'male', skin: 4, hair: 3, hairStyle: 0, eye: 0 },
-            icon: 'dot', talk: 'partner' },
-          { id: 'paralegal', name: 'Riley (Paralegal)', x: 10, y: 8,
+          { id: 'secretary', name: 'Liz Loza, Secretary', x: 2, y: 7,
+            look: { suit: '#6e2436', gender: 'female', skin: 2, hair: 1, hairStyle: 3, eye: 2 },
+            icon: 'dot', talk: 'secretary' },
+          { id: 'paralegal', name: 'Riley Readsalot, Paralegal', x: 10, y: 7,
             look: { suit: '#3f5d4b', gender: 'nonbinary', skin: 2, hair: 4, hairStyle: 2, eye: 2 },
             icon: 'dot', talk: 'paralegal',
             visible: () => hasUpgrade('paralegal') },
         ],
+      },
+
+      // ---------------------------------------------------------- CORNER OFFICE
+      corner_office: {
+        id: 'corner_office',
+        name: 'Jim Hardsell’s Corner Office',
+        w: 10, h: 8,
+        walls: 'navy',
+        spawn: { x: 5, y: 6 },
+        tile(x, y) {
+          if (inRect(x, y, 3, 3, 6, 5)) return 'r';
+          return 'w';
+        },
+        props: [
+          { type: 'citywindow', x: 1, y: 1 },
+          { type: 'citywindow', x: 3, y: 1 },
+          { type: 'citywindow', x: 5, y: 1 },
+          { type: 'citywindow', x: 7, y: 1 },
+          { type: 'executivedesk', x: 3, y: 3, nameplate: true },
+          { type: 'clientchair', x: 3, y: 5 },
+          { type: 'clientchair', x: 6, y: 5 },
+          { type: 'plant', x: 8, y: 5 },
+        ],
+        portals: [
+          { x: 5, y: 7, label: 'Return to the Main Office', to: 'office', dest: { x: 12, y: 2 } },
+        ],
+        npcs: [
+          { id: 'jim', name: 'Jim Hardsell, Managing Partner', x: 4, y: 2,
+            look: { suit: '#2b2b33', gender: 'male', skin: 4, hair: 3, hairStyle: 0, eye: 0 },
+            icon: 'dot', talk: 'jim' },
+        ],
+      },
+
+      // ----------------------------------------------------------- LINDA OFFICE
+      linda_office: {
+        id: 'linda_office',
+        name: 'Linda Firestone’s Office',
+        w: 9, h: 8,
+        walls: 'burgundy',
+        spawn: { x: 4, y: 6 },
+        tile(x, y) {
+          if (inRect(x, y, 2, 3, 6, 5)) return 'r';
+          return 'w';
+        },
+        props: [
+          { type: 'citywindow', x: 1, y: 1 },
+          { type: 'citywindow', x: 3, y: 1 },
+          { type: 'citywindow', x: 5, y: 1 },
+          { type: 'executivedesk', x: 3, y: 3, nameplate: true },
+          { type: 'bookshelf', x: 6, y: 4, full: true },
+          { type: 'plant', x: 1, y: 5 },
+        ],
+        portals: [
+          { x: 4, y: 7, label: 'Return to the Main Office', to: 'office', dest: { x: 12, y: 5 } },
+        ],
+        npcs: [
+          { id: 'linda', name: 'Linda Firestone, Partner', x: 4, y: 2,
+            look: { suit: '#6e2436', gender: 'female', skin: 1, hair: 0, hairStyle: 1, eye: 1 },
+            icon: 'dot', talk: 'linda' },
+        ],
+      },
+
+      // --------------------------------------------------------- CONFERENCE ROOM
+      conference_room: {
+        id: 'conference_room',
+        name: 'Conference Room',
+        w: 11, h: 9,
+        walls: 'green',
+        spawn: { x: 5, y: 7 },
+        tile(x, y) {
+          if (inRect(x, y, 3, 3, 7, 6)) return 'r';
+          return 'w';
+        },
+        props: [
+          { type: 'tv', x: 4, y: 1 },
+          { type: 'conftable', x: 4, y: 4 },
+          { type: 'clientchair', x: 3, y: 4 },
+          { type: 'clientchair', x: 7, y: 4 },
+          { type: 'clientchair', x: 4, y: 6 },
+          { type: 'clientchair', x: 6, y: 6 },
+          { type: 'plant', x: 1, y: 6 },
+          { type: 'plant', x: 9, y: 6 },
+        ],
+        portals: [
+          { x: 5, y: 8, label: 'Return to the Main Office', to: 'office', dest: { x: 12, y: 9 } },
+        ],
+        npcs: [],
+      },
+
+      // --------------------------------------------------------------- COURTROOM
+      courtroom: {
+        id: 'courtroom',
+        name: 'Courtroom — No Matters on Calendar',
+        w: 13, h: 11,
+        walls: 'marble',
+        spawn: { x: 6, y: 9 },
+        tile(x, y) {
+          if (inRect(x, y, 1, 1, 11, 9)) return 'm';
+          return 'M';
+        },
+        props: [
+          { type: 'judgebench', x: 5, y: 1 },
+          { type: 'witnessstand', x: 2, y: 3 },
+          { type: 'clerkcounter', x: 9, y: 3 },
+          { type: 'counseltable', x: 3, y: 6 },
+          { type: 'counseltable', x: 8, y: 6 },
+          { type: 'bench', x: 2, y: 8 },
+          { type: 'bench', x: 5, y: 8 },
+          { type: 'bench', x: 8, y: 8 },
+        ],
+        portals: [
+          { x: 6, y: 10, label: 'Leave the Empty Courtroom', travel: true },
+        ],
+        npcs: [],
       },
 
       // ---------------------------------------------------------------- APARTMENT
@@ -1157,6 +1537,72 @@
           if (tier >= 2) { ctx.fillStyle = PAL.brass; ctx.fillRect(c.x + 18, c.y - 29, 8, 4); }
         },
       },
+      executivedesk: {
+        w: 3, h: 1, solid: true,
+        draw(ctx, ox, oy, prop) {
+          box(ctx, ox, oy, -0.42, -0.36, 2.84, 0.72, 26, PAL.woodDark);
+          const c = p(ox, oy, 1, 0);
+          ctx.fillStyle = PAL.parchment;
+          ctx.fillRect(c.x - 34, c.y - 32, 17, 9);
+          ctx.fillStyle = PAL.ink;
+          ctx.fillRect(c.x + 2, c.y - 49, 25, 17);
+          ctx.fillStyle = '#bcd8e8';
+          ctx.fillRect(c.x + 5, c.y - 46, 19, 11);
+          ctx.fillStyle = PAL.brass;
+          ctx.fillRect(c.x - 2, c.y - 30, 10, 3);
+          if (prop.nameplate) {
+            ctx.fillStyle = PAL.brassLight;
+            ctx.fillRect(c.x - 12, c.y - 37, 22, 5);
+          }
+        },
+      },
+      filingstation: {
+        w: 2, h: 1, solid: true,
+        draw(ctx, ox, oy, prop, t) {
+          box(ctx, ox, oy, -0.4, -0.3, 0.72, 0.62, 44, PAL.stoneDark);
+          box(ctx, ox, oy, 0.68, -0.3, 0.72, 0.62, 44, PAL.stoneDark);
+          const c = p(ox, oy, 0.5, 0.25);
+          ctx.fillStyle = PAL.brass;
+          for (const offset of [-28, -17, -6]) {
+            ctx.fillRect(c.x - 39, c.y + offset, 10, 2);
+            ctx.fillRect(c.x + 18, c.y + offset, 10, 2);
+          }
+          ctx.fillStyle = PAL.parchment;
+          ctx.fillRect(c.x - 8, c.y - 48, 21, 13);
+          ctx.strokeStyle = `rgba(110,36,54,${0.45 + Math.sin(t * 2) * 0.12})`;
+          ctx.lineWidth = 1;
+          ctx.strokeRect(c.x - 8, c.y - 48, 21, 13);
+        },
+      },
+      citywindow: {
+        w: 2, h: 1, solid: true,
+        draw(ctx, ox, oy, prop, t) {
+          const c = p(ox, oy, 0.5, 0);
+          const top = c.y - 78;
+          ctx.fillStyle = '#152a43';
+          ctx.fillRect(c.x - 48, top, 96, 60);
+          const glow = 0.55 + Math.sin(t * 0.7 + prop.x) * 0.08;
+          const buildings = [
+            [-44, 26], [-32, 38], [-18, 30], [-3, 45], [14, 34], [29, 48], [42, 28],
+          ];
+          ctx.fillStyle = '#0e1828';
+          for (const [x, height] of buildings) ctx.fillRect(c.x + x, top + 60 - height, 12, height);
+          ctx.fillStyle = `rgba(217,182,86,${glow})`;
+          for (let x = -40; x < 44; x += 16) {
+            for (let y = 13; y < 51; y += 13) {
+              if ((x + y + prop.x) % 3) ctx.fillRect(c.x + x, top + y, 3, 3);
+            }
+          }
+          ctx.strokeStyle = PAL.brass;
+          ctx.lineWidth = 4;
+          ctx.strokeRect(c.x - 50, top - 2, 100, 64);
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(c.x, top); ctx.lineTo(c.x, top + 60);
+          ctx.moveTo(c.x - 48, top + 29); ctx.lineTo(c.x + 48, top + 29);
+          ctx.stroke();
+        },
+      },
       caseboard: {
         w: 2, h: 1, solid: true,
         draw(ctx, ox, oy) {
@@ -1228,6 +1674,21 @@
           const c = p(ox, oy, 1, 0.5);
           ctx.fillStyle = PAL.parchment;
           ctx.fillRect(c.x - 20, c.y - 28, 12, 7); ctx.fillRect(c.x + 8, c.y - 24, 12, 7);
+        },
+      },
+      tv: {
+        w: 2, h: 1, solid: true,
+        draw(ctx, ox, oy, prop, t) {
+          const c = p(ox, oy, 0.5, 0);
+          box(ctx, ox, oy, -0.42, -0.1, 1.84, 0.2, 56, PAL.ink);
+          ctx.fillStyle = '#101d31';
+          ctx.fillRect(c.x - 42, c.y - 65, 84, 42);
+          ctx.fillStyle = `rgba(100,174,211,${0.22 + Math.sin(t) * 0.05})`;
+          ctx.fillRect(c.x - 38, c.y - 61, 76, 34);
+          ctx.fillStyle = PAL.parchment;
+          ctx.font = 'bold 8px Verdana';
+          ctx.textAlign = 'center';
+          ctx.fillText('CASE STRATEGY', c.x, c.y - 43);
         },
       },
       aiworkstation: {
@@ -1486,6 +1947,7 @@
       marble: PAL.marbleDark,
       green: PAL.archiveGreen,
       burgundy: '#5d3540',
+      navy: PAL.navy,
     };
 
     class WorldRenderer {
@@ -1763,6 +2225,7 @@
         this.path = [];
         this.facing = 1;              // -1 left, 1 right (screen-space flip)
         this.onArrive = null;         // callback when path completes
+        this.activity = null;         // null | 'reviewing'
       }
 
       get walking() { return this.path.length > 0; }
@@ -1805,7 +2268,8 @@
 
       // Draw at screen point (sx, sy) = center of the tile under the feet.
       draw(ctx, sx, sy, t, isPlayer = false) {
-        const bob = this.walking ? Math.sin(t * 12) * 1.6 : 0;
+        const seated = this.activity === 'reviewing';
+        const bob = this.walking && !seated ? Math.sin(t * 12) * 1.6 : 0;
         const f = this.facing;
         const suit = this.look.suit || PAL.navy;
         const skin = PAL.skin[this.look.skin ?? 0] || PAL.skin[0];
@@ -1822,12 +2286,23 @@
         ctx.ellipse(sx, sy + 2, 11, 5, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        const y0 = sy - bob;
+        const y0 = sy - bob + (seated ? 6 : 0);
+        if (seated) {
+          ctx.fillStyle = PAL.woodDark;
+          ctx.beginPath();
+          ctx.roundRect(sx - 11, y0 - 25, 22, 24, 4);
+          ctx.fill();
+        }
         // legs
         ctx.fillStyle = shade(suit, -0.25);
-        const stride = this.walking ? Math.sin(t * 12) * 3 : 0;
-        ctx.fillRect(sx - 5, y0 - 12 + Math.max(0, stride), 4, 12 - Math.max(0, stride));
-        ctx.fillRect(sx + 1, y0 - 12 + Math.max(0, -stride), 4, 12 - Math.max(0, -stride));
+        const stride = this.walking && !seated ? Math.sin(t * 12) * 3 : 0;
+        if (seated) {
+          ctx.fillRect(sx - 8, y0 - 11, 7, 8);
+          ctx.fillRect(sx + 1, y0 - 11, 7, 8);
+        } else {
+          ctx.fillRect(sx - 5, y0 - 12 + Math.max(0, stride), 4, 12 - Math.max(0, stride));
+          ctx.fillRect(sx + 1, y0 - 12 + Math.max(0, -stride), 4, 12 - Math.max(0, -stride));
+        }
         // body (suit)
         ctx.fillStyle = suit;
         ctx.beginPath();
@@ -1912,7 +2387,18 @@
         }
 
         // briefcase for the player
-        if (isPlayer) {
+        if (isPlayer && seated) {
+          const pageY = y0 - 17 + Math.sin(t * 1.8) * 0.5;
+          ctx.fillStyle = PAL.parchment;
+          ctx.fillRect(sx - 12, pageY, 24, 12);
+          ctx.strokeStyle = PAL.brass;
+          ctx.lineWidth = 1;
+          ctx.strokeRect(sx - 12, pageY, 24, 12);
+          ctx.fillStyle = PAL.ink;
+          for (let line = 0; line < 3; line++) {
+            ctx.fillRect(sx - 8, pageY + 3 + line * 3, 16, 1);
+          }
+        } else if (isPlayer) {
           ctx.fillStyle = PAL.woodDark;
           ctx.beginPath();
           ctx.roundRect(sx + 9 * f - 4, y0 - 16, 9, 7, 1.5);
@@ -2043,7 +2529,7 @@
     Object.assign(exports, { showDialogue, hideDialogue, dialogueOpen });
   },
   "js/data/ethics.js": (exports, require) => {
-    // BarMail ethics scenarios — the game's only task type.
+    // BarMail ethics scenarios — progressive professional-responsibility practice.
     //
     // Content was developed from a local professional-responsibility corpus
     // (Arizona Ethical Rules under Ariz. R. Sup. Ct. 42, cited
@@ -2059,14 +2545,16 @@
     // Every non-correct choice carries a `why` explaining the violation and the
     // rule, shown to the player when they lose Ethics.
 
+    const { MPRE_SCENARIOS } = require("js/data/mpre.js");
+
     const WRONG_DMG = 10;
     const VERY_WRONG_DMG = 25;
     const STREAK_HEAL = 10;
 
-    const SCENARIOS = [
+    const CORE_SCENARIOS = [
       {
         id: 'trust_advance',
-        from: 'Marcus Hargrove', role: 'Senior Partner', gold: 30,
+        from: 'Jim Hardsell', role: 'Managing Partner', gold: 30,
         subject: 'Whitfield retainer — cash flow',
         body: 'The Whitfield engagement letter is signed and their $10,000 advance fee just hit. '
           + 'Payroll is tight this month — deposit it straight into the firm operating account. '
@@ -2104,7 +2592,7 @@
       },
       {
         id: 'ai_brief',
-        from: 'Marcus Hargrove', role: 'Senior Partner', gold: 25,
+        from: 'Jim Hardsell', role: 'Managing Partner', gold: 25,
         subject: 'File the AI draft tonight',
         body: 'The reply brief is due at midnight. The new AI tool wrote a full draft and the '
           + 'citations look plausible. Nobody has time to pull the cases. File it as-is and '
@@ -2162,7 +2650,7 @@
       },
       {
         id: 'double_billing',
-        from: 'Marcus Hargrove', role: 'Senior Partner', gold: 25,
+        from: 'Jim Hardsell', role: 'Managing Partner', gold: 25,
         subject: 'Bill it twice — both files benefit',
         body: 'That preemption research you did for the Hendricks matter is equally useful on '
           + 'Marlowe. Bill the full twelve hours to Hendricks AND the same twelve to Marlowe. '
@@ -2200,7 +2688,7 @@
       },
       {
         id: 'witness_vacation',
-        from: 'Marcus Hargrove', role: 'Senior Partner', gold: 30,
+        from: 'Jim Hardsell', role: 'Managing Partner', gold: 30,
         subject: 'Ochoa deposition problem',
         body: 'Ochoa’s testimony will hurt us. He’s a former employee of the client, still '
           + 'friendly. Suggest to him that this would be a wonderful week to take that fishing '
@@ -2277,7 +2765,7 @@
       },
       {
         id: 'sign_for_client',
-        from: 'Marcus Hargrove', role: 'Senior Partner', gold: 25,
+        from: 'Jim Hardsell', role: 'Managing Partner', gold: 25,
         subject: 'Release needs a signature TODAY',
         body: 'The Vann settlement release must go back signed today or the deal collapses. '
           + 'Mrs. Vann is on a cruise, unreachable until Sunday. She told us last week she was '
@@ -2315,7 +2803,7 @@
       },
       {
         id: 'padding_hours',
-        from: 'Marcus Hargrove', role: 'Senior Partner', gold: 25,
+        from: 'Jim Hardsell', role: 'Managing Partner', gold: 25,
         subject: 'Your hours look light',
         body: 'Your timesheets are hurting the file’s realization. Everyone knows travel time, '
           + 'thinking in the shower, dreams about the case — it all counts. Round each entry up '
@@ -2412,7 +2900,7 @@
       },
       {
         id: 'paralegal_hearing',
-        from: 'Marcus Hargrove', role: 'Senior Partner', gold: 25,
+        from: 'Jim Hardsell', role: 'Managing Partner', gold: 25,
         subject: 'Coverage for Thursday’s status conference',
         body: 'Everyone’s in depositions Thursday. Riley the paralegal has watched a hundred '
           + 'status conferences and knows the Chen file cold. Have Riley appear for us and enter '
@@ -2470,7 +2958,276 @@
         ],
       },
     ];
+
+    const CORE_DIFFICULTY = {
+      trust_advance: 1,
+      double_billing: 1,
+      client_loan: 1,
+      sign_for_client: 1,
+      padding_hours: 1,
+      fake_reviews: 1,
+      confidences_dinner: 1,
+      candor_authority: 2,
+      ai_brief: 2,
+      former_client: 2,
+      no_contact: 2,
+      inadvertent_docs: 2,
+      witness_vacation: 2,
+      hospital_solicit: 2,
+      paralegal_hearing: 2,
+      delete_emails: 2,
+      threat_criminal: 3,
+      referral_split: 3,
+      disputed_funds: 3,
+      report_misconduct: 3,
+      decline_fraud: 3,
+    };
+
+    const SCENARIOS = [
+      ...CORE_SCENARIOS.map((scenario) => ({
+        ...scenario,
+        difficulty: CORE_DIFFICULTY[scenario.id] || 2,
+        sourceType: 'lawscape',
+      })),
+      ...MPRE_SCENARIOS,
+    ];
     Object.assign(exports, { WRONG_DMG, VERY_WRONG_DMG, STREAK_HEAL, SCENARIOS });
+  },
+  "js/data/mpre.js": (exports, require) => {
+    // Original LawScape email adaptations of concepts covered by NCBE's free MPRE
+    // sample set. These are not official NCBE questions and do not reproduce live
+    // or secure exam content.
+
+    const SOURCE_NOTE = 'MPRE-style practice — adapted from concepts in NCBE’s free sample questions; not an official NCBE question.';
+    const SOURCE_URL = 'https://www.ncbex.org/exams/mpre/preparing-mpre';
+
+    const MPRE_SCENARIOS = [
+      {
+        id: 'mpre_nonprofit_merger',
+        difficulty: 2,
+        sourceType: 'mpre-style',
+        sourceNote: SOURCE_NOTE,
+        sourceUrl: SOURCE_URL,
+        from: 'Elena Park',
+        role: 'Corporate Partner',
+        subject: 'HopeWorks will not disclose the merger problem',
+        body: `We represent HopeWorks in a nonprofit merger. I found old financial activity that may have jeopardized its tax status, although our firm had nothing to do with that activity and has made no false statement.
+
+    I told the board that silence could facilitate fraud and that we would withdraw unless it disclosed the issue. The board refused, so I withdrew without notifying the other nonprofit or regulators. Did I mishandle this?`,
+        gold: 35,
+        rule: 'Model Rules 1.13, 1.16, and 1.6 — Organizational Client; Withdrawal; Confidentiality',
+        choices: [
+          { grade: 'very_wrong',
+            text: 'You had to reveal the old activity to the merger counterparty immediately.',
+            why: 'Withdrawal does not automatically authorize revealing organizational-client information. External disclosure still requires an applicable confidentiality exception and the conditions of the organizational-client rule.' },
+          { grade: 'wrong',
+            text: 'You could not withdraw unless the board gave the firm permission.',
+            why: 'A lawyer must withdraw when continued representation would violate the rules or other law and may withdraw in other specified circumstances; the client does not hold an absolute veto.' },
+          { grade: 'correct',
+            text: 'Your warning and withdrawal were defensible; these facts did not automatically require external disclosure.' },
+          { grade: 'wrong',
+            text: 'You could withdraw silently even if the board never received an internal warning.',
+            why: 'An organizational lawyer ordinarily should refer a serious matter to higher authority when a constituent’s conduct threatens substantial injury to the organization.' },
+        ],
+      },
+      {
+        id: 'mpre_other_confession',
+        difficulty: 3,
+        sourceType: 'mpre-style',
+        sourceNote: SOURCE_NOTE,
+        sourceUrl: SOURCE_URL,
+        from: 'Marcus Lee',
+        role: 'Chief Deputy Prosecutor',
+        subject: 'Credible confession points to an innocent prisoner',
+        body: `A defendant credibly confessed not only to our pending homicide but also to an older murder in another county. Corroborated details make it reasonably likely that the person imprisoned for that older murder is innocent.
+
+    Our office has not shared the information with the other jurisdiction. What does professional responsibility require?`,
+        gold: 55,
+        rule: 'Model Rule 3.8(g) — New Evidence of Wrongful Conviction',
+        choices: [
+          { grade: 'correct',
+            text: 'Promptly disclose the information to an appropriate court or prosecutorial authority in the other jurisdiction.' },
+          { grade: 'wrong',
+            text: 'Disclosure is required only after our office completes its own reinvestigation.',
+            why: 'The duty is triggered by new, credible, material evidence creating a reasonable likelihood of innocence; it does not depend on completing a second prosecution.' },
+          { grade: 'very_wrong',
+            text: 'Keep it confidential because the confession arose while representing the state.',
+            why: 'A prosecutor’s special responsibility to address credible evidence of wrongful conviction cannot be avoided by treating the information as ordinary client confidentiality.' },
+          { grade: 'very_wrong',
+            text: 'Do nothing because the other conviction is already final.',
+            why: 'Finality is the reason the special post-conviction disclosure obligation matters, not an exception to it.' },
+        ],
+      },
+      {
+        id: 'mpre_toxic_waste',
+        difficulty: 2,
+        sourceType: 'mpre-style',
+        sourceNote: SOURCE_NOTE,
+        sourceUrl: SOURCE_URL,
+        from: 'Priya Shah',
+        role: 'Environmental Partner',
+        subject: 'Toxic waste threatens the city water supply',
+        body: `A chemical-company client admitted that an employee accidentally buried highly toxic waste where it can reach the city water supply. The danger is reasonably certain to cause substantial bodily harm.
+
+    The president refused my advice to notify the city, so I withdrew and alerted authorities. Was that disclosure permitted?`,
+        gold: 40,
+        rule: 'Model Rule 1.6(b)(1) — Preventing Reasonably Certain Death or Substantial Bodily Harm',
+        choices: [
+          { grade: 'very_wrong',
+            text: 'No. Confidential information can never be disclosed without client consent.',
+            why: 'The confidentiality rule contains a permissive exception for preventing reasonably certain death or substantial bodily harm.' },
+          { grade: 'wrong',
+            text: 'No. The exception applies only when the original conduct was intentional.',
+            why: 'The bodily-harm exception turns on the reasonably certain danger, not whether the client or employee intentionally created it.' },
+          { grade: 'wrong',
+            text: 'Yes, because the president’s decision was immoral and bad for publicity.',
+            why: 'A lawyer’s moral disagreement is not itself a confidentiality exception; the threatened bodily harm supplies the relevant basis.' },
+          { grade: 'correct',
+            text: 'Yes. A lawyer may disclose what is reasonably necessary to prevent the reasonably certain substantial bodily harm.' },
+        ],
+      },
+      {
+        id: 'mpre_unrepresented_parent',
+        difficulty: 2,
+        sourceType: 'mpre-style',
+        sourceNote: SOURCE_NOTE,
+        sourceUrl: SOURCE_URL,
+        from: 'Allison Grant',
+        role: 'Family-Law Partner',
+        subject: 'Meeting with an unrepresented parent',
+        body: `At our client’s request, I gave an unrepresented father her proposed custody arrangement and asked whether he would agree. When he asked if it was fair, I said he should obtain his own lawyer and gave no other legal advice.
+
+    Was the meeting improper?`,
+        gold: 35,
+        rule: 'Model Rule 4.3 — Dealing With an Unrepresented Person',
+        choices: [
+          { grade: 'wrong',
+            text: 'Yes. A lawyer may never present a client proposal to an unrepresented opposing person.',
+            why: 'A lawyer may communicate and negotiate with an unrepresented person, subject to the rule against misleading the person or giving conflicted legal advice.' },
+          { grade: 'very_wrong',
+            text: 'Yes. Telling the father to obtain counsel was itself prohibited legal advice.',
+            why: 'Advice to secure counsel is the express exception to the restriction on giving legal advice to an unrepresented person whose interests may conflict with the client’s.' },
+          { grade: 'correct',
+            text: 'No. Presenting the proposal was permissible, and the only advice given was to obtain independent counsel.' },
+          { grade: 'very_wrong',
+            text: 'No. You were free to advise him about fairness because he had no lawyer.',
+            why: 'The absence of counsel does not permit a lawyer to advise a potentially adverse person about the merits of the client’s proposal.' },
+        ],
+      },
+      {
+        id: 'mpre_billing_fraud_report',
+        difficulty: 2,
+        sourceType: 'mpre-style',
+        sourceNote: SOURCE_NOTE,
+        sourceUrl: SOURCE_URL,
+        from: 'Naomi Brooks',
+        role: 'Managing Partner',
+        subject: 'Former partner falsified client charges',
+        body: `We discovered that a partner charged personal expenses to a client and labeled them as representation costs. The partner resigned after confrontation. We informed and reimbursed the client, who does not object to a disciplinary report.
+
+    Must the firm report the former partner?`,
+        gold: 40,
+        rule: 'Model Rule 8.3(a) — Reporting Professional Misconduct',
+        choices: [
+          { grade: 'wrong',
+            text: 'Yes, because every professional-conduct violation must be reported.',
+            why: 'The reporting rule is limited to known violations raising a substantial question about honesty, trustworthiness, or fitness.' },
+          { grade: 'correct',
+            text: 'Yes. Deliberate billing fraud raises a substantial question about honesty and fitness.' },
+          { grade: 'very_wrong',
+            text: 'No. Refunding the client erased the reporting obligation.',
+            why: 'Remediation helps the client but does not erase known dishonest conduct that raises a substantial fitness question.' },
+          { grade: 'very_wrong',
+            text: 'No. Partnership duties prohibit reporting a former partner.',
+            why: 'Private firm duties do not override the professional reporting rule when its conditions are met and confidentiality does not bar disclosure.' },
+        ],
+      },
+      {
+        id: 'mpre_malpractice_settlement',
+        difficulty: 3,
+        sourceType: 'mpre-style',
+        sourceNote: SOURCE_NOTE,
+        sourceUrl: SOURCE_URL,
+        from: 'Thomas Reed',
+        role: 'Appellate Partner',
+        subject: 'I missed the appeal deadline',
+        body: `I missed a pro bono client’s appeal deadline. I offered to pay the value of the lost claim in exchange for a written release. The agreement advised him in writing to seek independent counsel and gave him ample time. He chose not to consult anyone and signed a week later.
+
+    Is the settlement professionally permissible?`,
+        gold: 55,
+        rule: 'Model Rule 1.8(h)(2) — Settling a Malpractice Claim With an Unrepresented Client',
+        choices: [
+          { grade: 'very_wrong',
+            text: 'No. A lawyer may never settle a potential malpractice claim with a client.',
+            why: 'Such settlements are permitted if the unrepresented client receives the required written advice and a reasonable opportunity to obtain independent counsel.' },
+          { grade: 'wrong',
+            text: 'No. The client had to actually retain independent counsel before signing.',
+            why: 'The rule requires written advice about the desirability of independent counsel and a reasonable opportunity to seek it, not proof that counsel was retained.' },
+          { grade: 'correct',
+            text: 'Yes. The written advice and reasonable opportunity to seek independent counsel satisfy the professional-conduct condition.' },
+          { grade: 'wrong',
+            text: 'Yes, solely because the payment fully covered the expected loss.',
+            why: 'The amount does not substitute for the required process protecting an unrepresented client deciding whether to release a claim.' },
+        ],
+      },
+      {
+        id: 'mpre_lawyer_witness',
+        difficulty: 3,
+        sourceType: 'mpre-style',
+        sourceNote: SOURCE_NOTE,
+        sourceUrl: SOURCE_URL,
+        from: 'Michael Torres',
+        role: 'Estate-Planning Partner',
+        subject: 'Can I try the will contest if I must testify?',
+        body: `I drafted a longtime client’s will and was one of its witnesses. After her death, the executor asked me to handle probate. Her son is contesting capacity, and I expect to be the only surviving witness able to give necessary testimony on that disputed issue.
+
+    May I serve as trial counsel in the contest?`,
+        gold: 55,
+        rule: 'Model Rule 3.7 — Lawyer as Witness',
+        choices: [
+          { grade: 'correct',
+            text: 'No. A lawyer ordinarily may not advocate at a trial where the lawyer is likely to be a necessary witness on a contested issue.' },
+          { grade: 'wrong',
+            text: 'No, because representing an executor is always adverse to an heir.',
+            why: 'The controlling problem on these facts is the advocate-witness rule, not an automatic conflict with every heir.' },
+          { grade: 'very_wrong',
+            text: 'Yes. Being the only surviving witness automatically permits the dual role.',
+            why: 'Necessity of the testimony is what triggers the rule; it is not itself a categorical exception permitting the lawyer to act as trial advocate.' },
+          { grade: 'wrong',
+            text: 'Yes, because the testimony supports the will rather than undermines it.',
+            why: 'The advocate-witness concern applies even when the lawyer’s expected testimony favors the client’s position.' },
+        ],
+      },
+      {
+        id: 'mpre_internal_investigation',
+        difficulty: 3,
+        sourceType: 'mpre-style',
+        sourceNote: SOURCE_NOTE,
+        sourceUrl: SOURCE_URL,
+        from: 'Henry Cole',
+        role: 'Investigations Partner',
+        subject: 'Board refuses to stop ongoing billing fraud',
+        body: `A health-care company hired us to investigate and defend a Medicaid-fraud matter. We confirmed that the president ordered ongoing false billing. I reported up to the board, which declined to act, then disclosed the information to the attorney general.
+
+    Was reporting outside the company permitted under the organizational-client rule?`,
+        gold: 60,
+        rule: 'Model Rule 1.13(c) and (d) — Reporting Outside an Organization',
+        choices: [
+          { grade: 'wrong',
+            text: 'No, because the employee who first reported the conduct did not consent.',
+            why: 'The firm represents the organization, not necessarily the reporting employee; the decisive limitation arises from the purpose for which the firm was retained.' },
+          { grade: 'correct',
+            text: 'No. Reporting out is unavailable when the lawyer was retained to investigate the violation or defend the organization in a related claim.' },
+          { grade: 'very_wrong',
+            text: 'Yes. Reporting to the board always permits disclosure to the government if the board refuses to act.',
+            why: 'Reporting up is normally required first, but reporting out remains limited and contains an express investigation-or-defense restriction.' },
+          { grade: 'wrong',
+            text: 'Yes. Any conduct likely to injure an organization may always be disclosed.',
+            why: 'The rule imposes conditions and exceptions; likely organizational injury is not a universal confidentiality override.' },
+        ],
+      },
+    ];
+    Object.assign(exports, { MPRE_SCENARIOS });
   },
   "js/data/upgrades.js": (exports, require) => {
     // Upgrade catalogs, priced in gold earned from BarMail ethics scenarios.
@@ -2484,17 +3241,17 @@
         desc: 'BarMail shows which Rule of Professional Conduct is implicated before you answer. Your bookshelf fills up.' },
       { id: 'seating', name: 'Client Seating Area', cost: 220,
         desc: 'Grateful clients tip: +10 gold flat on every correct answer. A respectable sofa appears.' },
-      { id: 'paralegal', name: 'Paralegal Desk (Riley)', cost: 450,
-        desc: 'Riley flags disasters before you hit send: very wrong answers deal 15 damage instead of 25.' },
-      { id: 'conference', name: 'Conference Room Setup', cost: 900,
-        desc: '+25% gold from correct answers and an executive desk. The firm looks like a firm.' },
+      { id: 'paralegal', name: 'Paralegal Upgrade — Riley Readsalot', cost: 450,
+        desc: 'Riley Readsalot flags disasters before you hit send: very wrong answers deal 15 damage instead of 25.' },
+      { id: 'conference', name: 'Conference Room AV Upgrade', cost: 900,
+        desc: '+25% gold from correct answers and upgraded case-presentation equipment.' },
     ];
 
     const APARTMENT_UPGRADES = [
       { id: 'mattress', name: 'Better Mattress', cost: 80,
         desc: '+20 max Ethics. A principled attorney is a well-rested attorney.' },
       { id: 'coffee', name: 'Coffee Machine', cost: 120,
-        desc: 'Streak heals restore +5 more Ethics. Clarity in a cup.' },
+        desc: 'Drink a cup to restore 2 Ethics. Clarity in a cup.' },
       { id: 'wardrobe_rack', name: 'Wardrobe Rack', cost: 160,
         desc: 'Unlocks suit color changes at the wardrobe.' },
       { id: 'homedesk', name: 'Home CLE Desk', cost: 260,
@@ -2518,12 +3275,800 @@
         goldFlat: has('seating') ? 10 : 0,
         showRule: has('subscription'),
         veryWrongDmg: has('paralegal') ? 15 : 25,
-        streakHealBonus: has('coffee') ? 5 : 0,
+        streakHealBonus: 0,
         restHeal: 15 + (has('homedesk') ? 10 : 0),
         restCooldownMs: has('kitchen') ? 120_000 : 240_000,
       };
     }
     Object.assign(exports, { OFFICE_UPGRADES, APARTMENT_UPGRADES, findUpgrade, bonuses });
+  },
+  "js/data/rules.js": (exports, require) => {
+    // Generated from the local Ethics Agents authoring corpus.
+    // Run npm run rules:build to refresh after those source files change.
+
+    const RULE_LIBRARY = [
+      {
+        "id": "nevada",
+        "title": "Nevada Rules of Professional Conduct",
+        "citation": "NRPC",
+        "snapshot": "Local source includes amendments through January 12, 2024",
+        "officialUrl": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html",
+        "note": "Bundled text is an authoring snapshot. Use the official link to confirm the current rule before relying on it.",
+        "rules": [
+          {
+            "number": "1.0",
+            "title": "Terminology",
+            "text": "As used in these Rules, the following terms shall have the meanings ascribed:\n\n(a) “Belief” or “believes” denotes that the person involved actually supposed the fact in question to be true. A person’s belief may be inferred from\ncircumstances.\n(b) “Confirmed in writing,” when used in reference to the informed consent of a person, denotes informed consent that is given in writing by the\nperson or a writing that a lawyer promptly transmits to the person confirming an oral informed consent. See paragraph (e) for the definition of “informed\nconsent.” If it is not feasible to obtain or transmit the writing at the time the person gives informed consent, then the lawyer must obtain or transmit it\nwithin a reasonable time thereafter.\n(c) “Firm” or “law firm” denotes a lawyer or lawyers in a law partnership, professional corporation, sole proprietorship or other association authorized\nto practice law; or lawyers employed in a legal services organization or the legal department of a corporation or other organization.\n(d) “Fraud” or “fraudulent” denotes conduct that is fraudulent under the substantive or procedural law of the applicable jurisdiction and has a purpose\nto deceive.\n(e) “Informed consent” denotes the agreement by a person to a proposed course of conduct after the lawyer has communicated adequate information\nand explanation about the material risks of and reasonably available alternatives to the proposed course of conduct.\n(f) “Knowingly,” “known,” or “knows” denotes actual knowledge of the fact in question. A person’s knowledge may be inferred from circumstances.\n(g) “Partner” denotes a member of a partnership, a shareholder in a law firm organized as a professional corporation, or a member of an association\nauthorized to practice law.\n(h) “Reasonable” or “reasonably” when used in relation to conduct by a lawyer denotes the conduct of a reasonably prudent and competent lawyer.\n(i) “Reasonable belief” or “reasonably believes” when used in reference to a lawyer denotes that the lawyer believes the matter in question and that\nthe circumstances are such that the belief is reasonable.\n(j) “Reasonably should know” when used in reference to a lawyer denotes that a lawyer of reasonable prudence and competence would ascertain the\nmatter in question.\n(k) “Screened” denotes the isolation of a lawyer from any participation in a matter through the timely imposition of procedures within a firm that are\nreasonably adequate under the circumstances to protect information that the isolated lawyer is obligated to protect under these Rules or other law.\n(l) “Substantial” when used in reference to degree or extent denotes a material matter of clear and weighty importance.\n(m) “Tribunal” denotes a court, an arbitrator in a binding arbitration proceeding or a legislative body, administrative agency or other body acting in an\nadjudicative capacity. A legislative body, administrative agency or other body acts in an adjudicative capacity when a neutral official, after the presentation\nof evidence or legal argument by a party or parties, will render a binding legal judgment directly affecting a party’s interests in a particular matter.\n(n) “Writing” or “written” denotes a tangible or electronic record of a communication or representation, including handwriting, typewriting, printing,\nphotostating, photography, audio or videorecording and electronic communications. A “signed” writing includes an electronic sound, symbol or process\nattached to or logically associated with a writing and executed or adopted by a person with the intent to sign the writing.\n(o) “Organization” when used in reference to “organization as client” denotes any constituent of the organization, whether inside or outside counsel,\nwho supervises, directs, or regularly consults with the lawyer concerning the organization’s legal matters unless otherwise defined in the Rule.\n[Added; effective May 1, 2006; as amended; effective April 4, 2014.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC10"
+          },
+          {
+            "number": "1.0A",
+            "title": "Guidelines for Interpreting the Nevada Rules of Professional Conduct",
+            "text": "The preamble and comments to the ABA Model Rules of\n\nProfessional Conduct are not enacted by this Rule but may be consulted for guidance in interpreting and applying the Nevada Rules of Professional\nConduct, unless there is a conflict between the Nevada Rules and the preamble or comments. The following guidelines for interpreting and applying the\nNevada Rules of Professional Conduct are hereby adopted:\n(a) The Rules of Professional Conduct are rules of reason. They should be interpreted with reference to the purposes of legal representation and of the\nlaw itself. Some of the Rules are imperatives, cast in the terms “shall” or “shall not.” These define proper conduct for purposes of professional discipline.\nOthers, generally cast in the term “may,” are permissive and define areas under the Rules in which the lawyer has discretion to exercise professional\njudgment. No disciplinary action should be taken when the lawyer chooses not to act or acts within the bounds of such discretion. Other Rules define the\nnature of relationships between the lawyer and others. The Rules are thus partly obligatory and disciplinary and partly constitutive and descriptive in that\nthey define a lawyer’s professional role.\n(b) For purposes of determining the lawyer’s authority and responsibility, principles of substantive law external to these Rules determine whether a\nclient-lawyer relationship exists. Most of the duties flowing from the client-lawyer relationship attach only after the client has requested the lawyer to\nrender legal services and the lawyer has agreed to do so. But there are some duties, such as the duty of confidentiality under Rule 1.6, that attach when the\nlawyer agrees to consider whether a client-lawyer relationship shall be established. See Rule 1.18. Whether a client-lawyer relationship exists for any\nspecific purpose can depend on the circumstances and may be a question of fact.\n(c) Failure to comply with an obligation or prohibition imposed by a Rule is a basis for invoking the disciplinary process. The Rules presuppose that\ndisciplinary assessment of a lawyer’s conduct will be made on the basis of the facts and circumstances as they existed at the time of the conduct in\nquestion and in recognition of the fact that a lawyer often has to act upon uncertain or incomplete evidence of the situation. Moreover, the Rules\npresuppose that whether or not discipline should be imposed for a violation, and the severity of a sanction, depend on all the circumstances, such as the\nwillfulness and seriousness of the violation, extenuating factors and whether there have been previous violations.\n(d) Violation of a Rule should not itself give rise to a cause of action against a lawyer nor should it create any presumption in such a case that a legal\nduty has been breached. In addition, violation of a Rule does not necessarily warrant any other nondisciplinary remedy, such as disqualification of a\nlawyer in pending litigation. The Rules are designed to provide guidance to lawyers and to provide a structure for regulating conduct through disciplinary\nagencies. They are not designed to be a basis for civil liability. Furthermore, the purpose of the Rules can be subverted when they are invoked by opposing\nparties as procedural weapons. The fact that a Rule is a just basis for a lawyer’s self-assessment, or for sanctioning a lawyer under the administration of a\ndisciplinary authority, does not imply that an antagonist in a collateral proceeding or transaction has standing to seek enforcement of the Rule.\nNevertheless, since the Rules do establish standards of conduct by lawyers, a lawyer’s violation of a Rule may be evidence of breach of the applicable\nstandard of conduct.\n[Added; effective May 1, 2006.]\n\nCLIENT-LAWYER RELATIONSHIP",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC10A"
+          },
+          {
+            "number": "1.1",
+            "title": "Competence",
+            "text": "A lawyer shall provide competent representation to a client. Competent representation requires the legal knowledge, skill,\n\nthoroughness and preparation reasonably necessary for the representation.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC11"
+          },
+          {
+            "number": "1.2",
+            "title": "Scope of Representation and Allocation of Authority Between Client and Lawyer",
+            "text": "(a) Subject to paragraphs (c) and (d), a lawyer shall abide by a client’s decision concerning the objectives of representation and, as required by Rule\n1.4, shall consult with the client as to the means by which they are to be pursued. A lawyer may take such action on behalf of the client as is impliedly\nauthorized to carry out the representation. A lawyer shall abide by a client’s decision whether to settle a matter. In a criminal case, the lawyer shall abide\nby the client’s decision, after consultation with the lawyer, as to a plea to be entered, whether to waive jury trial and whether the client will testify.\n(b) A lawyer’s representation of a client, including representation by appointment, does not constitute an endorsement of the client’s political,\neconomic, social or moral views or activities.\n(c) A lawyer may limit the scope of the representation if the limitation is reasonable under the circumstances and the client gives informed consent.\n(d) A lawyer shall not counsel a client to engage, or assist a client, in conduct that the lawyer knows is criminal or fraudulent, but a lawyer may\ndiscuss the legal consequences of any proposed course of conduct with a client and may counsel or assist a client to make a good faith effort to determine\nthe validity, scope, meaning or application of the law.\n\nCOMMENT\n\n[1] A lawyer may counsel a client regarding the validity, scope, and meaning of Nevada Constitution Article 4, Section 38, and NRS Chapter 453A,\nand may assist a client in conduct that the lawyer reasonably believes is permitted by these constitutional provisions and statutes, including regulations,\norders, and other state or local provisions implementing them. In these circumstances, the lawyer shall also advise the client regarding related federal law\nand policy.\n[Added; effective May 1, 2006; as amended; effective May 7, 2014.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC12"
+          },
+          {
+            "number": "1.3",
+            "title": "Diligence",
+            "text": "A lawyer shall act with reasonable diligence and promptness in representing a client.\n\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC13"
+          },
+          {
+            "number": "1.4",
+            "title": "Communication",
+            "text": "(a) A lawyer shall:\n(1) Promptly inform the client of any decision or circumstance with respect to which the client’s informed consent is required by these Rules;\n(2) Reasonably consult with the client about the means by which the client’s objectives are to be accomplished;\n(3) Keep the client reasonably informed about the status of the matter;\n(4) Promptly comply with reasonable requests for information; and\n(5) Consult with the client about any relevant limitation on the lawyer’s conduct when the lawyer knows that the client expects assistance not\npermitted by the Rules of Professional Conduct or other law.\n(b) A lawyer shall explain a matter to the extent reasonably necessary to permit the client to make informed decisions regarding the representation.\n(c) Lawyer’s Biographical Data Form.  Each lawyer or law firm shall have available in written form to be provided upon request of the State Bar\nor a client or prospective client a factual statement detailing the background, training and experience of each lawyer or law firm.\n(1) The form shall be known as the “Lawyer’s Biographical Data Form” and shall contain the following fields of information:\n(i) Full name and business address of the lawyer.\n(ii) Date and jurisdiction of initial admission to practice.\n(iii) Date and jurisdiction of each subsequent admission to practice.\n(iv) Name of law school and year of graduation.\n(v) The areas of specialization in which the lawyer is entitled to hold himself or herself out as a specialist under the provisions of Rule 7.4.\n(vi) Any and all disciplinary sanctions imposed by any jurisdiction and/or court, whether or not the lawyer is licensed to practice law in that\njurisdiction and/or court. For purposes of this Rule, disciplinary sanctions include all private reprimands imposed after March 1, 2007, and any and all\npublic discipline imposed, regardless of the date of the imposition.\n(vii) If the lawyer is engaged in the private practice of law, whether the lawyer maintains professional liability insurance, and if the lawyer\nmaintains a policy, the name and address of the carrier.\n(2) Upon request, each lawyer or law firm shall provide the following additional information detailing the background, training and experience of\neach lawyer or law firm, including but not limited to:\n(i) Names and dates of any legal articles or treatises published by the lawyer, and the name of the publication in which they were published.\n(ii) A good faith estimate of the number of jury trials tried to a verdict by the lawyer to the present date, identifying the court or courts.\n(iii) A good faith estimate of the number of court (bench) trials tried to a judgment by the lawyer to the present date, identifying the court or\ncourts.\n(iv) A good faith estimate of the number of administrative hearings tried to a conclusion by the lawyer, identifying the administrative agency\nor agencies.\n(v) A good faith estimate of the number of appellate cases argued to a court of appeals or a supreme court, in which the lawyer was\nresponsible for writing the brief or orally arguing the case, identifying the court or courts.\n(vi) The professional activities of the lawyer consisting of teaching or lecturing.\n(vii) The names of any volunteer or charitable organizations to which the lawyer belongs, which the lawyer desires to publish.\n(viii) A description of bar activities such as elective or assigned committee positions in a recognized bar organization.\n(3) A lawyer or law firm that advertises or promotes services by written communication not involving solicitation as prohibited by Rule 7.3 shall\nenclose with each such written communication the information described in paragraph (c)(1)(i) through (v) of this Rule.\n(4) A copy of all information provided pursuant to this Rule shall be retained by the lawyer or law firm for a period of 3 years after last regular\nuse of the information.\n[Added; effective May 1, 2006; as amended; effective November 21, 2008.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC14"
+          },
+          {
+            "number": "1.5",
+            "title": "Fees",
+            "text": "(a) A lawyer shall not make an agreement for, charge, or collect an unreasonable fee or an unreasonable amount for expenses. The factors to be\nconsidered in determining the reasonableness of a fee include the following:\n(1) The time and labor required, the novelty and difficulty of the questions involved, and the skill requisite to perform the legal service properly;\n(2) The likelihood, if apparent to the client, that the acceptance of the particular employment will preclude other employment by the lawyer;\n(3) The fee customarily charged in the locality for similar legal services;\n(4) The amount involved and the results obtained;\n(5) The time limitations imposed by the client or by the circumstances;\n(6) The nature and length of the professional relationship with the client;\n(7) The experience, reputation, and ability of the lawyer or lawyers performing the services; and\n(8) Whether the fee is fixed or contingent.\n(b) The scope of the representation and the basis or rate of the fee and expenses for which the client will be responsible shall be communicated to the\nclient, preferably in writing, before or within a reasonable time after commencing the representation, except when the lawyer will charge a regularly\nrepresented client on the same basis or rate. Any changes in the basis or rate of the fee or expenses shall also be communicated to the client.\n(c) A fee may be contingent on the outcome of the matter for which the service is rendered, except in a matter in which a contingent fee is prohibited\nby paragraph (d) or other law. A contingent fee agreement shall be in writing, signed by the client, and shall state, in boldface type that is at least as large\nas the largest type used in the contingent fee agreement:\n(1) The method by which the fee is to be determined, including the percentage or percentages that shall accrue to the lawyer in the event of\nsettlement, trial or appeal;\n(2) Whether litigation and other expenses are to be deducted from the recovery, and whether such expenses are to be deducted before or after the\ncontingent fee is calculated;\n(3) Whether the client is liable for expenses regardless of outcome;\n(4) That, in the event of a loss, the client may be liable for the opposing party’s attorney fees, and will be liable for the opposing party’s costs as\nrequired by law; and\n(5) That a suit brought solely to harass or to coerce a settlement may result in liability for malicious prosecution or abuse of process.\nUpon conclusion of a contingent fee matter, the lawyer shall provide the client with a written statement stating the outcome of the matter and, if there is a\nrecovery, showing the remittance to the client and the method of its determination.\n(d) A lawyer shall not enter into an arrangement for, charge, or collect:\n(1) Any fee in a domestic relations matter, the payment or amount of which is contingent upon the securing of a divorce or upon the amount of\nalimony or support, or property settlement in lieu thereof; or\n(2) A contingent fee for representing a defendant in a criminal case.\n(e) A division of a fee between lawyers who are not in the same firm may be made only if:\n(1) Reserved;\n(2) The client agrees to the arrangement, including the share each lawyer will receive, and the agreement is confirmed in writing; and\n(3) The total fee is reasonable.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC15"
+          },
+          {
+            "number": "1.6",
+            "title": "Confidentiality of Information",
+            "text": "(a) A lawyer shall not reveal information relating to representation of a client unless the client gives informed consent, the disclosure is impliedly\nauthorized in order to carry out the representation, or the disclosure is permitted by paragraphs (b) and (d).\n(b) A lawyer may reveal information relating to the representation of a client to the extent the lawyer reasonably believes necessary:\n(1) To prevent reasonably certain death or substantial bodily harm;\n(2) To prevent the client from committing a criminal or fraudulent act in furtherance of which the client has used or is using the lawyer’s services,\nbut the lawyer shall, where practicable, first make reasonable effort to persuade the client to take suitable action;\n(3) To prevent, mitigate, or rectify the consequences of a client’s criminal or fraudulent act in the commission of which the lawyer’s services have\nbeen or are being used, but the lawyer shall, where practicable, first make reasonable effort to persuade the client to take corrective action;\n(4) To secure legal advice about the lawyer’s compliance with these Rules;\n(5) To establish a claim or defense on behalf of the lawyer in a controversy between the lawyer and the client, to establish a defense to a criminal\ncharge or civil claim against the lawyer based upon conduct in which the client was involved, or to respond to allegations in any proceeding concerning\nthe lawyer’s representation of the client; or\n(6) To comply with other law or a court order.\n(7) To detect and resolve conflicts of interest arising from the lawyer’s change of employment or from changes in the composition or ownership\nof a firm, but only if the revealed information would not compromise the attorney-client privilege or otherwise prejudice the client.\n(c) A lawyer shall make reasonable efforts to prevent the inadvertent or unauthorized disclosure of, or unauthorized access to, information relating to\nthe representation of a client.\n(d) A lawyer shall reveal information relating to the representation of a client to the extent the lawyer reasonably believes necessary to prevent a\ncriminal act that the lawyer believes is likely to result in reasonably certain death or substantial bodily harm.\n[Added; effective May 1, 2006; as amended; effective April 4, 2014.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC16"
+          },
+          {
+            "number": "1.7",
+            "title": "Conflict of Interest: Current Clients",
+            "text": "(a) Except as provided in paragraph (b), a lawyer shall not represent a client if the representation involves a concurrent conflict of interest. A\nconcurrent conflict of interest exists if:\n(1) The representation of one client will be directly adverse to another client; or\n(2) There is a significant risk that the representation of one or more clients will be materially limited by the lawyer’s responsibilities to another\nclient, a former client or a third person or by a personal interest of the lawyer.\n(b) Notwithstanding the existence of a concurrent conflict of interest under paragraph (a), a lawyer may represent a client if:\n(1) The lawyer reasonably believes that the lawyer will be able to provide competent and diligent representation to each affected client;\n(2) The representation is not prohibited by law;\n(3) The representation does not involve the assertion of a claim by one client against another client represented by the lawyer in the same\nlitigation or other proceeding before a tribunal; and\n(4) Each affected client gives informed consent, confirmed in writing.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC17"
+          },
+          {
+            "number": "1.8",
+            "title": "Conflict of Interest: Current Clients: Specific Rules",
+            "text": "(a) A lawyer shall not enter into a business transaction with a client or knowingly acquire an ownership, possessory, security or other pecuniary\ninterest adverse to a client unless:\n(1) The transaction and terms on which the lawyer acquires the interest are fair and reasonable to the client and are fully disclosed and transmitted\nin writing in a manner that can be reasonably understood by the client;\n(2) The client is advised in writing of the desirability of seeking and is given a reasonable opportunity to seek the advice of independent legal\ncounsel on the transaction; and\n(3) The client gives informed consent, in a writing signed by the client, to the essential terms of the transaction and the lawyer’s role in the\ntransaction, including whether the lawyer is representing the client in the transaction.\n(b) A lawyer shall not use information relating to representation of a client to the disadvantage of the client unless the client gives informed consent,\nexcept as permitted or required by these Rules.\n(c) A lawyer shall not solicit any substantial gift from a client, including a testamentary gift, or prepare on behalf of a client an instrument giving the\nlawyer or a person related to the lawyer any substantial gift unless the lawyer or other recipient of the gift is related to the client. For purposes of this\nparagraph, related persons include a spouse, child, grandchild, parent, grandparent or other relative or individual with whom the lawyer or the client\nmaintains a close, familial relationship.\n(d) Prior to the conclusion of representation of a client, a lawyer shall not make or negotiate an agreement giving the lawyer literary or media rights to\na portrayal or account based in substantial part on information relating to the representation.\n(e) A lawyer shall not provide financial assistance to a client in connection with pending or contemplated litigation, except that:\n(1) A lawyer may advance court costs and expenses of litigation, the repayment of which may be contingent on the outcome of the matter; and\n(2) A lawyer representing an indigent client may pay court costs and expenses of litigation on behalf of the client; and\n(3) A lawyer representing an indigent client pro bono; a lawyer representing an indigent client pro bono through a nonprofit legal services\nprovider, public interest organization, or law school clinical or pro bono program; and a lawyer representing an indigent client in a criminal matter through\na public defender’s office or by appointment may provide or facilitate modest gifts and humanitarian aid to a client or to those undertaking the care and\nsupport of the client. The following exceptions apply:\n(i) The lawyer may not seek or accept reimbursement from the client, a relative of the client, or anyone affiliated with the client for such gifts\nor aid; and\n(ii) Gifts or aid that would compromise the lawyer’s independent professional judgment are prohibited.\n(f) A lawyer shall not accept compensation for representing a client from one other than the client unless:\n(1) The client gives informed consent;\n(2) There is no interference with the lawyer’s independence of professional judgment or with the client-lawyer relationship; and\n(3) Information relating to representation of a client is protected as required by Rule 1.6.\n(g) A lawyer who represents two or more clients shall not participate in making an aggregate settlement of the claims of or against the clients, or in a\ncriminal case an aggregated agreement as to guilty or nolo contendere pleas, unless each client gives informed consent, in a writing signed by the client.\nThe lawyer’s disclosure shall include the existence and nature of all the claims or pleas involved and of the participation of each person in the settlement.\n(h) A lawyer shall not:\n(1) Make an agreement prospectively limiting the lawyer’s liability to a client for malpractice unless the client is independently represented in\nmaking the agreement; or\n(2) Settle a claim or potential claim for such liability with an unrepresented client or former client unless that person is advised in writing of the\ndesirability of seeking and is given a reasonable opportunity to seek the advice of independent legal counsel in connection therewith.\n(i) A lawyer shall not acquire a proprietary interest in the cause of action or subject matter of litigation the lawyer is conducting for a client, except\nthat the lawyer may:\n(1) Acquire a lien authorized by law to secure the lawyer’s fee or expenses; and\n(2) Contract with a client for a reasonable contingent fee in a civil case.\n(j) A lawyer shall not have sexual relations with a client unless a consensual sexual relationship existed between them when the client-lawyer\nrelationship commenced. This paragraph does not apply when the client is an organization.\n(k) A lawyer related to another lawyer as parent, child, sibling or spouse shall not represent a client in a representation directly adverse to a person\nwhom the lawyer knows is represented by the other lawyer except upon informed consent by the client after consultation regarding the relationship.\n(l) A lawyer shall not stand as security for costs or as surety on any appearance, appeal, or other bond or surety in any case in which the lawyer is\ncounsel.\n(m) While lawyers are associated in a firm, a prohibition in the foregoing paragraphs, with the exception of paragraph (j), that applies to any one of\nthem shall apply to all of them.\n[Added; effective May 1, 2006; as amended; effective January 12, 2024.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC18"
+          },
+          {
+            "number": "1.9",
+            "title": "Duties to Former Clients",
+            "text": "(a) A lawyer who has formerly represented a client in a matter shall not thereafter represent another person in the same or a substantially related\nmatter in which that person’s interests are materially adverse to the interests of the former client unless the former client gives informed consent,\nconfirmed in writing.\n(b) A lawyer shall not knowingly represent a person in the same or a substantially related matter in which a firm with which the lawyer formerly was\nassociated had previously represented a client:\n(1) Whose interests are materially adverse to that person; and\n(2) About whom the lawyer had acquired information protected by Rules 1.6 and 1.9(c) that is material to the matter;\n(3) Unless the former client gives informed consent, confirmed in writing.\n(c) A lawyer who has formerly represented a client in a matter or whose present or former firm has formerly represented a client in a matter shall not\nthereafter:\n(1) Use information relating to the representation to the disadvantage of the former client except as these Rules would permit or require with\nrespect to a client, or when the information has become generally known; or\n(2) Reveal information relating to the representation except as these Rules would permit or require with respect to a client.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC19"
+          },
+          {
+            "number": "1.10",
+            "title": "Imputation of Conflicts of Interest",
+            "text": "(a) While lawyers are associated in a firm, none of them shall knowingly represent a client when any one of them practicing alone would be prohibited\nfrom doing so by Rules 1.7, 1.9, or 2.2, unless the prohibition is based on a personal interest of the prohibited lawyer and does not present a significant\nrisk of materially limiting the representation of the client by the remaining lawyers in the firm.\n(b) When a lawyer has terminated an association with a firm, the firm is not prohibited from thereafter representing a person with interests materially\nadverse to those of a client represented by the formerly associated lawyer and not currently represented by the firm unless:\n(1) The matter is the same or substantially related to that in which the formerly associated lawyer represented the client; and\n(2) Any lawyer remaining in the firm has information protected by Rules 1.6 and 1.9(c) that is material to the matter.\n(c) A disqualification prescribed by this Rule may be waived by the affected client under the conditions stated in Rule 1.7.\n(d) Reserved.\n(e) When a lawyer becomes associated with a firm, no lawyer associated in the firm shall knowingly represent a person in a matter in which that\nlawyer is disqualified under Rule 1.9 unless:\n(1) The personally disqualified lawyer did not have a substantial role in or primary responsibility for the matter that causes the disqualification\nunder Rule 1.9;\n(2) The personally disqualified lawyer is timely screened from any participation in the matter and is apportioned no part of the fee therefrom; and\n(3) Written notice is promptly given to any affected former client to enable it to ascertain compliance with the provisions of this Rule.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC110"
+          },
+          {
+            "number": "1.11",
+            "title": "Special Conflicts of Interest for Former and Current Government Officers and Employees",
+            "text": "(a) Except as law may otherwise expressly permit, a lawyer who has formerly served as a public officer or employee of the government:\n(1) Is subject to Rule 1.9(c); and\n(2) Shall not otherwise represent a client in connection with a matter in which the lawyer participated personally and substantially as a public\nofficer or employee, unless the appropriate government agency gives its informed consent, confirmed in writing, to the representation.\n(b) When a lawyer is disqualified from representation under paragraph (a), no lawyer in a firm with which that lawyer is associated may knowingly\nundertake or continue representation in such a matter unless:\n(1) The disqualified lawyer is timely screened from any participation in the matter and is apportioned no part of the fee therefrom; and\n(2) Written notice is promptly given to the appropriate government agency to enable it to ascertain compliance with the provisions of this Rule.\n(c) Except as law may otherwise expressly permit, a lawyer having information that the lawyer knows is confidential government information about a\nperson acquired when the lawyer was a public officer or employee, may not represent a private client whose interests are adverse to that person in a matter\nin which the information could be used to the material disadvantage of that person. As used in this Rule, the term “confidential government information”\nmeans information that has been obtained under governmental authority and which, at the time this Rule is applied, the government is prohibited by law\nfrom disclosing to the public or has a legal privilege not to disclose and which is not otherwise available to the public. A firm with which that lawyer is\nassociated may undertake or continue representation in the matter only if the disqualified lawyer is timely screened from any participation in the matter\nand is apportioned no part of the fee therefrom.\n(d) Except as law may otherwise expressly permit, a lawyer currently serving as a public officer or employee:\n(1) Is subject to Rules 1.7 and 1.9; and\n(2) Shall not:\n(i) Participate in a matter in which the lawyer participated personally and substantially while in private practice or nongovernmental\nemployment, unless the appropriate government agency gives its informed consent, confirmed in writing; or\n(ii) Negotiate for private employment with any person who is involved as a party or as lawyer for a party in a matter in which the lawyer is\nparticipating personally and substantially, except that a lawyer serving as a law clerk to a judge, other adjudicative officer or arbitrator may negotiate for\nprivate employment as permitted by, and subject to the conditions stated in, Rule 1.12(b).\n(e) As used in this Rule, the term “matter” includes:\n(1) Any judicial or other proceeding, application, request for a ruling or other determination, contract, claim, controversy, investigation, charge,\naccusation, arrest or other particular matter involving a specific party or parties, and\n(2) Any other matter covered by the conflict of interest rules of the appropriate government agency.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC111"
+          },
+          {
+            "number": "1.12",
+            "title": "Former Judge, Arbitrator, Mediator or Other Third-Party Neutral",
+            "text": "(a) Except as stated in paragraph (d), a lawyer shall not represent anyone in connection with a matter in which the lawyer participated personally and\nsubstantially as a judge or other adjudicative officer, or law clerk to such a person or as an arbitrator, mediator or other third-party neutral, unless all\nparties to the proceeding give informed consent confirmed in writing.\n(b) A lawyer shall not negotiate for employment with any person who is involved as a party or as lawyer for a party in a matter in which the lawyer is\nparticipating personally and substantially as a judge or other adjudicative officer, or as an arbitrator, mediator or other third-party neutral. A lawyer serving\nas a law clerk to a judge or other adjudicative officer may negotiate for employment with a party or lawyer involved in a matter in which the clerk is\nparticipating personally and substantially, but only after the lawyer has notified the judge or other adjudicative officer.\n(c) If a lawyer is disqualified by paragraph (a), no lawyer in a firm with which that lawyer is associated may knowingly undertake or continue\nrepresentation in the matter unless:\n(1) The disqualified lawyer is timely screened from any participation in the matter and is apportioned no part of the fee therefrom; and\n(2) Written notice is promptly given to the parties and any appropriate tribunal to enable them to ascertain compliance with the provisions of this\nRule.\n(d) An arbitrator selected as a partisan of a party in a multimember arbitration panel is not prohibited from subsequently representing that party.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC112"
+          },
+          {
+            "number": "1.13",
+            "title": "Organization as Client",
+            "text": "(a) A lawyer employed or retained by an organization represents the organization acting through its duly authorized constituents.\n(b) If a lawyer for an organization knows that an officer, employee or other person associated with the organization is engaged in action, intends to act\nor refuses to act in a matter related to the representation that is a violation of a legal obligation to the organization, or a violation of law that reasonably\nmight be imputed to the organization, and that is likely to result in substantial injury to the organization, then the lawyer shall proceed as is reasonably\nnecessary in the best interest of the organization. Unless the lawyer reasonably believes that it is not necessary in the best interest of the organization to do\nso, the lawyer shall refer the matter to higher authority in the organization, including, if warranted by the circumstances, to the highest authority that can\nact on behalf of the organization as determined by applicable law.\n(c) Except as provided in paragraph (d), if\n(1) despite the lawyer’s efforts in accordance with paragraph (b), the highest authority that can act on behalf of the organization insists upon or\nfails to address in a timely and appropriate manner an action, or a refusal to act, that is clearly a violation of law, and\n(2) the lawyer reasonably believes that the violation is reasonably certain to result in substantial injury to the organization, then the lawyer may\nreveal information relating to the representation whether or not Rule 1.6 permits such disclosure, but only if and to the extent the lawyer reasonably\nbelieves necessary to prevent substantial injury to the organization.\n(d) Paragraph (c) shall not apply with respect to information related to a lawyer’s retention by an organization to investigate an alleged violation of\nlaw, or to defend the organization or an officer, employee or other constituent associated with the organization against a claim arising out of an alleged\nviolation of law.\n(e) A lawyer who reasonably believes that he or she has been discharged because of the lawyer’s actions taken pursuant to paragraphs (b) or (c) or\nwho withdraws under circumstances that require or permit the lawyer to take action under either of those paragraphs, shall proceed as the lawyer\nreasonably believes necessary to assure that the organization’s highest authority is informed of the lawyer’s discharge or withdrawal.\n(f) In dealing with an organization’s directors, officers, employees, members, shareholders or other constituents, a lawyer shall explain the identity of\nthe client to the constituent and reasonably attempt to ensure that the constituent realizes that the lawyer’s client is the organization rather than the\nconstituent. In cases of multiple representation such as discussed in paragraph (g), the lawyer shall take reasonable steps to ensure that the constituent\nunderstands the fact of multiple representation.\n(g) A lawyer representing an organization may also represent any of its directors, officers, employees, members, shareholders or other constituents,\nsubject to the provisions of Rule 1.7. If the organization’s consent to the dual representation is required by Rule 1.7, the consent shall be given by an\nappropriate official of the organization other than the individual who is to be represented, or by the shareholders.\n[Added; effective May 1, 2006; as amended; effective January 1, 2007.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC113"
+          },
+          {
+            "number": "1.14",
+            "title": "Client With Diminished Capacity",
+            "text": "(a) When a client’s capacity to make adequately considered decisions in connection with a representation is diminished, whether because of minority,\nmental impairment or for some other reason, the lawyer shall, as far as reasonably possible, maintain a normal client-lawyer relationship with the client.\n(b) When the lawyer reasonably believes that the client has diminished capacity, is at risk of substantial physical, financial or other harm unless action\nis taken and cannot adequately act in the client’s own interest, the lawyer may take reasonably necessary protective action, including consulting with\nindividuals or entities that have the ability to take action to protect the client and, in appropriate cases, seeking the appointment of a guardian ad litem,\nconservator or guardian.\n(c) Information relating to the representation of a client with diminished capacity is protected by Rule 1.6. When taking protective action pursuant to\nparagraph (b), the lawyer is impliedly authorized under Rule 1.6(a) to reveal information about the client, but only to the extent reasonably necessary to\nprotect the client’s interests.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC114"
+          },
+          {
+            "number": "1.15",
+            "title": "Safekeeping Property",
+            "text": "(a) A lawyer shall hold funds or other property of clients or third persons that is in a lawyer’s possession in connection with a representation separate\nfrom the lawyer’s own property. All funds received or held for the benefit of clients by a lawyer or firm, including advances for costs and expenses, shall\nbe deposited in one or more identifiable bank accounts designated as a trust account maintained in the state where the lawyer’s office is situated, or\nelsewhere with the consent of the client or third person. Other property in which clients or third persons hold an interest shall be identified as such and\nappropriately safeguarded. Complete records of such account funds and other property shall be kept by the lawyer and shall be preserved for a period of\nfive years after termination of the representation.\n(b) A lawyer may deposit the lawyer’s own funds in a client trust account for the sole purpose of paying bank service charges on that account, but only\nin an amount necessary for that purpose.\n(c) A lawyer shall deposit into a client trust account legal fees and expenses that have been paid in advance, to be withdrawn by the lawyer only as\nfees are earned or expenses incurred.\n(d) Upon receiving funds or other property in which a client or third person has an interest, a lawyer shall promptly notify the client or third person.\nExcept as stated in this Rule or otherwise permitted by law or by agreement with the client, a lawyer shall promptly deliver to the client or third person\nany funds or other property that the client or third person is entitled to receive and, upon request by the client or third person, shall promptly render a full\naccounting regarding such property.\n(e) When in the course of representation a lawyer is in possession of funds or other property in which two or more persons (one of whom may be the\nlawyer) claim interests, the property shall be kept separate by the lawyer until the dispute is resolved. The lawyer shall promptly distribute all portions of\nthe funds or other property as to which the interests are not in dispute.\n(f) A lawyer or law firm with unclaimed or unidentified funds in a client trust account shall take reasonable efforts to locate and to distribute the funds\nto the owner. If the lawyer or firm cannot after reasonable efforts locate or distribute the unclaimed or unidentified funds to an owner within five years of\nreceipt of the property, then the lawyer or firm may remit the funds to the Clients Security Fund except as otherwise provided by law. The Clients Security\nFund shall grant remitted funds and shall not hold funds for future recovery.\n(1) “Unclaimed funds” are monies that a lawyer or firm is holding in a client trust account that should be distributed to a client or third party.\n(2) “Unidentified funds” are monies for which the lawyer or firm cannot identify an owner.\n(3) Reasonable efforts to locate the owner of unclaimed funds shall include, but not be limited to, no less than regular and certified mail to the\nowner’s last known address, telephone, and email. The board of governors may establish additional requirements for client contact or identification of\nfunds. A lawyer or firm must certify and provide supporting documentary evidence of the lawyer’s or firm’s reasonable efforts to locate the owner before\nremitting such funds to the Clients Security Fund.\n(4) A lawyer’s or firm’s remittance to the Clients Security Fund under this paragraph (f) shall not constitute misconduct or grounds for discipline\nif the member or firm exercised reasonable efforts to locate and distribute the property and remitted the property to the Clients Security Fund in good faith.\n(g) An attorney appointed pursuant to Rule 118 may, after due diligence to identify client funds and locate clients, remit any amount of funds in the\nlawyer’s trust account to the Clients Security Fund.\n[Added; effective May 1, 2006; as amended; effective April 19, 2021.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC115"
+          },
+          {
+            "number": "1.16",
+            "title": "Declining or Terminating Representation",
+            "text": "(a) Except as stated in paragraph (c), a lawyer shall not represent a client or, where representation has commenced, shall withdraw from the\nrepresentation of a client if:\n(1) The representation will result in violation of the Rules of Professional Conduct or other law;\n(2) The lawyer’s physical or mental condition materially impairs the lawyer’s ability to represent the client; or\n(3) The lawyer is discharged.\n(b) Except as stated in paragraph (c), a lawyer may withdraw from representing a client if:\n(1) Withdrawal can be accomplished without material adverse effect on the interests of the client;\n(2) The client persists in a course of action involving the lawyer’s services that the lawyer reasonably believes is criminal or fraudulent;\n(3) The client has used the lawyer’s services to perpetrate a crime or fraud;\n(4) A client insists upon taking action that the lawyer considers repugnant or with which the lawyer has fundamental disagreement;\n(5) The client fails substantially to fulfill an obligation to the lawyer regarding the lawyer’s services and has been given reasonable warning that\nthe lawyer will withdraw unless the obligation is fulfilled;\n(6) The representation will result in an unreasonable financial burden on the lawyer or has been rendered unreasonably difficult by the client; or\n(7) Other good cause for withdrawal exists.\n(c) A lawyer must comply with applicable law requiring notice to or permission of a tribunal when terminating representation. When ordered to do so\nby a tribunal, a lawyer shall continue representation notwithstanding good cause for terminating the representation.\n(d) Upon termination of representation, a lawyer shall take steps to the extent reasonably practicable to protect a client’s interests, such as giving\nreasonable notice to the client, allowing time for employment of other counsel, surrendering papers and property to which the client is entitled and\nrefunding any advance payment of fee or expense that has not been earned or incurred. The lawyer may retain papers relating to the client to the extent\npermitted by other law.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC116"
+          },
+          {
+            "number": "1.17",
+            "title": "Sale of Law Practice",
+            "text": "A lawyer or a law firm may sell or purchase a law practice, or an area of law practice, including good will, if the\n\nfollowing conditions are satisfied:\n(a) The seller ceases to engage in the private practice of law, or in the area of practice that has been sold, in the geographic area or jurisdiction in\nwhich the practice has been conducted for a reasonable period of time, in no case less than 6 months, to be set forth in the written agreement for the sale of\nthe practice. In the event a specific term is not set forth in writing, a term of 6 months shall apply for the purposes of this Rule;\n(b) The entire practice, or the entire area of practice, is sold to one or more lawyers or law firms;\n(c) The seller gives written notice to each of the seller’s clients regarding:\n(1) The proposed sale;\n(2) The client’s right to retain other counsel or to take possession of the file; and\n(3) The fact that the client’s consent to the transfer of the client’s files will be presumed if the client does not take any action or does not otherwise\nobject within 90 days of receipt of the notice.\nIf a client cannot be given notice, the representation of that client may be transferred to the purchaser only upon entry of an order so authorizing by a\ncourt having jurisdiction. The seller may disclose to the court in camera information relating to the representation only to the extent necessary to obtain an\norder authorizing the transfer of a file.\n(d) The fees charged clients shall not be increased by reason of the sale.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC117"
+          },
+          {
+            "number": "1.18",
+            "title": "Duties to Prospective Client",
+            "text": "(a) A person who consults with a lawyer about the possibility of forming a client-lawyer relationship with respect to a matter is a prospective client.\n(b) Even when no client-lawyer relationship ensues, a lawyer who has learned information from a prospective client shall not use or reveal that\ninformation, except as Rule 1.9 would permit with respect to information of a former client.\n(c) A lawyer subject to paragraph (b) shall not represent a client with interests materially adverse to those of a prospective client in the same or a\nsubstantially related matter if the lawyer received information from the prospective client that could be significantly harmful to that person in the matter,\nexcept as provided in paragraph (d). If a lawyer is disqualified from representation under this paragraph, no lawyer in a firm with which that lawyer is\nassociated may knowingly undertake or continue representation in such a matter, except as provided in paragraph (d).\n(d) When the lawyer has received disqualifying information as defined in paragraph (c), representation is permissible if:\n(1) Both the affected client and the prospective client have given informed consent, confirmed in writing, or:\n(2) The lawyer who received the information took reasonable measures to avoid exposure to more disqualifying information than was reasonably\nnecessary to determine whether to represent the prospective client; and\n(i) The disqualified lawyer is timely screened from any participation in the matter and is apportioned no part of the fee therefrom; and\n(ii) Written notice is promptly given to the prospective client.\n(e) A person who communicates information to a lawyer without any reasonable expectation that the lawyer is willing to discuss the possibility of\nforming a client-lawyer relationship, or for purposes which do not include a good faith intention to retain the lawyer in the subject matter of the\nconsultation, is not a “prospective client” within the meaning of this Rule.\n(f) A lawyer may condition conversations with a prospective client on the person’s informed consent that no information disclosed during the\nconsultation will prohibit the lawyer from representing a different client in the matter. If the agreement expressly so provides, the prospective client may\nalso consent to the lawyer’s subsequent use of information received from the prospective client.\n(g) Whenever a prospective client shall request information regarding a lawyer or law firm for the purpose of making a decision regarding\nemployment of the lawyer or law firm:\n(1) The lawyer or law firm shall promptly furnish (by mail if requested) the written information described in Rule 1.4(c).\n(2) The lawyer or law firm may furnish such additional factual information regarding the lawyer or law firm deemed valuable to assist the client.\n(3) If the information furnished to the client includes a fee contract, the top of each page of the contract shall be marked “SAMPLE” in red ink in\na type size one size larger than the largest type used in the contract and the words “DO NOT SIGN” shall appear on the client signature line.\n[Added; effective May 1, 2006; as amended; effective April 4, 2014.]\n\nCOUNSELOR",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC118"
+          },
+          {
+            "number": "2.1",
+            "title": "Advisor",
+            "text": "In representing a client, a lawyer shall exercise independent professional judgment and render candid advice. In rendering\n\nadvice, a lawyer may refer not only to law but to other considerations such as moral, economic, social and political factors, that may be relevant to the\nclient’s situation.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC21"
+          },
+          {
+            "number": "2.2",
+            "title": "Intermediary",
+            "text": "(a) A lawyer may act as intermediary between clients if:\n(1) The lawyer consults with each client concerning the implications of the common representation, including the advantages and risks involved,\nand the effect on the attorney-client privileges, and obtains each client’s consent to the common representation;\n(2) The lawyer reasonably believes that the matter can be resolved on terms compatible with the clients’ best interests, that each client will be able\nto make adequately informed decisions in the matter and that there is little risk of material prejudice to the interests of any of the clients if the\ncontemplated resolution is unsuccessful; and\n(3) The lawyer reasonably believes that the common representation can be undertaken impartially and without improper effect on other\nresponsibilities the lawyer has to any of the clients.\n(b) While acting as intermediary, the lawyer shall consult with each client concerning the decisions to be made and the considerations relevant in\nmaking them, so that each client can make adequately informed decisions.\n(c) A lawyer shall withdraw as intermediary if any of the clients so requests, or if any of the conditions stated in subsection 1 is no longer satisfied.\nUpon withdrawal, the lawyer shall not continue to represent any of the clients in the matter that was the subject of the intermediation.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC22"
+          },
+          {
+            "number": "2.3",
+            "title": "Evaluation for Use by Third Persons",
+            "text": "(a) A lawyer may provide an evaluation of a matter affecting a client for the use of someone other than the client if the lawyer reasonably believes that\nmaking the evaluation is compatible with other aspects of the lawyer’s relationship with the client.\n(b) When the lawyer knows or reasonably should know that the evaluation is likely to affect the client’s interests materially and adversely, the lawyer\nshall not provide the evaluation unless the client gives informed consent.\n(c) Except as disclosure is authorized in connection with a report of an evaluation, information relating to the evaluation is otherwise protected by\nRule 1.6.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC23"
+          },
+          {
+            "number": "2.4",
+            "title": "Lawyer Serving as Third-Party Neutral",
+            "text": "(a) A lawyer serves as a third-party neutral when the lawyer assists two or more persons who are not clients of the lawyer to reach a resolution of a\ndispute or other matter that has arisen between them. Service as a third-party neutral may include service as an arbitrator, a mediator or in such other\ncapacity as will enable the lawyer to assist the parties to resolve the matter.\n(b) A lawyer serving as a third-party neutral shall inform unrepresented parties that the lawyer is not representing them. When the lawyer knows or\nreasonably should know that a party does not understand the lawyer’s role in the matter, the lawyer shall explain the difference between the lawyer’s role\nas a third-party neutral and a lawyer’s role as one who represents a client.\n[Added; effective May 1, 2006.]\n\nADVOCATE",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC24"
+          },
+          {
+            "number": "3.1",
+            "title": "Meritorious Claims and Contentions",
+            "text": "A lawyer shall not bring or defend a proceeding, or assert or controvert an issue therein, unless\n\nthere is a basis in law and fact for doing so that is not frivolous, which includes a good faith argument for an extension, modification or reversal of existing\nlaw. A lawyer for the defendant in a criminal proceeding, or the respondent in a proceeding that could result in incarceration, may nevertheless so defend\nthe proceeding as to require that every element of the case be established.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC31"
+          },
+          {
+            "number": "3.2",
+            "title": "Expediting Litigation",
+            "text": "(a) A lawyer shall make reasonable efforts to expedite litigation consistent with the interests of the client.\n(b) The duty stated in paragraph (a) does not preclude a lawyer from granting a reasonable request from opposing counsel for an accommodation, such\nas an extension of time, or from disagreeing with a client’s wishes on administrative and tactical matters, such as scheduling depositions, the number of\ndepositions to be taken, and the frequency and use of written discovery requests.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC32"
+          },
+          {
+            "number": "3.3",
+            "title": "Candor Toward the Tribunal",
+            "text": "(a) A lawyer shall not knowingly:\n(1) Make a false statement of fact or law to a tribunal or fail to correct a false statement of material fact or law previously made to the tribunal by\nthe lawyer;\n(2) Fail to disclose to the tribunal legal authority in the controlling jurisdiction known to the lawyer to be directly adverse to the position of the\nclient and not disclosed by opposing counsel; or\n(3) Offer evidence that the lawyer knows to be false. If a lawyer, the lawyer’s client, or a witness called by the lawyer, has offered material\nevidence and the lawyer comes to know of its falsity, the lawyer shall take reasonable remedial measures, including, if necessary, disclosure to the\ntribunal. A lawyer may refuse to offer evidence, other than the testimony of a defendant in a criminal matter, that the lawyer reasonably believes is false.\n(b) A lawyer who represents a client in an adjudicative proceeding and who knows that a person intends to engage, is engaging or has engaged in\ncriminal or fraudulent conduct related to the proceeding shall take reasonable remedial measures, including, if necessary, disclosure to the tribunal.\n(c) The duties stated in paragraphs (a) and (b) continue to the conclusion of the proceeding, and apply even if compliance requires disclosure of\ninformation otherwise protected by Rule 1.6.\n(d) In an ex parte proceeding, a lawyer shall inform the tribunal of all material facts known to the lawyer that will enable the tribunal to make an\ninformed decision, whether or not the facts are adverse.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC33"
+          },
+          {
+            "number": "3.4",
+            "title": "Fairness to Opposing Party and Counsel",
+            "text": "A lawyer shall not:\n\n(a) Unlawfully obstruct another party’s access to evidence or unlawfully alter, destroy or conceal a document or other material having potential\nevidentiary value. A lawyer shall not counsel or assist another person to do any such act;\n(b) Falsify evidence, counsel or assist a witness to testify falsely, or offer an inducement to a witness that is prohibited by law;\n(c) Knowingly disobey an obligation under the rules of a tribunal except for an open refusal based on an assertion that no valid obligation exists;\n(d) In pretrial procedure, make a frivolous discovery request or fail to make reasonably diligent effort to comply with a legally proper discovery\nrequest by an opposing party;\n(e) In trial, allude to any matter that the lawyer does not reasonably believe is relevant or that will not be supported by admissible evidence, assert\npersonal knowledge of facts in issue except when testifying as a witness, or state a personal opinion as to the justness of a cause, the credibility of a\nwitness, the culpability of a civil litigant or the guilt or innocence of an accused; or\n(f) Request a person other than a client to refrain from voluntarily giving relevant information to another party unless:\n(1) The person is a relative or an employee or other agent of a client; and\n(2) The lawyer reasonably believes that the person’s interests will not be adversely affected by refraining from giving such information.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC34"
+          },
+          {
+            "number": "3.5",
+            "title": "Impartiality and Decorum of the Tribunal and Relations With Jury",
+            "text": "(a) A lawyer shall not seek to influence a judge, juror, prospective juror or other official by means prohibited by law.\n(b) A lawyer shall not communicate ex parte with a judge, juror, prospective juror or other official except as permitted by law.\n(c) Subject to the limitations imposed by this Rule or by law, it is a lawyer’s right, after the jury has been discharged, to interview the jurors to\ndetermine whether their verdict is subject to any legal challenge. A lawyer shall not communicate with a juror or prospective juror after discharge of the\njury if the juror has made known to the lawyer a desire not to communicate, or the communication involves misrepresentation, coercion, duress or\nharassment. The scope of the interview should be restricted and caution should be used to avoid embarrassment to any juror or to influence his or her\naction in any subsequent jury service.\n(d) A lawyer shall not engage in conduct intended to disrupt a tribunal.\n(e) Before the jury is sworn to try the cause, a lawyer may investigate the prospective jurors to ascertain any basis for challenge, provided that a\nlawyer or the lawyer’s employees or independent contractors may not, at any time before the commencement of the trial, conduct or authorize any\ninvestigation of the prospective jurors, through any means which are calculated or likely to lead to communication with prospective jurors of any\nallegations or factual circumstances relating to the case at issue. Conduct prohibited by this Rule includes, but is not limited to, any direct or indirect\ncommunication with a prospective juror, a member of the juror’s family, an employer, or any other person that may lead to direct or indirect\ncommunication with a prospective juror.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC35"
+          },
+          {
+            "number": "3.5A",
+            "title": "Relations With Opposing Counsel",
+            "text": "When a lawyer knows or reasonably should know the identity of a lawyer representing an\n\nopposing party, he or she should not take advantage of the lawyer by causing any default or dismissal to be entered without first inquiring about the\nopposing lawyer’s intention to proceed.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC35A"
+          },
+          {
+            "number": "3.6",
+            "title": "Trial Publicity",
+            "text": "(a) A lawyer who is participating or has participated in the investigation or litigation of a matter shall not make an extrajudicial statement that the\nlawyer knows or reasonably should know will be disseminated by means of public communication and will have a substantial likelihood of materially\nprejudicing an adjudicative proceeding in the matter.\n(b) Notwithstanding paragraph (a), a lawyer may state:\n(1) The claim, offense or defense involved and, except when prohibited by law, the identity of the persons involved;\n(2) Information contained in a public record;\n(3) That an investigation of a matter is in progress;\n(4) The scheduling or result of any step in litigation;\n(5) A request for assistance in obtaining evidence and information necessary thereto;\n(6) A warning of danger concerning the behavior of a person involved, when there is reason to believe that there exists the likelihood of\n\n(6) A warning of danger concerning the behavior of a person involved, when there is reason to believe that there exists the likelihood of\nsubstantial harm to an individual or to the public interest; and\n(7) In a criminal case, in addition to subparagraphs (1) through (6):\n(i) The identity, residence, occupation and family status of the accused;\n(ii) If the accused has not been apprehended, information necessary to aid in apprehension of that person;\n(iii) The fact, time and place of arrest; and\n(iv) The identity of investigating and arresting officers or agencies and the length of the investigation.\n(c) Notwithstanding paragraph (a), a lawyer may make a statement that a reasonable lawyer would believe is required to protect a client from the\nsubstantial undue prejudicial effect of recent publicity not initiated by the lawyer or the lawyer’s client. A statement made pursuant to this paragraph shall\nbe limited to such information as is necessary to mitigate the recent adverse publicity.\n(d) No lawyer associated in a firm or government agency with a lawyer subject to paragraph (a) shall make a statement prohibited by that paragraph.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC36"
+          },
+          {
+            "number": "3.7",
+            "title": "Lawyer as Witness",
+            "text": "(a) A lawyer shall not act as advocate at a trial in which the lawyer is likely to be a necessary witness unless:\n(1) The testimony relates to an uncontested issue;\n(2) The testimony relates to the nature and value of legal services rendered in the case; or\n(3) Disqualification of the lawyer would work substantial hardship on the client.\n(b) A lawyer may act as advocate in a trial in which another lawyer in the lawyer’s firm is likely to be called as a witness unless precluded from doing\nso by Rule 1.7 or Rule 1.9.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC37"
+          },
+          {
+            "number": "3.8",
+            "title": "Special Responsibilities of a Prosecutor",
+            "text": "The prosecutor in a criminal case shall:\n\n(a) Refrain from prosecuting a charge that the prosecutor knows is not supported by probable cause;\n(b) Make reasonable efforts to assure that the accused has been advised of the right to, and the procedure for obtaining, counsel and has been given\nreasonable opportunity to obtain counsel;\n(c) Not seek to obtain from an unrepresented accused a waiver of important pretrial rights, such as the right to a preliminary hearing;\n(d) Make timely disclosure to the defense of all evidence or information known to the prosecutor that tends to negate the guilt of the accused or\nmitigates the offense, and, in connection with sentencing, disclose to the defense and to the tribunal all unprivileged mitigating information known to the\nprosecutor, except when the prosecutor is relieved of this responsibility by a protective order of the tribunal;\n(e) Not subpoena a lawyer in a grand jury or other criminal proceeding to present evidence about a past or present client unless the prosecutor\nreasonably believes:\n(1) The information sought is not protected from disclosure by any applicable privilege;\n(2) The evidence sought is essential to the successful completion of an ongoing investigation or prosecution; and\n(3) There is no other feasible alternative to obtain the information;\n(f) Except for statements that are necessary to inform the public of the nature and extent of the prosecutor’s action and that serve a legitimate law\nenforcement purpose, refrain from making extrajudicial comments that have a substantial likelihood of heightening public condemnation of the accused\nand exercise reasonable care to prevent investigators, law enforcement personnel, employees or other persons assisting or associated with the prosecutor in\na criminal case from making an extrajudicial statement that the prosecutor would be prohibited from making under Rule 3.6 or this Rule.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC38"
+          },
+          {
+            "number": "3.9",
+            "title": "Advocate in Nonadjudicative Proceedings",
+            "text": "A lawyer representing a client before a legislative body or administrative agency in a\n\nnonadjudicative proceeding shall disclose that the appearance is in a representative capacity and shall conform to the provisions of Rules 3.3(a) through\n(c), 3.4(a) through (c), and 3.5.\n[Added; effective May 1, 2006.]\n\nTRANSACTIONS WITH PERSONS OTHER THAN CLIENTS",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC39"
+          },
+          {
+            "number": "4.1",
+            "title": "Truthfulness in Statements to Others",
+            "text": "In the course of representing a client a lawyer shall not knowingly:\n\n(a) Make a false statement of material fact or law to a third person; or\n(b) Fail to disclose a material fact to a third person when disclosure is necessary to avoid assisting a criminal or fraudulent act by a client, unless\ndisclosure is prohibited by Rule 1.6.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC41"
+          },
+          {
+            "number": "4.2",
+            "title": "Communication With Person Represented by Counsel",
+            "text": "In representing a client, a lawyer shall not communicate about the subject of\n\nthe representation with a person the lawyer knows to be represented by another lawyer in the matter, unless the lawyer has the consent of the other lawyer\nor is authorized to do so by law or a court order.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC42"
+          },
+          {
+            "number": "4.3",
+            "title": "Dealing With Unrepresented Person",
+            "text": "In dealing on behalf of a client with a person who is not represented by counsel, a lawyer shall\n\nnot state or imply that the lawyer is disinterested. When the lawyer knows or reasonably should know that the unrepresented person misunderstands the\nlawyer’s role in the matter, the lawyer shall make reasonable efforts to correct the misunderstanding. The lawyer shall not give legal advice to an\nunrepresented person, other than the advice to secure counsel, if the lawyer knows or reasonably should know that the interests of such a person are or\nhave a reasonable possibility of being in conflict with the interests of the client.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC43"
+          },
+          {
+            "number": "4.4",
+            "title": "Respect for Rights of Third Persons",
+            "text": "(a) In representing a client, a lawyer shall not use means that have no substantial purpose other than to embarrass, delay, or burden a third person, or\nuse methods of obtaining evidence that violate the legal rights of such a person.\n(b) A lawyer who receives a document or electronically stored information relating to the representation of the lawyer’s client and knows or\nreasonably should know that the document or electronically stored information was inadvertently sent shall promptly notify the sender.\n[Added; effective May 1, 2006; as amended; effective April 4, 2014.]\n\nLAW FIRMS AND ASSOCIATIONS",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC44"
+          },
+          {
+            "number": "5.1",
+            "title": "Responsibilities of Partners, Managers, and Supervisory Lawyers",
+            "text": "(a) A partner in a law firm, and a lawyer who individually or together with other lawyers possesses comparable managerial authority in a law firm,\nshall make reasonable efforts to ensure that the firm has in effect measures giving reasonable assurance that all lawyers in the firm conform to the Rules of\nProfessional Conduct.\n(b) A lawyer having direct supervisory authority over another lawyer shall make reasonable efforts to ensure that the other lawyer conforms to the\nRules of Professional Conduct.\n(c) A lawyer shall be responsible for another lawyer’s violation of the Rules of Professional Conduct if:\n(1) The lawyer orders or, with knowledge of the specific conduct, ratifies the conduct involved; or\n(2) The lawyer is a partner or has comparable managerial authority in the law firm in which the other lawyer practices, or has direct supervisory\nauthority over the other lawyer, and knows of the conduct at a time when its consequences can be avoided or mitigated but fails to take reasonable\nremedial action.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC51"
+          },
+          {
+            "number": "5.2",
+            "title": "Responsibilities of a Subordinate Lawyer",
+            "text": "(a) A lawyer is bound by the Rules of Professional Conduct notwithstanding that the lawyer acted at the direction of another person.\n(b) A subordinate lawyer does not violate the Rules of Professional Conduct if that lawyer acts in accordance with a supervisory lawyer’s reasonable\nresolution of an arguable question of professional duty.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC52"
+          },
+          {
+            "number": "5.3",
+            "title": "Responsibilities Regarding Nonlawyer Assistants",
+            "text": "With respect to a nonlawyer employed or retained by or associated with a lawyer:\n\n(a) A partner, and a lawyer who individually or together with other lawyers possesses comparable managerial authority in a law firm shall make\nreasonable efforts to ensure that the firm has in effect measures giving reasonable assurance that the person’s conduct is compatible with the professional\nobligations of the lawyer;\n(b) A lawyer having direct supervisory authority over the nonlawyer shall make reasonable efforts to ensure that the person’s conduct is compatible\nwith the professional obligations of the lawyer; and\n(c) A lawyer shall be responsible for conduct of such a person that would be a violation of the Rules of Professional Conduct if engaged in by a\nlawyer if:\n(1) The lawyer orders or, with the knowledge of the specific conduct, ratifies the conduct involved; or\n(2) The lawyer is a partner or has comparable managerial authority in the law firm in which the person is employed, or has direct supervisory\nauthority over the person, and knows of the conduct at a time when its consequences can be avoided or mitigated but fails to take reasonable remedial\naction.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC53"
+          },
+          {
+            "number": "5.4",
+            "title": "Professional Independence of a Lawyer",
+            "text": "(a) A lawyer or law firm shall not share legal fees with a nonlawyer, except that:\n(1) An agreement by a lawyer with the lawyer’s firm, partner, or associate may provide for the payment of money, over a reasonable period of\ntime after the lawyer’s death, to the lawyer’s estate or to one or more specified persons;\n(2) A lawyer who purchases the practice of a deceased, disabled, or disappeared lawyer may, pursuant to the provisions of Rule 1.17, pay to the\nestate or other representative of that lawyer the agreed-upon purchase price;\n(3) A lawyer or law firm may include nonlawyer employees in a compensation or retirement plan, even though the plan is based in whole or in\npart on a profit-sharing arrangement;\n(4) A lawyer may share court-awarded legal fees with a nonprofit organization that employed, retained or recommended employment of the\nlawyer in the matter; and\n(5) A lawyer who undertakes to complete unfinished legal business of a deceased lawyer may pay to the estate of the deceased lawyer that\nproportion of the total compensation that fairly represents the services rendered by the deceased lawyer.\n(b) A lawyer shall not form a partnership with a nonlawyer if any of the activities of the partnership consist of the practice of law.\n(c) A lawyer shall not permit a person who recommends, employs, or pays the lawyer to render legal services for another to direct or regulate the\nlawyer’s professional judgment in rendering such legal services.\n(d) A lawyer shall not practice with or in the form of a professional corporation or association authorized to practice law for a profit, if:\n(1) A nonlawyer owns any interest therein, except that a fiduciary representative of the estate of a lawyer may hold the stock or interest of the\nlawyer for a reasonable time during administration;\n(2) A nonlawyer is a corporate director or officer thereof or occupies the position of similar responsibility in any form of association other than a\ncorporation; or\n(3) A nonlawyer has the right to direct or control the professional judgment of a lawyer.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC54"
+          },
+          {
+            "number": "5.5",
+            "title": "Unauthorized Practice of Law",
+            "text": "(a) General rule.  A lawyer shall not:\n(1) Practice law in a jurisdiction where doing so violates the regulation of the legal profession in that jurisdiction; or\n(2) Assist another person in the unauthorized practice of law.\n(b) Exceptions.  A lawyer who is not admitted in this jurisdiction, but who is admitted and in good standing in another jurisdiction of the United\nStates, does not engage in the unauthorized practice of law in this jurisdiction when:\n(1) The lawyer is authorized to appear before a tribunal in this jurisdiction by law or order of the tribunal or is preparing for a proceeding in\nwhich the lawyer reasonably expects to be so authorized;\n(2) The lawyer participates in this jurisdiction in investigation and discovery incident to litigation that is pending or anticipated to be instituted in\na jurisdiction in which the lawyer is admitted to practice;\n(3) The lawyer is an employee of a client and is acting on behalf of the client or, in connection with the client’s matters, on behalf of the client’s\nother employees, or its commonly owned organizational affiliates in matters related to the business of the employer, provided that the lawyer is acting in\nthis jurisdiction on an occasional basis and not as a regular or repetitive course of business in this jurisdiction;\n(4) The lawyer is acting with respect to a matter that is incident to work being performed in a jurisdiction in which the lawyer is admitted,\nprovided that the lawyer is acting in this jurisdiction on an occasional basis and not as a regular or repetitive course of business in this jurisdiction;\n(5) The lawyer is engaged in the occasional representation of a client in association with a lawyer who is admitted in this jurisdiction and who has\nactual responsibility for the representation and actively participates in the representation, provided that the out-of-state lawyer’s representation of the client\nis not part of a regular or repetitive course of practice in this jurisdiction;\n(6) The lawyer is representing a client, on an occasional basis and not as part of a regular or repetitive course of practice in this jurisdiction, in\nareas governed primarily by federal law, international law, or the law of a foreign nation; or\n(7) The lawyer is acting as an arbitrator, mediator, or impartial third party in an alternative dispute resolution proceeding.\n(c) Interaction with Supreme Court Rule 42.  Notwithstanding the provisions of paragraph (b) of this Rule, a lawyer who is not admitted to\npractice in this jurisdiction shall not represent a client in this state in an action or proceeding governed by Supreme Court Rule 42 unless the lawyer has\nbeen authorized to appear under Supreme Court Rule 42 or reasonably expects to be so authorized.\n(d) Limitations.\n(1) No lawyer is authorized to provide legal services under this Rule if the lawyer:\n(i) Is an inactive or suspended member of the State Bar of Nevada, or has been disbarred or has received a disciplinary resignation from the\nState Bar of Nevada; or\n(ii) Has previously been disciplined or held in contempt by reason of misconduct committed while engaged in the practice of law permitted\nunder this Rule.\n(2) A lawyer who is not admitted to practice in this jurisdiction shall not:\n(i) Establish an office or other regular presence in this jurisdiction for the practice of law;\n(ii) Solicit clients in this jurisdiction; or\n(iii) Represent or hold out to the public that the lawyer is admitted to practice law in this jurisdiction.\n(e) Conduct and discipline.  A lawyer admitted to practice in another jurisdiction of the United States who acts in this jurisdiction pursuant to\nparagraph (b) of this Rule shall be subject to the Nevada Rules of Professional Conduct and the disciplinary jurisdiction of the Supreme Court of Nevada\nand the State Bar of Nevada as provided in Supreme Court Rule 99.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC55"
+          },
+          {
+            "number": "5.5A",
+            "title": "Registration of Private Lawyers Not Admitted to Nevada in Extra-Judicial Matters",
+            "text": "(a) Application of rule.\n(1) This Rule applies to a lawyer who is not admitted in this jurisdiction, but who is admitted and in good standing in another jurisdiction of the\nUnited States, and who provides legal services for a Nevada client in connection with transactional or extra-judicial matters that are pending in or\nsubstantially related to Nevada.\n(2) This Rule does not apply to work performed by a lawyer in connection with any action pending before a court of this state, any action pending\nbefore an administrative agency or governmental body, or any arbitration, mediation, alternative dispute resolution proceeding, whether authorized by the\ncourt, law, rule, or private agreement.\n(b) Definitions.  For purposes of this Rule, a “Nevada client” is a natural person residing in the State of Nevada, a Nevada governmental entity, or a\nbusiness entity doing business in Nevada.\n(c) Annual report.  Notwithstanding any other provision of law, a lawyer who is subject to this Rule shall file an annual report, along with a\nreporting fee of $150, with the State Bar of Nevada at its Las Vegas, Nevada, office. The annual report shall encompass January 1 through December 31 of\na single calendar year and shall be filed on or before January 31 of the following calendar year. The report shall be on a form approved by the State Bar of\nNevada and include the following information:\n(1) The lawyers’ residence and office address;\n(2) The courts before which the lawyer has been admitted to practice and the dates of admission;\n(3) That the lawyer is currently a member in good standing of, and eligible to practice law before, the bar of those courts;\n(4) That the lawyer is not currently on suspension or disbarred from the practice of law before the bar of any court; and\n(5) The nature of the client(s) (individual or business entity) for whom the lawyer has provided services that are subject to this Rule and the\nnumber and general nature of the transactions performed for each client during the previous 12-month period. The lawyer shall not disclose the identity of\nany clients or any information that is confidential or subject to attorney-client privilege.\n(d) Failure to file report.  Failure to timely file the report described in paragraph (c) of this Rule may be grounds for discipline under applicable\nSupreme Court Rules and prosecution under applicable state laws. The failure to file a timely report shall result in the imposition of a fine of not more than\n$500.\n(e) Discipline.  A lawyer who must file an annual report under this Rule shall be subject to the jurisdiction of the courts and disciplinary boards of\nthis state with respect to the law of this state governing the conduct of lawyers to the same extent as a member of the State Bar of Nevada. He or she shall\nfamiliarize himself or herself and comply with the standards of professional conduct required of members of the State Bar of Nevada and shall be subject\nto the disciplinary jurisdiction of the State Bar of Nevada. The Nevada Supreme Court Rules shall govern in any investigation or proceeding conducted by\nthe State Bar of Nevada under this Rule.\n(f) Confidentiality.  The State Bar of Nevada shall not disclose annual reports filed under this Rule to any third parties unless necessary for\ndisciplinary investigation or criminal prosecution for the unauthorized practice of law.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC55A"
+          },
+          {
+            "number": "5.6",
+            "title": "Restrictions on Right to Practice",
+            "text": "A lawyer shall not participate in offering or making:\n\n(a) A partnership, shareholders, operating, employment, or other similar type of agreement that restricts the right of a lawyer to practice after\ntermination of the relationship, except an agreement concerning benefits upon retirement; or\n(b) An agreement in which a restriction on the lawyer’s right to practice is part of the settlement of a client controversy.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC56"
+          },
+          {
+            "number": "5.7",
+            "title": "Reserved",
+            "text": "PUBLIC SERVICE",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC57"
+          },
+          {
+            "number": "6.1",
+            "title": "Pro Bono Publico Service",
+            "text": "(a) Professional responsibility.  Every lawyer has a professional responsibility to provide legal services to those unable to pay. A lawyer should\naspire to render at least 20 hours of pro bono publico legal services per year. In fulfilling this responsibility, the lawyer should:\n(1) Provide a substantial majority of the 20 hours of legal services without compensation or expectation of compensation to:\n(i) Persons of limited means; or\n(ii) A public service, charitable group, or organization in matters that are designed primarily to address the needs of persons of limited means;\nand\n(2) Provide any additional services through:\n(i) Delivery of legal services at no fee or substantially reduced fee to individuals, groups or organizations seeking to secure or protect civil\nrights, civil liberties or public rights, or charitable, civic, community, governmental and educational organizations in matters in furtherance of their\norganizational purposes, where the payment of standard legal fees would significantly deplete the organization’s economic resources or would be\notherwise inappropriate;\n(ii) Participation in activities for improving the law, the legal system, or the legal profession; or\n(iii) Delivery of services in connection with law-related education sponsored by the State Bar of Nevada, the Nevada Bar Foundation, a\ncounty bar association, or a court located in Nevada.\n(3) As an alternative to rendering at least 20 hours of pro bono publico legal services per year as provided in subparagraphs (1) and (2), a lawyer\nmay discharge the professional responsibility to provide legal services to those unable to pay by:\n(i) Providing at least 60 hours of professional services per year at a substantially reduced fee to persons of limited means; or\n(ii) Contributing at least $500 per year to an organization or group that provides pro bono legal services to persons of limited means.\n(4) When pro bono legal service is performed for an individual without compensation or at a substantially reduced fee, the fee shall be agreed to\nin writing at the inception of the representation and refer to this Rule.\n(5) The following do not qualify as pro bono legal service under this Rule:\n(i) Legal services written off as bad debts;\n(ii) Legal services performed for family members; and\n(iii) Activities that do not involve the provision of legal services, such as serving on the board of a charitable organization.\n(b) Reporting; discharge of professional responsibility.\n(1) All members shall complete an Annual Pro Bono Reporting Form, indicating services performed under this Rule, to be submitted to the state\nbar annually on a form to be provided by the state bar with the members’ fee statements. If a member fails to file the report required by this Rule, the state\nbar shall notify the member that a fine of $100 will be imposed unless the member files the report within a specified period of time not less than 30 days\nafter the notice.\n(2) The professional responsibility to provide pro bono services as established under this Rule is aspirational rather than mandatory in nature.\nAccordingly, the failure to render pro bono services will not subject a member to discipline.\n(c) Voluntary pro bono plan.  The purposes of the voluntary pro bono plan are to make available legal services to those Nevadans who cannot\notherwise afford them and to expand the present pro bono programs. To accomplish these goals the following committees are hereby created.\n(1) District Court Pro Bono Committees.  In each judicial district, the Chief Judge of the District Court shall appoint a Pro Bono Committee\nconsisting of representatives of various members of the bench and bar as well as pro bono services and community organizations of that judicial district.\nThe responsibility of these committees is to determine and address the specific unmet legal needs of that jurisdiction by way of a plan to be submitted to\nthe Supreme Court. Pursuant to paragraph (d) of this Rule, the Pro Bono Committee may establish a foundation. The foundations are authorized to receive\nfunds paid in satisfaction of an order of any court entered in accordance with paragraph (e) of this Rule and to determine the allocation and use of such\nfunds in a manner consistent with this Rule. If no foundation is established, the Pro Bono Committee is authorized to receive such funds and determine\ntheir allocation and use in a manner consistent with this Rule.\n(2) Access to Justice Section.  The board of governors shall have the power to establish a permanent Statewide Access to Justice Section that\nshall assist in the implementation of this Rule as well as facilitate and support local efforts to improve the public’s access to justice. The initial officers of\nthe Access to Justice Section shall be the currently serving officers of the Access to Justice Committee. Thereafter, elections for officers shall be held as\nprovided in the Access to Justice Section’s bylaws, as approved by the board of governors. The Access to Justice Section shall be composed of regular\nmembers who are licensed to practice law in Nevada and laypersons who may become auxiliary members.\n(d) Foundations.  A district court Pro Bono Committee may establish a local foundation to actively promote the provision of civil legal services to\ndisadvantaged persons and households within the district. A foundation established pursuant to this Rule shall be created as a Nevada nonprofit\ncorporation and is authorized to:\n(1) Actively promote the observance of this Rule within the district;\n(2) Receive donations from members of the State Bar of Nevada and monies from the courts as provided in this Rule;\n(3) Distribute such funds to providers of pro bono and free or reduced fee civil legal services in the district and to public law libraries;\n(4) Develop other new sources of funding and support for delivery of civil legal services;\n(5) Support existing legal services and pro bono efforts and foster new projects to broaden the existing range of civil legal services; and\n(6) Serve as an educational facilitator to make the community as a whole aware of the efforts being made to provide all Nevadans within the\ndistrict with full access to the justice system.\n(e) Payment of civil sanctions to fund pro bono programs or libraries.  Subject to the limitations of this Rule, a court may direct that sanctions or\nfines imposed under NRS 1.210, NRAP 38, NRCP 11, JCRCP 11, or like authority be paid to a nonprofit entity or law library specified below. The court’s\ndiscretion to direct payment of sanctions or fines to a nonprofit entity or law library, however, is limited to civil sanctions imposed against counsel, parties,\nwitnesses or others appearing before the court and expressly excludes sanctions or fines imposed against a defendant in any criminal case. Payment may\nbe directed only to the following:\n(1) A nonprofit entity or committee designated pursuant to a voluntary pro bono plan described in paragraph (c) to serve the pro bono and access\nto justice needs either for the judicial district in which the judicial officer presides or, if serving outside his or her judicial district, where the case is heard;\nor\n(2) A public law library or nonprofit entity associated with a public law library located either in the judicial district in which the judicial officer\npresides or, if serving outside his or her judicial district, where the case is heard; or\n(3) To the Nevada Law Foundation or other statewide nonprofit entity designated by the state bar to serve pro bono and access to justice needs.\n(4) The supreme court may also direct payment to such nonprofit entities or public law libraries located in the judicial district in which the matter\nbefore the supreme court originated or to any other public law library in the state.\n(f) Limitation on authority to specify use of funds.  A judicial officer who orders payment of a sanction or fine pursuant to paragraph (e) must not\nparticipate in the specific determination of which entity will receive the sanction or fine or of how that sanction or fine will be used by the nonprofit entity\nor law library designated to receive the funds. The judicial officer may, however, serve on the board or as an officer of a nonprofit entity created pursuant\nto this Rule, or of a law library or nonprofit entity associated with a law library, provided that he or she does not participate in specific decisions regarding\nthe use of any sanction or fine directed to the nonprofit entity or library by that judicial officer.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC61"
+          },
+          {
+            "number": "6.2",
+            "title": "Accepting Appointments",
+            "text": "A lawyer shall not seek to avoid appointment by a tribunal to represent a person except for good cause, such\n\nas:\n(a) Representing the client is likely to result in violation of the Rules of Professional Conduct or other law;\n(b) Representing the client is likely to result in an unreasonable financial burden on the lawyer; or\n(c) The client or the cause is so repugnant to the lawyer as to be likely to impair the client-lawyer relationship or the lawyer’s ability to represent the\nclient.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC62"
+          },
+          {
+            "number": "6.3",
+            "title": "Membership in Legal Services Organization",
+            "text": "A lawyer may serve as a director, officer or member of a legal services organization,\n\napart from the law firm in which the lawyer practices, notwithstanding that the organization serves persons having interests adverse to a client of the\nlawyer. The lawyer shall not knowingly participate in a decision or action of the organization:\n(a) If participating in the decision or action would be incompatible with the lawyer’s obligations to a client under Rule 1.7; or\n(b) Where the decision or action could have a material adverse effect on the representation of a client of the organization whose interests are adverse\nto a client of the lawyer.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC63"
+          },
+          {
+            "number": "6.4",
+            "title": "Law Reform Activities Affecting Client Interests",
+            "text": "A lawyer may serve as a director, officer or member of an organization involved in\n\nreform of the law or its administration notwithstanding that the reform may affect the interests of a client of the lawyer. When the lawyer knows that the\ninterests of a client may be materially benefitted by a decision in which the lawyer participates, the lawyer shall disclose that fact but need not identify the\nclient.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC64"
+          },
+          {
+            "number": "6.5",
+            "title": "Nonprofit and Court-Annexed Limited Legal Services Programs",
+            "text": "(a) A lawyer who, under the auspices of a program sponsored by a nonprofit organization or court, provides short-term limited legal services to a\nclient without expectation by either the lawyer or the client that the lawyer will provide continuing representation in the matter:\n(1) Is subject to Rules 1.7 and 1.9(a) only if the lawyer knows that the representation of the client involves a conflict of interest; and\n(2) Is subject to Rule 1.10 only if the lawyer knows that another lawyer associated with the lawyer in a law firm is disqualified by Rule 1.7 or\n1.9(a) with respect to the matter.\n(b) Except as provided in paragraph (a)(2), Rule 1.10 is inapplicable to a representation governed by this Rule.\n[Added; effective May 1, 2006.]\n\nINFORMATION ABOUT LEGAL SERVICES",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC65"
+          },
+          {
+            "number": "7.1",
+            "title": "Communications Concerning a Lawyer’s Services",
+            "text": "A lawyer shall not make a false or misleading communication about the lawyer or\n\nthe lawyer’s services. A communication is false or misleading if it contains a material misrepresentation of fact or law, or omits a fact necessary to make\nthe statement considered as a whole not materially misleading.\n[Added; effective May 1, 2006; as amended; effective April 9, 2018.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC71"
+          },
+          {
+            "number": "7.2",
+            "title": "Advertising",
+            "text": "Subject to the requirements of Rules 7.1 and 7.3, a lawyer may advertise services through written, recorded, or electronic\n\ncommunication, including public media.\n(a) Except as allowed under Rule 1.5(e), a lawyer shall not give anything of value to a person for recommending the lawyer’s services, except that a\nlawyer may pay the reasonable cost of advertising or written or recorded communication permitted by these Rules and may pay the usual charges of a\nlawyer referral service or other legal service organization.\n(b) Any communication made pursuant to this Rule shall include the following disclaimers and disclosures:\n(1)  Use of actors.  If the advertisement uses any actors to portray a lawyer, members of the law firm, clients, or utilizes depictions of\nfictionalized events or scenes, the same must be disclosed. In the event actors are used, the disclosure must be sufficiently specific to identify which\npersons in the advertisement are actors, and the disclosure must appear for the duration in which the actor(s) appear in the advertisement.\n(2) Lawyer responsible for all content.  All advertisements and written communications disseminated pursuant to these Rules shall identify the\nname of at least one lawyer responsible for their content.\n(3) Area(s) of practice.  Every advertisement and written communication that indicates one or more areas of law in which the lawyer or law\nfirm practices shall conform to the requirements of Rule 7.4.\n(4) Contingency fees.  Every advertisement and written communication indicating that the charging of a fee is contingent on outcome or that the\nfee will be a percentage of the recovery shall contain a disclaimer that the client may be liable for the opposing parties’ fees and costs.\n(5) Range of fees.  A lawyer who advertises a specific fee or range of fees shall include the duration said fees are in effect and any other limiting\nconditions to the availability of the fees.\n(6)  Quality of services.  Statements describing or characterizing the quality of the lawyer’s services in advertisements and written\ncommunications are subject to proof of verification, to be provided at the request of the state bar or a client or prospective client.\n(7) Statement regarding past results.  If the advertisement contains any reference to past successes or results obtained, the communicating\nlawyer or member of the law firm must have served as lead counsel in the matter giving rise to the recovery, or was primarily responsible for the\nsettlement or verdict. The advertisement shall also contain a disclaimer that past results do not guarantee, warrant, or predict future cases.\nIf the past successes or results obtained include a monetary sum, the amount involved must have been actually received by the client, and the reference\nmust be accompanied by adequate information regarding the nature of the case or matter and the damages or injuries sustained by the client, and if the\ngross amount received is stated, the attorney fees and litigation expenses withheld from the amount must be stated as well.\n(c) Any statement or disclaimer required by these Rules shall be made in each language used in the advertisement or writing with respect to which\nsuch required statement or disclaimer relates; provided, however, the mere statement that a particular language is spoken or understood shall not alone\nresult in the need for a statement or disclaimer in that language.\n(d) Any information required by these Rules to appear in an advertisement must be reasonably prominent and clearly legible if written, or intelligible\nif spoken.\n(e) Nothing in this Rule prohibits a lawyer or law firm from permitting the inclusion in law lists and law directories intended primarily for the use of\nthe legal profession of such information as has traditionally been included in these publications.\n[Added; effective May 1, 2006; as amended; effective April 9, 2018.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC72"
+          },
+          {
+            "number": "7.2A",
+            "title": "Advertising Filing Requirements",
+            "text": "(a) Filing requirements.  A lawyer or law firm shall file with the state bar (1) a copy or recording of all advertisements disseminated in exchange for\nsomething of value; and (2) written or recorded communications the lawyer causes to be disseminated for the purpose of advertising legal services. For the\npurpose of this Rule, websites are not considered to be advertisements subject to filing requirements. Submission shall be in a format provided by the bar\nwithin 15 days of first dissemination accompanied by a form supplied by the state bar and a filing fee, as established by the board of governors.\n(b) Failure to file.  A lawyer or law firm’s failure to file an advertisement in accordance with paragraph (a) is grounds for disciplinary action. In\naddition, for purposes of disciplinary review pursuant to Supreme Court Rule 106 (privilege and limitation), when a lawyer or law firm fails to file, the 4-\nyear limitation period begins on the date the advertisement was actually known to bar counsel.\n[Added; effective May 1, 2006; as amended; effective April 9, 2018.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC72A"
+          },
+          {
+            "number": "7.2B",
+            "title": "Volunteer Advisory Committees; Pre-Dissemination Review",
+            "text": "(a)  Standing Lawyer Advertising Advisory Committees.  The board of governors shall create a Standing Lawyer Advertising Advisory\nCommittee to review filings submitted under Rule 7.2A and to respond to written requests from an advertising lawyer or law firm voluntarily seeking an\nadvance opinion regarding that lawyer’s compliance with the advertising rules.\nThe board of governors may promulgate bylaws, rules of procedure, and reasonable fees for advance opinions to offset the administrative costs of the\ncommittee, as it deems necessary and proper.\n(1) Committee composition.  The committee shall have 11 members: 8 of whom shall be members in good standing of the state bar, 4 of whom\nshall practice in northern Nevada and 4 of whom shall practice in southern Nevada; 3 members may be non-lawyers.\n(i) Appointment.  Members shall be appointed by the board of governors and serve 2-year terms, subject to reappointment at the board’s\ndiscretion. No member shall serve a lifetime total of more than 12 years. Members may be removed by the board of governors for cause.\n(ii) Minimum duties.  The committee shall meet as often as necessary to review all matters before it in a timely fashion. Advance opinions\nshall be provided within 30 days of submission of the request or sooner. Requests to expedite review of advertisements shall be granted whenever possible\nwithin reason. The board of governors may promulgate a procedure and attach an added fee for expedited requests.\n(b) Review of filings; advisory opinions to bar counsel.  The committee may issue advisory opinions on any advertisement filed with the state bar.\nIf the committee finds that an advertisement does not comply with these Rules, it may issue an advisory opinion to bar counsel within 30 days of its\nreview. The opinion must include the basis for the Committee’s finding of noncompliance. Bar counsel may initiate appropriate disciplinary action if\nwarranted.\n(c) Pre-dissemination review.  A lawyer or law firm may file a written request with the state bar seeking an advance opinion on whether a proposed\nadvertisement complies with these Rules. The request shall be made in the form and manner designated by the state bar.\n(1) Advance opinion.  Within 30 days of submission, the committee shall issue an advance opinion to the lawyer or law firm submitting the\nrequest for pre-dissemination review. The opinion shall include a finding of whether the proposed advertisement is in compliance with these Rules. If the\nCommittee finds that the advertisement is not in compliance, then the opinion shall also include the basis for the finding and instructions on how the\nproposed advertisement can be corrected. Such an adverse opinion must also notify the lawyer or law firm of an opportunity for an appeal of the\ncommittee’s finding of noncompliance.\n(2) Appeal.  Appeals are decided by the committee, whose decision shall be controlling.\n(d) Limitations; when binding on discipline authority.  The committee created under this Rule is primarily dedicated to providing independent,\nvolunteer peer advance opinions to lawyers upon request as a safe-harbor to future disciplinary action only. No request for an advance opinion shall be\ngranted after a disciplinary investigation is commenced on the subject advertisement. In the event an opinion is inadvertently issued by a committee during\nor after a disciplinary review is in progress, the decision of any disciplinary panel convened pursuant to Supreme Court Rule 105 shall be controlling.\nAn advance opinion of noncompliance issued under this Rule shall not be binding on any disciplinary panel or bar counsel. An advance finding of\ncompliance is binding on the disciplinary panel and bar counsel in favor of the advertising lawyer provided that the representations, statements, materials,\nfacts and written assurances received in connection therewith are true and not misleading. An advance opinion of compliance constitutes admissible\nevidence if offered by a party.\n(e) Annual report.  The board of governors shall file an annual report with the clerk of this court that addresses, among other things, the status of\nlawyer advertising in this state.\n[Added; effective September 1, 2007; as amended; effective April 9, 2018.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC72B"
+          },
+          {
+            "number": "7.3",
+            "title": "Communications With Prospective Clients",
+            "text": "(a) Direct contact with prospective clients.  Except as permitted pursuant to paragraph (d) of this Rule, a lawyer shall not solicit professional\nemployment from a prospective client with whom the lawyer has no family or prior professional relationship, by mail, in person or otherwise, when a\nsignificant motive for the lawyer’s doing so is the lawyer’s pecuniary gain. The term “solicit” includes contact in person, by telephone, telegraph or\nfacsimile, by letter or other writing, or by other communication directed to a specific recipient.\n(b) Direct or indirect written advertising.  Any direct or indirect written mail communication or advertising circular distributed to persons not\nknown to need legal services of the kind provided by the lawyer in a particular matter, but who are so situated that they might in general find such services\nuseful, shall contain the disclaimers required by Rule 7.2. The disclaimers shall be in a type size and legibility sufficient to cause the disclaimers to be\nconspicuous.\n(c)  Additional disclaimer on mailers or written advertisements or communications.   Direct or indirect mail envelope, and written mail\ncommunications or advertising circulars shall contain, upon the outside of the envelope and upon the communication side of each page of the\ncommunication or advertisement, in red ink, the following warning:\n\nNOTICE: THIS IS AN ADVERTISEMENT!\n\n(d) Target mail to prospective clients.  In the event of an incident involving claims for personal injury or wrongful death, written communication\ndirected to an individual injured in the incident or to a family member or legal representative of such an individual, seeking to represent the injured\nindividual or legal representative thereof in potential litigation or in a proceeding arising out of the incident is prohibited in Nevada within 30 days of the\ndate of the incident. After 30 days following the incident, any such communication must comply with paragraphs (b) and (c) of this Rule and must comply\nwith all other Rules of Professional Conduct.\nThis provision limiting contact with an injured individual or the legal representative thereof applies as well to lawyers or law firms or any associate,\nagent, employee, or other representative of a lawyer or law firm who represent actual or potential defendants or entities that may defend and/or indemnify\nsaid defendants.\n[Added; effective May 1, 2006; as amended; effective December 13, 2012.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC73"
+          },
+          {
+            "number": "7.4",
+            "title": "Communication of Fields of Practice and Specialization",
+            "text": "(a) A lawyer may communicate that the lawyer is a specialist or expert or that he or she practices in particular fields of law, provided the lawyer\ncomplies with this Rule. Nothing in this Rule shall be construed to prohibit communication of fields of practice unless the communication is false or\nmisleading.\n(b) Patent law.  A lawyer admitted to engage in patent practice before the United States Patent and Trademark Office may use the designation\n“Patent Attorney” or a substantially similar designation.\n(c) Admiralty law.  A lawyer engaged in admiralty practice may use the designation “Admiralty,” “Proctor in Admiralty” or a substantially similar\ndesignation.\n(d) Specialist or expert.  In addition to the designations permitted by paragraphs (b) and (c) of this Rule, a lawyer may communicate that he or she\nis a specialist or expert in a particular field of law if the lawyer complies with the provisions of this paragraph.\n(1) Certification.  The lawyer must be certified as a specialist or expert by an organization that has been approved under Rule 7.4A.\n(2) Practice hours; CLE; liability coverage; reporting.  The lawyer must meet the following requirements for practice hours devoted to each\nfield of specialization, continuing legal education in each field of specialization, and professional liability coverage:\n(i) The lawyer shall have devoted at least one-third of his or her practice to each designated field of specialization for each of the preceding 2\ncalendar years.\n(ii) The lawyer shall have completed 10 hours of accredited continuing legal education in each designated field of specialization of practice\nduring the preceding calendar year. The carry-forward and exemption provisions of Supreme Court Rules 210 and 214 do not apply. In reporting under\nsubparagraph (iv), the lawyer shall identify the specific courses and hours that apply to each designated field of specialization.\n(iii) The lawyer shall carry a minimum of $500,000 in professional liability insurance, with the exception of lawyers who practice exclusively\nin public law. The lawyer shall provide proof of liability coverage to the state bar as part of the reporting requirement under subparagraph (iv).\n(iv) The lawyer shall submit written confirmation annually to the state bar and board of continuing legal education demonstrating that the\nlawyer has complied with these requirements. The report shall be public information.\n(3) Registration with state bar.  The lawyer must file a registration of specialty, along with a $250 fee, with the executive director of the state\nbar on a form supplied by the state bar. The form shall include attestation of compliance with paragraph (d)(2) for each specialty registered.\n(i) Annual renewal.  A lawyer registered under this Rule must renew the registration annually by completing a renewal form provided by\nthe state bar, paying a $250 renewal fee, and providing current information as required under paragraph (d)(2) for each specialty registered. The lawyer\nmust submit the renewal form to the executive director of the state bar on or before the anniversary date of the initial filing of the registration of specialty\nwith the state bar.\n(ii)  Registration of multiple specialties.  A lawyer may include more than one specialty on the initial registration or include additional\nspecialties with the annual renewal without additional charge. Additional specialties added at any other time will be assessed a one-time $50 processing\nfee.\n(4)  Revocation and reinstatement.  The board of governors shall establish rules and procedures governing administrative revocation and\nreinstatement of the right to communicate a specialty for failure to pay the fees set forth in paragraph (d)(3), including reasonable processing fees for late\npayment and reinstatement.\n(5) Advertising.  A lawyer certified as a specialist under this Rule may advertise the certification during such time as the lawyer’s certification\nand the state bar’s approval of the certifying organization are both in effect. Advertising by a lawyer regarding the lawyer’s certification under this Rule\nshall comply with Rules 7.1 and 7.2 and shall clearly identify the name of the certifying organization.\n(e) Temporary exemption from CLE requirements.  The board of governors or its designee may grant a member’s request for temporary\nexemption from completion of the specific continuing legal education requirements imposed by this Rule for exceptional, extreme, and undue hardship\nunique to the member.\n(f) Extension to complete CLE requirements.  If a lawyer is unable to complete the hours of accredited continuing legal education during the\npreceding calendar year as required by this Rule, the lawyer may apply to the board of continuing legal education for an extension of time in which to\ncomplete the hours. For good cause the board may extend the time not more than 6 months.\n(g) Records.  A lawyer who communicates a specialty pursuant to this Rule shall keep time records to demonstrate compliance with paragraph (d)\n(2). Such records shall be available to the State Bar of Nevada and the board of continuing legal education on request.\n(h) Guidelines.  The board of governors of the state bar shall be authorized to formulate and publish a set of guidelines to aid members of the state\nbar in complying with the requirements of this Rule.\n(i) Law lists and legal directories.  This Rule does not apply to listings placed by a lawyer or law firm in reputable law lists and legal directories\nthat are primarily addressed to lawyers.\n[Added; effective May 1, 2006; as amended; effective September 1, 2007.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC74"
+          },
+          {
+            "number": "7.4A",
+            "title": "State Bar Approval of Organizations That Certify Lawyers as Specialists",
+            "text": "The board of governors of the state bar may, for the\n\npurposes of Rule 7.4, approve organizations that certify lawyers as specialists in accordance with this Rule. The board of governors may, in its discretion,\nappoint a committee to assist the board in implementing a program for the approval of certifying organizations. Any such committee shall be comprised of\nmembers of the state bar and such others whom the board of governors deems necessary and proper.\n(a) Rules; authority.  The board of governors shall implement rules and standards by which the board approves organizations to certify lawyers as\nspecialists in particular areas of law, and which describe the conditions and procedures under which such approval shall be granted, maintained, and\nrevoked. The board shall retain jurisdiction to approve, deny, or revoke approval of a certifying organization under this Rule and may establish fees for\nadministering its duties under this Rule. At its discretion, the board may delegate any other duties associated with approving specialty certification\norganizations as it deems necessary and proper.\n(b) Minimum standards for certifying organizations.  To be approved under this Rule, in addition to meeting the standards adopted by the board\nof governors, an organization that certifies lawyers as specialists in a particular area of the law must make certification available to all lawyers who meet\nobjective and consistently applied standards relevant to the specialty area of law.\n(c) Duration of approval; renewal; revocation.  The board’s approval of the certifying organization shall be valid for a period of 5 years, subject to\ndiscretionary renewal upon application by the organization. The board of governors may revoke approval of a certifying organization at any time for\nviolation of this Rule or violation of any other terms and conditions of the approval. Notice of a decision to deny approval, deny renewal, or revoke\napproval shall be provided to the petitioning organization and an opportunity to appeal provided.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC74A"
+          },
+          {
+            "number": "7.5",
+            "title": "Firm Names and Letterheads",
+            "text": "(a) A lawyer shall not use a firm name, letterhead, or other professional designation that violates Rule 7.1. A trade name may be used by a lawyer in\nprivate practice if it does not imply a connection with a government agency or with a public or charitable legal services organization and is not otherwise\nin violation of Rule 7.1.\n(b) A law firm with offices in more than one jurisdiction that has registered with the State Bar of Nevada under Rule 7.5A may use the same name in\neach jurisdiction. Identification of the lawyers in an office of the firm shall indicate the jurisdictional limitations on those not licensed to practice in the\njurisdiction where the office is located.\n(c) The name of a lawyer holding a public office shall not be used in the name of a law firm, or in communications on its behalf, during any\nsubstantial period in which the lawyer is not actively and regularly practicing with the firm. This provision does not apply to a lawyer who takes a brief\nhiatus from practice to serve as an elected member of the Nevada State Legislature when the legislature is in session.\n(d) Lawyers may state or imply that they practice in a partnership or other organization only when that is the fact.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC75"
+          },
+          {
+            "number": "7.5A",
+            "title": "Registration of Multijurisdictional Law Firms",
+            "text": "(a) Applicability of rule.  All law firms having an office in Nevada and in one or more other jurisdictions shall register with the State Bar of Nevada\nand shall pay an annual fee of $500 for such registration.\n(b) Definitions.  For purposes of this Rule:\n(1) “Law firm” means a solo practitioner or a group of lawyers.\n(2) “Nevada client” means a natural person residing in the State of Nevada, a Nevada governmental entity, or a business entity doing business in\nNevada.\n(3) “Resident member” means a Nevada-licensed lawyer who maintains a full-time presence in the Nevada office of the multijurisdictional firm.\n(c) Procedure and requirements for registering.  An application for registration to practice under this Rule, along with the appropriate fee, shall be\nfiled with the executive director of the State Bar of Nevada, on a form supplied or approved by the State Bar of Nevada, at its Las Vegas, Nevada, office.\nThe application shall include the following:\n(1) The names and addresses of all lawyers employed by the firm, the jurisdictions in which each lawyer is licensed, and verification that each\nlawyer is in good standing in the jurisdictions in which each lawyer is licensed;\n(2) Any pending disciplinary action or investigation against a lawyer employed by the firm;\n(3) The address and telephone number of a permanent office located within the State of Nevada that will be maintained by the firm;\n(4) The name, address, and telephone number of a member of the firm who shall be resident in the firm’s Nevada office and who shall be the\ndesignated agent for service of process in this state. The resident member of the firm in the Nevada office must be an active member in good standing of\nthe State Bar of Nevada; and\n(5) A certification that:\n(i) The firm will maintain a permanent office in Nevada with a resident member of the firm who is also an active member in good standing of\nthe State Bar of Nevada at all times the firm is practicing in Nevada and will notify the state bar of any change of status or address within 30 days of the\nchange in status or address;\n(ii) The firm agrees to disclose in writing to its Nevada clients whether all of its lawyers are licensed to practice in Nevada and, if any of its\nlawyers are not so-licensed, to disclose what legal work will be performed by lawyers not admitted to practice in this state. Upon request of the State Bar\nof Nevada, the firm shall provide documentation evidencing its compliance with these disclosure requirements;\n(iii) The firm agrees to maintain trust accounts in accordance with Supreme Court Rule 78.5, with all funds arising from any matter in Nevada\nmaintained solely in those accounts. The firm shall identify the financial institution where the trust account has been established; and\n(iv) The firm agrees to comply fully with Rule 7.5.\n(d) Disposition of application for registration.  The executive director of the state bar shall have 30 days from receipt of the application to review\nthe application and determine whether it has been completed and filed in compliance with the requirements of this Rule. Upon approval of the application,\nthe executive director shall notify the applicant and shall also give notice of the registration to the supreme court clerk and the district court clerk for the\ncounty in which the law firm’s Nevada office is located. If the application is incomplete, the executive director shall give the applicant written notification\nof the deficiencies in the application. The applicant shall have 30 days from the date of mailing of the notice of the deficiencies to cure the deficiencies\nand complete the application. If the application is not completed within the allotted time, the executive director shall reject the application.\n(e) Application or certificate containing false information.  A lawyer who causes to be filed an application or certificate containing false\ninformation shall be subject to the disciplinary jurisdiction of the State Bar of Nevada with respect to such action and the firm shall be disqualified from\nregistering to practice in Nevada.\n(f) Violation of conditions.  If the State Bar of Nevada determines that the firm is in violation of the conditions set forth in paragraph (c)(5) of this\nRule, the executive director of the state bar may, upon 20 days’ notice, revoke the registration and the right of the firm to practice in Nevada. The\nexecutive director shall notify the supreme court clerk and the district court clerk for the county in which the law firm’s Nevada office is located of the\nsuspension.\n(g) Renewal of registration.  On or before the anniversary date of the filing of the application with the State Bar of Nevada, a firm registered under\nthis Rule must renew its registration, providing current information and certification as required under paragraph (c) of this Rule. The renewal shall be\naccompanied by payment of an annual fee of $500.\n(h) Failure to renew.  A law firm registered under this Rule that continues to practice law in Nevada but fails to provide the proper information and\ncertification or pay the renewal fees set forth in paragraph (f) of this Rule shall be suspended from practicing law in Nevada upon expiration of a period of\n30 days after the anniversary date. The executive director of the state bar shall notify the firm, the supreme court clerk and the district court clerk for the\ncounty in which the law firm’s Nevada office is located of the suspension.\n(i) Reinstatement.  The firm may be reinstated upon the compliance with the requirements of paragraph (f) of this Rule and the payment of a late\npenalty of $100. Upon payment of all accrued fees and the late penalty, the executive director of the state bar may reinstate the firm and shall notify the\nfirm, the supreme court clerk and the district court clerk for the county in which the law firm’s Nevada office is located of the reinstatement.\n(j) Responsibilities of Nevada-licensed members.  The members of the firm who are admitted to practice in Nevada shall be responsible for and\nactively participate as a principal or lead lawyer in all work performed for Nevada clients and for compliance with all state and local rules of practice. It is\nthe responsibility of the Nevada-licensed members of the firm to ensure that any proceedings in this jurisdiction are tried and managed in accordance with\nall applicable procedural and ethical rules and that out-of-state members of the firm comply with Supreme Court Rule 42 before appearing in any\nproceedings that are subject to that rule.\n(k) Confidentiality.  The State Bar of Nevada shall not disclose the application for registration to any third parties unless necessary for disciplinary\ninvestigation or criminal prosecution for the unauthorized practice of law.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC75A"
+          },
+          {
+            "number": "7.6",
+            "title": "Reserved",
+            "text": "MAINTAINING THE INTEGRITY OF THE PROFESSION",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC76"
+          },
+          {
+            "number": "8.1",
+            "title": "Bar Admission and Disciplinary Matters",
+            "text": "An applicant for admission to the bar, or a lawyer in connection with a bar admission\n\napplication or in connection with a disciplinary matter, shall not:\n(a) Knowingly make a false statement of material fact; or\n(b) Fail to disclose a fact necessary to correct a misapprehension known by the person to have arisen in the matter, or knowingly fail to respond to a\nlawful demand for information from an admissions or disciplinary authority, except that this Rule does not require disclosure of information otherwise\nprotected by Rule 1.6.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC81"
+          },
+          {
+            "number": "8.2",
+            "title": "Judicial and Legal Officials",
+            "text": "(a) A lawyer shall not make a statement that the lawyer knows to be false or with reckless disregard as to its truth or falsity concerning the\nqualifications or integrity of a judge, adjudicatory officer or public legal officer, or of a candidate for election or appointment to judicial or legal office.\n(b) A lawyer who is a candidate for judicial office shall comply with the applicable provisions of the Code of Judicial Conduct.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC82"
+          },
+          {
+            "number": "8.3",
+            "title": "Reporting Professional Misconduct",
+            "text": "(a) A lawyer who knows that another lawyer has committed a violation of the Rules of Professional Conduct that raises a substantial question as to\nthat lawyer’s honesty, trustworthiness or fitness as a lawyer in other respects, shall inform the appropriate professional authority.\n(b) A lawyer who knows that a judge has committed a violation of applicable rules of judicial conduct that raises a substantial question as to the\njudge’s fitness for office shall inform the appropriate authority.\n(c) This Rule does not require disclosure of information otherwise protected by Rule 1.6 or information gained by a lawyer or judge while\nparticipating in an approved lawyers assistance program, including but not limited to the Lawyers Concerned for Lawyers program established by\nSupreme Court Rule 106.5.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC83"
+          },
+          {
+            "number": "8.4",
+            "title": "Misconduct",
+            "text": "It is professional misconduct for a lawyer to:\n\n(a) Violate or attempt to violate the Rules of Professional Conduct, knowingly assist or induce another to do so, or do so through the acts of another;\n(b) Commit a criminal act that reflects adversely on the lawyer’s honesty, trustworthiness or fitness as a lawyer in other respects;\n(c) Engage in conduct involving dishonesty, fraud, deceit or misrepresentation;\n(d) Engage in conduct that is prejudicial to the administration of justice;\n(e) State or imply an ability to influence improperly a government agency or official or to achieve results by means that violate the Rules of\nProfessional Conduct or other law; or\n(f) Knowingly assist a judge or judicial officer in conduct that is a violation of applicable rules of judicial conduct or other law.\n\nCOMMENT\n\n[1] Because use, possession, and distribution of marijuana in any form still violates federal law, attorneys are advised that engaging in such conduct\nmay result in federal prosecution and trigger discipline proceedings under SCR 111.\n[Added; effective May 1, 2006; as amended; effective February 10, 2017.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC84"
+          },
+          {
+            "number": "8.5",
+            "title": "Jurisdiction",
+            "text": "A lawyer admitted to practice in this jurisdiction is subject to the disciplinary authority of this jurisdiction although\n\nengaged in practice elsewhere.\n[Added; effective May 1, 2006.]",
+            "url": "https://www.leg.state.nv.us/Division/Legal/LawLibrary/CourtRules/RPC.html#RPC85"
+          }
+        ]
+      },
+      {
+        "id": "arizona",
+        "title": "Arizona Ethical Rules",
+        "citation": "ER",
+        "snapshot": "Rule 42 index plus locally harvested text",
+        "officialUrl": "https://www.azbar.org/for-legal-professionals/lawyer-regulation/resources/rules-of-professional-conduct/",
+        "note": "The local corpus contains a complete rule index and full text for selected rules. Open the official rule link for current text when a card is marked index-only.",
+        "rules": [
+          {
+            "number": "1.0",
+            "title": "Terminology",
+            "text": "(a) \"Belief\" or \"believes\" denotes that the person involved actually supposed the fact in question to be true. A person's belief may be inferred from circumstances.\n\n(b) \"Confirmed in writing,\" when used in reference to the informed consent of a person, denotes informed consent that is given in writing by the person or a writing that a lawyer promptly transmits to the person confirming an oral informed consent. See paragraph (e) for the definition of \"informed consent.\" If it is not feasible to obtain or transmit the writing at the time the person gives informed consent, then the lawyer must obtain or transmit it within a reasonable time thereafter.\n\n(c) \"Firm\" or \"law firm\" denotes a lawyer or lawyers in any affiliation, or any entity that provides legal services for which it employs lawyers. Whether two or more lawyers constitute a firm can depend on the specific facts.\n\n(d) \"Fraud\" or \"fraudulent\" denotes conduct that is fraudulent under the substantive or procedural law of the applicable jurisdiction and has a purpose to deceive.\n\n(e) \"Informed consent\" denotes the agreement by a person to a proposed course of conduct after the lawyer has communicated adequate information and explanation about the material risks of and reasonably available alternatives to the proposed course of conduct.\n\n(f) \"Knowingly,\" \"known,\" or \"knows\" denotes actual knowledge of the fact in question. A person's knowledge may be inferred from circumstances.\n\n(g) \"Reasonable\" or \"reasonably\" when used in relation to conduct by a lawyer denotes the conduct of a reasonably prudent and competent lawyer.\n\n(h) \"Reasonable belief\" or \"reasonably believes\" when used in reference to a lawyer denotes that the lawyer believes the matter in question and that the circumstances are such that the belief is reasonable.\n\n(i) \"Reasonably should know\" when used in reference to a lawyer denotes that a lawyer of reasonable prudence and competence would ascertain the matter in question.\n\n(j) \"Screened\" denotes the isolation of a lawyer or nonlawyer from any participation in a matter through the timely imposition of procedures within a firm that are reasonably adequate under the circumstances to protect information that the isolated lawyer or nonlawyer is obligated to protect under these Rules or other law.\n\n(1) Reasonably adequate procedures include: (i) written notice to all affected firm personnel that a screen is in place and the screened lawyer or nonlawyer must avoid any communication with other firm personnel about the screened matter; (ii) adoption of mechanisms to deny access by the screened lawyer or nonlawyer to firm files or other information, including information in electronic form, relating to the screened matter; (iii) acknowledgment by the screened lawyer or nonlawyer of the obligation not to communicate with any other firm personnel with respect to the matter and to avoid any contact with any firm files or other information, including information in electronic form, relating to the matter; (iv) periodic reminders of the screen to all affected firm personnel; and (v) additional screening measures that are appropriate for the particular matter will depend on the circumstances.\n\n(2) Screening measures must be implemented as soon as practical after a lawyer, nonlawyer, or firm knows or reasonably should know that there is a need for screening.\n\n(k) \"Substantial\" when used in reference to degree or extent denotes a material matter of clear and weighty importance.\n\n(l) \"Tribunal\" denotes a court, an arbitrator in an arbitration proceeding or a legislative body, administrative agency or other body acting in an adjudicative capacity. A legislative body, administrative agency or other body acts in an adjudicative capacity when a neutral official, after the presentation of evidence or legal argument by a party or parties, will render a legal judgment directly affecting a party's interests in a particular matter.\n\n(m) \"Writing\" or \"written\" denotes a tangible or electronic record of a communication or representation, including handwriting, typewriting, printing, photostating, photography, audio or video recording and electronic communications. A \"signed\" writing includes an electronic sound, symbol or process attached to or logically associated with a writing and executed or adopted by a person with the intent to sign the writing.\n\n(n) \"Business transaction,\" when used in reference to conflicts of interests: (1) includes but is not limited to: (i) the sale of goods or services related to the practice of law to existing clients of a firm's legal practice; (ii) a lawyer referring a client to nonlegal services performed by others within a firm or a separate entity in which the lawyer or the lawyer's firm has a financial interest; or (iii) transactions between a lawyer or a firm and a client in which a lawyer or firm accepts nonmonetary property or an interest in the client's business as payment of all or part of a fee. (2) does not include: (i) ordinary fee arrangements between client and lawyer; or (ii) standard commercial transactions between a lawyer and a client for products or services that the client generally markets to others and over which the lawyer has no advantage with the client.\n\n(o) \"Personal interests,\" when used in reference to conflicts of interests, include but are not limited to: (1) the probity of a lawyer's own conduct, or the conduct of a nonlawyer in the firm, in a transaction; (2) referring clients to a nonlawyer within a firm to provide nonlegal services; or (3) referring clients to an enterprise in which a firm lawyer or nonlawyer has an undisclosed or disclosed financial interest.\n\n(p) \"Authorized to practice law in this jurisdiction\" denotes a firm that employs lawyers or nonlawyers who provide legal services as authorized by Rule 31.1(a).\n\n(q) \"Nonlawyer\" denotes a person not licensed as a lawyer in this jurisdiction or who is licensed in another jurisdiction but is not authorized by Supreme Court Rule 31.1(a) to practice Arizona law.\n\n*(ER 1.0 includes official Comments [2021 Amendment]: Confirmed in Writing [1]; Firm [2]; Fraud [3]; Informed Consent [4]–[5]; and others. Retrieve full comments via ViewRule id 21 when needed.)*",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=21"
+          },
+          {
+            "number": "1.1",
+            "title": "Competence",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=3"
+          },
+          {
+            "number": "1.2",
+            "title": "Scope of Representation and Allocation of Authority Between Client and Lawyer",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=4"
+          },
+          {
+            "number": "1.3",
+            "title": "Diligence",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=23"
+          },
+          {
+            "number": "1.4",
+            "title": "Communication",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=24"
+          },
+          {
+            "number": "1.5",
+            "title": "Fees",
+            "text": "(a) A lawyer shall not make an agreement for, charge, or collect an unreasonable fee or an unreasonable amount for expenses. The factors to be considered in determining the reasonableness of a fee include the following: (1) the time and labor required, the novelty and difficulty of the questions involved, and the skill requisite to perform the legal service properly; (2) the likelihood, if apparent to the client, that the acceptance of the particular employment will preclude other employment by the lawyer; (3) the fee customarily charged in the locality for similar legal services; (4) the amount involved and the results obtained; (5) the time limitations imposed by the client or by the circumstances; (6) the nature and length of the professional relationship with the client; (7) the experience, reputation, and ability of the lawyer or lawyers performing the services; and (8) the degree of risk assumed by the lawyer.\n\n(b) The scope of the representation and the basis or rate of the fee and expenses for which the client will be responsible shall be communicated to the client in writing, before or within a reasonable time after commencing the representation, except when the lawyer will charge a regularly represented client on the same basis or rate. Any changes in the basis or rate of the fee or expenses shall also be communicated in writing before the fees or expenses to be billed at higher rates are actually incurred. The requirements of this subsection shall not apply to: (1) court-appointed lawyers who are paid by a court or other governmental entity, and (2) lawyers who provide pro bono short-term limited legal services to a client pursuant to ER 6.5.\n\n(c) A fee may be contingent on the outcome of the matter for which the service is rendered, except in a matter in which a contingent fee is prohibited by paragraph (d) or other law. A contingent fee agreement shall be in a writing signed by the client and shall state the method by which the fee is to be determined, including the percentage or percentages that shall accrue to the lawyer in the event of settlement, trial or appeal, litigation and other expenses to be deducted from the recovery, and whether such expenses are to be deducted before or after the contingent fee is calculated. The agreement must clearly notify the client of any expenses for which the client will be liable whether or not the client is the prevailing party. Upon conclusion of a contingent fee matter, the lawyer shall provide the client with a written statement stating the outcome of the matter and, if there is a recovery, showing the remittance to the client and the method of its determination.\n\n(d) A lawyer shall not enter into an arrangement for, charge, or collect: (1) any fee in a domestic relations matter, the payment or amount of which is contingent upon the securing of a divorce or upon the amount of alimony or support, or property settlement in lieu thereof; (2) a contingent fee for representing a defendant in a criminal case; or (3) a fee denominated as \"earned upon receipt,\" \"nonrefundable\" or in similar terms unless the client is simultaneously advised in writing that the client may nevertheless discharge the lawyer at any time and in that event may be entitled to a refund of all or part of the fee based upon the value of the representation pursuant to paragraph (a).\n\n(e) Two or more firms jointly working on a matter may divide a fee paid by a client if: (1) the firms disclose to the client in writing how the fee will be divided and how the firms will divide responsibility for the matter among themselves; (2) the client consents to the division of fees in a writing signed by the client; (3) the total fee is reasonable; and (4) the division of responsibility among firms is reasonable in light of the client's need that the entire representation be completely and diligently completed.\n\n*(ER 1.5 includes official Comments [1]–[9], covering reasonableness, basis/rate of fee, contingent fees, terms of payment, prohibited contingent fees, disclosure of refund rights for prepaid/\"nonrefundable\"/\"earned upon receipt\" fees, fee disputes/arbitration, and fee-sharing versus referral compensation. Comment [9]: paragraph (e) applies only to sharing a fee for joint work, not to compensation paid solely for a referral, which may be governed by ERs 1.5(a) and 1.7(a)(2). Retrieve full comments via ViewRule id 25 when needed.)*",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=25"
+          },
+          {
+            "number": "1.6",
+            "title": "Confidentiality of Information",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=26"
+          },
+          {
+            "number": "1.7",
+            "title": "Conflict of Interest: Current Clients",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=27"
+          },
+          {
+            "number": "1.8",
+            "title": "Conflict of Interest: Current Clients: Specific Rules",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=28"
+          },
+          {
+            "number": "1.9",
+            "title": "Duties to Former Clients",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=29"
+          },
+          {
+            "number": "1.10",
+            "title": "Imputation of Conflicts of Interest: General Rule",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=22"
+          },
+          {
+            "number": "1.11",
+            "title": "Special Conflicts of Interest for Former and Current Government Officers and Employees",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=30"
+          },
+          {
+            "number": "1.12",
+            "title": "Former Judge, Arbitrator, Mediator or Other Third-Party Neutral",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=31"
+          },
+          {
+            "number": "1.13",
+            "title": "Organization as Client",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=32"
+          },
+          {
+            "number": "1.14",
+            "title": "Client with Diminished Capacity",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=33"
+          },
+          {
+            "number": "1.15",
+            "title": "Safekeeping Property",
+            "text": "(a) A lawyer shall hold property of clients or third persons that is in a lawyer's possession in connection with a representation separate from the lawyer's own property. Funds shall be kept in a separate account maintained in the state where the lawyer's office is situated, or elsewhere with the consent of the client or third person. Other property shall be identified as such and appropriately safeguarded. Complete records of such account funds and other property shall be kept by the lawyer and shall be preserved for a period of five years after termination of the representation.\n\n(b) A lawyer may deposit the lawyer's own funds in a client trust account only for the following purposes and only in an amount reasonably estimated to be necessary to fulfill the stated purposes: (1) to pay service or other charges or fees imposed by the financial institution that are related to operation of the trust account; or (2) to pay any merchant fees or credit card transaction fees or to offset debits for credit card chargebacks. (3) Earned fees and funds for reimbursement of costs or expenses may be deposited into a trust account if they are part of a single credit card transaction that also includes the payment of advance fees, costs or expenses and the lawyer does not use a credit card processing service that permits the lawyer to direct such funds to the lawyer's separate business account. Any such earned fees and funds for reimbursement of costs or expenses must be withdrawn from the trust account within a reasonable time after deposit.\n\n(c) A lawyer shall deposit into a client trust account legal fees and expenses that have been paid in advance, to be withdrawn by the lawyer only as fees are earned or expenses incurred.\n\n(d) Upon receiving funds or other property in which a client or third person has an interest, a lawyer shall promptly notify the client or third person. Except as stated in this Rule or otherwise permitted by law or by agreement between the client and the third person, a lawyer shall promptly deliver to the client or third person any funds or other property that the client or third person is entitled to receive and, upon request by the client or third person, shall promptly render a full accounting regarding such property.\n\n(e) When in the course of representation a lawyer possesses property in which two or more persons (one of whom may be the lawyer) claim interests, the property shall be kept separate by the lawyer. The lawyer shall promptly distribute any portions of the property as to which there are no competing claims. Any other property shall be kept separate until one of the following occurs: (1) the parties reach an agreement on the distribution of the property; (2) a court order resolves the competing claims; or (3) distribution is allowed under section (f) below.\n\n(f) Where the competing claims are between a client and a third party, the lawyer may provide written notice to the third party of the lawyer's intent to distribute the property to the client, as follows: (1) The notice shall be served on the third party in the manner provided under Rules 4.1 or 4.2 of the Arizona Rules of Civil Procedure, and must inform the third party that the lawyer may distribute the property to the client unless the third party initiates legal action and provides the lawyer with written notice of such action within 90 calendar days of the date of service of the lawyer's notice. (2) If the lawyer does not receive such written notice from the third party within the 90-day period, and provided that the disbursement is not prohibited by law or court order, the lawyer may distribute the funds to the client after consulting with the client regarding the advantages and disadvantages of disbursement of the disputed funds and obtaining the client's informed consent to the distribution, confirmed in writing. (3) If the lawyer is notified in writing of an action filed within the 90-day period, the lawyer shall continue to hold the property separate unless and until the parties reach an agreement on distribution of the property, or a court resolves the matter. (4) Nothing in this rule is intended to alter a third party's substantive rights.\n\n*(ER 1.15 includes extensive official Comments addressing fiduciary care, commingling, disputed fees, third-party claims/liens, escrow obligations, the client-protection fund, and the 2009/2014 credit-card and notice amendments. Comment cross-references **Ariz. R. Sup. Ct. 43 (\"Trust Account Verification\") and Rule 44 (\"Trust Accounts; Interest Thereon\" — IOLTA)**. Retrieve full comments via ViewRule id 63.)*",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=63"
+          },
+          {
+            "number": "1.16",
+            "title": "Declining or Terminating Representation",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=35"
+          },
+          {
+            "number": "1.17",
+            "title": "Sale of Law Practice",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=36"
+          },
+          {
+            "number": "1.18",
+            "title": "Duties to Prospective Client",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=37"
+          },
+          {
+            "number": "2.1",
+            "title": "Advisor",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=7"
+          },
+          {
+            "number": "2.2",
+            "title": "(Reserved)",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=8"
+          },
+          {
+            "number": "2.3",
+            "title": "Evaluation for Use by Third Persons",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=38"
+          },
+          {
+            "number": "2.4",
+            "title": "Lawyer Serving as Third-Party Neutral",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=39"
+          },
+          {
+            "number": "3.1",
+            "title": "Meritorious Claims and Contentions",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=9"
+          },
+          {
+            "number": "3.2",
+            "title": "Expediting Litigation",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=10"
+          },
+          {
+            "number": "3.3",
+            "title": "Candor Toward the Tribunal",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=40"
+          },
+          {
+            "number": "3.4",
+            "title": "Fairness to Opposing Party and Counsel",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=41"
+          },
+          {
+            "number": "3.5",
+            "title": "Impartiality and Decorum of the Tribunal",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=42"
+          },
+          {
+            "number": "3.6",
+            "title": "Trial Publicity",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=43"
+          },
+          {
+            "number": "3.7",
+            "title": "Lawyer as Witness",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=44"
+          },
+          {
+            "number": "3.8",
+            "title": "Special Responsibilities of a Prosecutor",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=45"
+          },
+          {
+            "number": "3.9",
+            "title": "Advocate in Nonadjudicative Proceedings",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=46"
+          },
+          {
+            "number": "3.10",
+            "title": "Threatening Criminal, Administrative or Disciplinary Action (Arizona-specific)",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=64"
+          },
+          {
+            "number": "4.1",
+            "title": "Truthfulness in Statements to Others",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=11"
+          },
+          {
+            "number": "4.2",
+            "title": "Communication with Person Represented by Counsel",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=12"
+          },
+          {
+            "number": "4.3",
+            "title": "Dealing with Unrepresented Person",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=47"
+          },
+          {
+            "number": "4.4",
+            "title": "Respect for Rights of Third Persons",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=48"
+          },
+          {
+            "number": "5.1",
+            "title": "Responsibilities of Partners, Managers, and Supervisory Lawyers (and owners)",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=13"
+          },
+          {
+            "number": "5.2",
+            "title": "Responsibilities of a Subordinate Lawyer",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=14"
+          },
+          {
+            "number": "5.3",
+            "title": "Responsibilities Regarding Nonlawyers",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=49"
+          },
+          {
+            "number": "5.4",
+            "title": "(Abrogated eff. 1/1/2021 — former \"Professional Independence of a Lawyer\")",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=50"
+          },
+          {
+            "number": "5.5",
+            "title": "Unauthorized Practice of Law; Multijurisdictional Practice of Law",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=51"
+          },
+          {
+            "number": "5.6",
+            "title": "Restrictions on Right to Practice",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=52"
+          },
+          {
+            "number": "5.7",
+            "title": "Responsibilities Regarding Law-Related Services",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=53"
+          },
+          {
+            "number": "6.1",
+            "title": "Voluntary Pro Bono Publico Service",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=15"
+          },
+          {
+            "number": "6.2",
+            "title": "Accepting Appointments",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=16"
+          },
+          {
+            "number": "6.3",
+            "title": "Membership in Legal Services Organization",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=54"
+          },
+          {
+            "number": "6.4",
+            "title": "Law Reform Activities Affecting Client Interests",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=55"
+          },
+          {
+            "number": "6.5",
+            "title": "Nonprofit and Court-Annexed Limited Legal Services Programs",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=56"
+          },
+          {
+            "number": "7.1",
+            "title": "Communications Concerning a Lawyer's Services",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=17"
+          },
+          {
+            "number": "7.2",
+            "title": "Advertising (amended 2021 — confirm)",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=18"
+          },
+          {
+            "number": "7.3",
+            "title": "Solicitation of Clients (amended 2021 — confirm)",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=57"
+          },
+          {
+            "number": "7.4",
+            "title": "Communication of Fields of Practice and Specialization (amended 2021 — confirm)",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=58"
+          },
+          {
+            "number": "7.5",
+            "title": "Firm Names and Letterheads (amended 2021 — confirm)",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=59"
+          },
+          {
+            "number": "8.1",
+            "title": "Bar Admission and Disciplinary Matters",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=19"
+          },
+          {
+            "number": "8.2",
+            "title": "Judicial and Legal Officials",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=20"
+          },
+          {
+            "number": "8.3",
+            "title": "Reporting Professional Misconduct",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=60"
+          },
+          {
+            "number": "8.4",
+            "title": "Misconduct",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=61"
+          },
+          {
+            "number": "8.5",
+            "title": "Disciplinary Authority; Choice of Law",
+            "text": "",
+            "url": "https://tools.azbar.org/RulesofProfessionalConduct/ViewRule.aspx?id=62"
+          }
+        ]
+      }
+    ];
+    Object.assign(exports, { RULE_LIBRARY });
+  },
+  "js/data/work.js": (exports, require) => {
+    // Shared economy values for the office's repeatable work and NPC interactions.
+    // Keeping them in a small data module makes the launch promises testable.
+
+    const DOC_REVIEW_CYCLE_MS = 60_000;
+    const DOC_REVIEW_REWARD = 5;
+    const COFFEE_ETHICS_RESTORE = 2;
+    const LINDA_TIP_COST = 5;
+    Object.assign(exports, { DOC_REVIEW_CYCLE_MS, DOC_REVIEW_REWARD, COFFEE_ETHICS_RESTORE, LINDA_TIP_COST });
   }
   };
   const cache = Object.create(null);

@@ -221,6 +221,72 @@ export const PROPS = {
       if (tier >= 2) { ctx.fillStyle = PAL.brass; ctx.fillRect(c.x + 18, c.y - 29, 8, 4); }
     },
   },
+  executivedesk: {
+    w: 3, h: 1, solid: true,
+    draw(ctx, ox, oy, prop) {
+      box(ctx, ox, oy, -0.42, -0.36, 2.84, 0.72, 26, PAL.woodDark);
+      const c = p(ox, oy, 1, 0);
+      ctx.fillStyle = PAL.parchment;
+      ctx.fillRect(c.x - 34, c.y - 32, 17, 9);
+      ctx.fillStyle = PAL.ink;
+      ctx.fillRect(c.x + 2, c.y - 49, 25, 17);
+      ctx.fillStyle = '#bcd8e8';
+      ctx.fillRect(c.x + 5, c.y - 46, 19, 11);
+      ctx.fillStyle = PAL.brass;
+      ctx.fillRect(c.x - 2, c.y - 30, 10, 3);
+      if (prop.nameplate) {
+        ctx.fillStyle = PAL.brassLight;
+        ctx.fillRect(c.x - 12, c.y - 37, 22, 5);
+      }
+    },
+  },
+  filingstation: {
+    w: 2, h: 1, solid: true,
+    draw(ctx, ox, oy, prop, t) {
+      box(ctx, ox, oy, -0.4, -0.3, 0.72, 0.62, 44, PAL.stoneDark);
+      box(ctx, ox, oy, 0.68, -0.3, 0.72, 0.62, 44, PAL.stoneDark);
+      const c = p(ox, oy, 0.5, 0.25);
+      ctx.fillStyle = PAL.brass;
+      for (const offset of [-28, -17, -6]) {
+        ctx.fillRect(c.x - 39, c.y + offset, 10, 2);
+        ctx.fillRect(c.x + 18, c.y + offset, 10, 2);
+      }
+      ctx.fillStyle = PAL.parchment;
+      ctx.fillRect(c.x - 8, c.y - 48, 21, 13);
+      ctx.strokeStyle = `rgba(110,36,54,${0.45 + Math.sin(t * 2) * 0.12})`;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(c.x - 8, c.y - 48, 21, 13);
+    },
+  },
+  citywindow: {
+    w: 2, h: 1, solid: true,
+    draw(ctx, ox, oy, prop, t) {
+      const c = p(ox, oy, 0.5, 0);
+      const top = c.y - 78;
+      ctx.fillStyle = '#152a43';
+      ctx.fillRect(c.x - 48, top, 96, 60);
+      const glow = 0.55 + Math.sin(t * 0.7 + prop.x) * 0.08;
+      const buildings = [
+        [-44, 26], [-32, 38], [-18, 30], [-3, 45], [14, 34], [29, 48], [42, 28],
+      ];
+      ctx.fillStyle = '#0e1828';
+      for (const [x, height] of buildings) ctx.fillRect(c.x + x, top + 60 - height, 12, height);
+      ctx.fillStyle = `rgba(217,182,86,${glow})`;
+      for (let x = -40; x < 44; x += 16) {
+        for (let y = 13; y < 51; y += 13) {
+          if ((x + y + prop.x) % 3) ctx.fillRect(c.x + x, top + y, 3, 3);
+        }
+      }
+      ctx.strokeStyle = PAL.brass;
+      ctx.lineWidth = 4;
+      ctx.strokeRect(c.x - 50, top - 2, 100, 64);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(c.x, top); ctx.lineTo(c.x, top + 60);
+      ctx.moveTo(c.x - 48, top + 29); ctx.lineTo(c.x + 48, top + 29);
+      ctx.stroke();
+    },
+  },
   caseboard: {
     w: 2, h: 1, solid: true,
     draw(ctx, ox, oy) {
@@ -292,6 +358,21 @@ export const PROPS = {
       const c = p(ox, oy, 1, 0.5);
       ctx.fillStyle = PAL.parchment;
       ctx.fillRect(c.x - 20, c.y - 28, 12, 7); ctx.fillRect(c.x + 8, c.y - 24, 12, 7);
+    },
+  },
+  tv: {
+    w: 2, h: 1, solid: true,
+    draw(ctx, ox, oy, prop, t) {
+      const c = p(ox, oy, 0.5, 0);
+      box(ctx, ox, oy, -0.42, -0.1, 1.84, 0.2, 56, PAL.ink);
+      ctx.fillStyle = '#101d31';
+      ctx.fillRect(c.x - 42, c.y - 65, 84, 42);
+      ctx.fillStyle = `rgba(100,174,211,${0.22 + Math.sin(t) * 0.05})`;
+      ctx.fillRect(c.x - 38, c.y - 61, 76, 34);
+      ctx.fillStyle = PAL.parchment;
+      ctx.font = 'bold 8px Verdana';
+      ctx.textAlign = 'center';
+      ctx.fillText('CASE STRATEGY', c.x, c.y - 43);
     },
   },
   aiworkstation: {

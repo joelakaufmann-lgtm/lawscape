@@ -40,6 +40,15 @@
       <div id="control-hint">Click or tap to walk · WASD/Arrows move · B opens BarMail</div>
     </div>
 
+    <div id="work-status" class="hidden" role="status" aria-live="polite">
+      <div class="work-status-head">
+        <span><b>Document Review</b> · +5 gold per cycle</span>
+        <button id="btn-stop-review" aria-label="Stop document review">Stop</button>
+      </div>
+      <div id="review-progress"><span id="review-progress-fill"></span></div>
+      <div id="review-time">Next cycle in 1:00</div>
+    </div>
+
     <div id="toast" class="hidden" role="status" aria-live="polite"></div>
     <div id="hoverlabel" class="hidden"></div>
 
@@ -72,6 +81,8 @@
         </div>
         <div id="email-toolbar">
           <span>📥 Inbox (1)</span><span>📤 Sent</span><span>🗑 Trash</span>
+          <span id="email-difficulty"></span>
+          <span id="email-source" class="hidden"></span>
           <span id="email-rule" class="hidden"></span>
         </div>
         <div id="email-body">
@@ -114,8 +125,8 @@
         <h1>LawScape</h1>
         <p class="tagline">Answer the rule. Build your practice. Protect your license.</p>
         <div class="title-features" aria-label="Game features">
-          <span><b>21</b> ethics dilemmas</span>
-          <span><b>2</b> explorable locations</span>
+          <span><b>29</b> ethics dilemmas</span>
+          <span><b>6</b> explorable locations</span>
           <span><b>0</b> downloads</span>
         </div>
         <button id="btn-new" class="primary">Create an Attorney</button>

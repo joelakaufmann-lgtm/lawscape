@@ -1,4 +1,4 @@
-// BarMail ethics scenarios — the game's only task type.
+// BarMail ethics scenarios — progressive professional-responsibility practice.
 //
 // Content was developed from a local professional-responsibility corpus
 // (Arizona Ethical Rules under Ariz. R. Sup. Ct. 42, cited
@@ -14,14 +14,16 @@
 // Every non-correct choice carries a `why` explaining the violation and the
 // rule, shown to the player when they lose Ethics.
 
+import { MPRE_SCENARIOS } from './mpre.js';
+
 export const WRONG_DMG = 10;
 export const VERY_WRONG_DMG = 25;
 export const STREAK_HEAL = 10;
 
-export const SCENARIOS = [
+const CORE_SCENARIOS = [
   {
     id: 'trust_advance',
-    from: 'Marcus Hargrove', role: 'Senior Partner', gold: 30,
+    from: 'Jim Hardsell', role: 'Managing Partner', gold: 30,
     subject: 'Whitfield retainer — cash flow',
     body: 'The Whitfield engagement letter is signed and their $10,000 advance fee just hit. '
       + 'Payroll is tight this month — deposit it straight into the firm operating account. '
@@ -59,7 +61,7 @@ export const SCENARIOS = [
   },
   {
     id: 'ai_brief',
-    from: 'Marcus Hargrove', role: 'Senior Partner', gold: 25,
+    from: 'Jim Hardsell', role: 'Managing Partner', gold: 25,
     subject: 'File the AI draft tonight',
     body: 'The reply brief is due at midnight. The new AI tool wrote a full draft and the '
       + 'citations look plausible. Nobody has time to pull the cases. File it as-is and '
@@ -117,7 +119,7 @@ export const SCENARIOS = [
   },
   {
     id: 'double_billing',
-    from: 'Marcus Hargrove', role: 'Senior Partner', gold: 25,
+    from: 'Jim Hardsell', role: 'Managing Partner', gold: 25,
     subject: 'Bill it twice — both files benefit',
     body: 'That preemption research you did for the Hendricks matter is equally useful on '
       + 'Marlowe. Bill the full twelve hours to Hendricks AND the same twelve to Marlowe. '
@@ -155,7 +157,7 @@ export const SCENARIOS = [
   },
   {
     id: 'witness_vacation',
-    from: 'Marcus Hargrove', role: 'Senior Partner', gold: 30,
+    from: 'Jim Hardsell', role: 'Managing Partner', gold: 30,
     subject: 'Ochoa deposition problem',
     body: 'Ochoa’s testimony will hurt us. He’s a former employee of the client, still '
       + 'friendly. Suggest to him that this would be a wonderful week to take that fishing '
@@ -232,7 +234,7 @@ export const SCENARIOS = [
   },
   {
     id: 'sign_for_client',
-    from: 'Marcus Hargrove', role: 'Senior Partner', gold: 25,
+    from: 'Jim Hardsell', role: 'Managing Partner', gold: 25,
     subject: 'Release needs a signature TODAY',
     body: 'The Vann settlement release must go back signed today or the deal collapses. '
       + 'Mrs. Vann is on a cruise, unreachable until Sunday. She told us last week she was '
@@ -270,7 +272,7 @@ export const SCENARIOS = [
   },
   {
     id: 'padding_hours',
-    from: 'Marcus Hargrove', role: 'Senior Partner', gold: 25,
+    from: 'Jim Hardsell', role: 'Managing Partner', gold: 25,
     subject: 'Your hours look light',
     body: 'Your timesheets are hurting the file’s realization. Everyone knows travel time, '
       + 'thinking in the shower, dreams about the case — it all counts. Round each entry up '
@@ -367,7 +369,7 @@ export const SCENARIOS = [
   },
   {
     id: 'paralegal_hearing',
-    from: 'Marcus Hargrove', role: 'Senior Partner', gold: 25,
+    from: 'Jim Hardsell', role: 'Managing Partner', gold: 25,
     subject: 'Coverage for Thursday’s status conference',
     body: 'Everyone’s in depositions Thursday. Riley the paralegal has watched a hundred '
       + 'status conferences and knows the Chen file cold. Have Riley appear for us and enter '
@@ -424,4 +426,37 @@ export const SCENARIOS = [
         why: 'Reviewing and polishing documents you know were fabricated still assists the fraud (ER 1.2(d), 8.4(a)). When the proposed engagement is the crime, the only compliant move is a clean refusal — and ER 1.16(a) would mandate withdrawal if you were already in.' },
     ],
   },
+];
+
+const CORE_DIFFICULTY = {
+  trust_advance: 1,
+  double_billing: 1,
+  client_loan: 1,
+  sign_for_client: 1,
+  padding_hours: 1,
+  fake_reviews: 1,
+  confidences_dinner: 1,
+  candor_authority: 2,
+  ai_brief: 2,
+  former_client: 2,
+  no_contact: 2,
+  inadvertent_docs: 2,
+  witness_vacation: 2,
+  hospital_solicit: 2,
+  paralegal_hearing: 2,
+  delete_emails: 2,
+  threat_criminal: 3,
+  referral_split: 3,
+  disputed_funds: 3,
+  report_misconduct: 3,
+  decline_fraud: 3,
+};
+
+export const SCENARIOS = [
+  ...CORE_SCENARIOS.map((scenario) => ({
+    ...scenario,
+    difficulty: CORE_DIFFICULTY[scenario.id] || 2,
+    sourceType: 'lawscape',
+  })),
+  ...MPRE_SCENARIOS,
 ];

@@ -1,6 +1,6 @@
 // LawScape — main game module. Boots the title flow, runs the world loop
 // (click-to-walk, OSRS style), and owns every interaction: the BarMail
-// ethics minigame, shops, rest, wardrobe, travel (court is closed), and
+// ethics minigame, document review, shops, rest, rule research, travel, and
 // disbarment.
 
 import { state, save, load, hasSave, reset,
@@ -16,6 +16,13 @@ import { updateHUD, setZoneName, toast, hoverLabel, drawMinimap } from './ui/hud
 import { showDialogue, hideDialogue, dialogueOpen } from './ui/dialogue.js';
 import { SCENARIOS, WRONG_DMG, STREAK_HEAL } from './data/ethics.js';
 import { OFFICE_UPGRADES, APARTMENT_UPGRADES, bonuses } from './data/upgrades.js';
+import { RULE_LIBRARY } from './data/rules.js';
+import {
+  COFFEE_ETHICS_RESTORE,
+  DOC_REVIEW_CYCLE_MS,
+  DOC_REVIEW_REWARD,
+  LINDA_TIP_COST,
+} from './data/work.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -31,6 +38,7 @@ let npcs = [];
 let hover = null;         // { tiles, label, run } — current mouse target
 let clickFx = null;       // { x, y, at } — OSRS yellow X on click
 let inGame = false;
+const docReview = { active: false, cycleStartedAt: 0 };
 
 function currentZone() { return ZONES[state.zone] || ZONES.office; }
 
@@ -55,6 +63,7 @@ function buildNpcs() {
 }
 
 function enterZone(id, pos = null) {
+  if (docReview.active) stopDocumentReview(false);
   state.zone = id;
   zone = currentZone();
   const p = pos || zone.spawn;
@@ -117,7 +126,9 @@ function targetAt(mx, my) {
           label: portal.label,
           walkOnto: true,
           approach: { x: cx, y: cy },
-          run: () => openTravelMenu(),
+          run: () => portal.to
+            ? enterZone(portal.to, portal.dest || null)
+            : openTravelMenu(),
         };
       }
     }
@@ -136,6 +147,11 @@ canvas.addEventListener('mousemove', (e) => {
 
 canvas.addEventListener('click', (e) => {
   if (!inGame || overlayOpen()) return;
+  if (docReview.active) {
+    stopDocumentReview();
+    toast('Document review stopped. Click again to move.');
+    return;
+  }
   if (dialogueOpen()) hideDialogue();
   const target = targetAt(e.offsetX, e.offsetY);
   if (!target) return;
@@ -168,7 +184,7 @@ function overlayOpen() {
 }
 
 function moveBy(dx, dy) {
-  if (!inGame || overlayOpen() || dialogueOpen() || player.walking) return;
+  if (!inGame || overlayOpen() || dialogueOpen() || player.walking || docReview.active) return;
   const dest = { x: player.tileX + dx, y: player.tileY + dy };
   if (!isWalkable(dest.x, dest.y)) return;
   player.setPath([dest]);
@@ -188,51 +204,87 @@ function updateQuickActions() {
 function runAction(action) {
   switch (action) {
     case 'email': openEmail(); break;
+    case 'doc_review': startDocumentReview(); break;
+    case 'rules': openRuleLibrary(); break;
     case 'shop_office': openShop('Office Upgrades', OFFICE_UPGRADES); break;
     case 'shop_apartment': openShop('Apartment Upgrades', APARTMENT_UPGRADES); break;
     case 'record': openRecord(); break;
     case 'rest': doRest(); break;
     case 'wardrobe': openWardrobe(); break;
-    case 'flavor_books':
-      showDialogue({
-        name: 'Ethics Treatises',
-        text: hasUpgrade('subscription')
-          ? 'Rows of well-thumbed professional-responsibility treatises. BarMail now shows you which rule each scenario implicates.'
-          : 'A mostly empty shelf: a bar directory and one lonely pamphlet, "So You Passed: Now Don’t Get Disbarred." The Ethics Treatise Shelf upgrade would fill this.',
-      });
-      break;
     case 'flavor_coffee':
-      showDialogue({
-        name: 'Coffee Machine',
-        text: 'It hums with quiet integrity. Streak heals restore +5 extra Ethics while you own it.',
-      });
+      drinkCoffee();
       break;
     default: break;
   }
 }
 
 function talkTo(def) {
-  if (def.talk === 'partner') {
+  if (def.talk === 'jim') {
+    toast('Jim Hardsell does not look up from his work.');
+  } else if (def.talk === 'linda') {
+    talkToLinda(def);
+  } else if (def.talk === 'secretary') {
     const lines = [
-      'Check your BarMail, associate. The inbox never sleeps, and neither does the disciplinary judge.',
-      'Gold pays the rent. Ethics keeps the license that earns the gold. Lose the second and the first is decor.',
-      'Some of my emails are... tests. Some are me on a bad day. Answer the rule, not the sender.',
+      'Get back to work.',
+      'You have emails to answer and documents to review.',
+      'Mr. Johnson called regarding his case.',
     ];
     showDialogue({ name: def.name, text: lines[Math.floor(Math.random() * lines.length)] });
   } else if (def.talk === 'paralegal') {
     showDialogue({
       name: def.name,
-      text: 'I read everything before it goes out. If you send something truly catastrophic, I’ll soften the blow — that’s why very wrong answers only cost you 15 Ethics now.',
+      text: 'Riley Readsalot here. I read everything before it goes out. Truly catastrophic answers cost 15 Ethics instead of 25 while I am on the team.',
     });
   } else {
     showDialogue({ name: def.name, text: '...' });
   }
 }
 
+const ETHICS_TIPS = [
+  'Client consent to a conflict usually must be informed and confirmed in writing. A signature without an explanation of material risks is not enough.',
+  'Advance fees belong in trust until earned. Calling money “nonrefundable” does not transform unearned money into the firm’s property.',
+  'Confidentiality is broader than attorney-client privilege. Do not use the two concepts as synonyms.',
+  'With an unrepresented person whose interests may conflict with your client’s, the safest legal advice is: get your own lawyer.',
+  'Candor to the tribunal can require correcting a false statement even when correction hurts the client’s position.',
+  'A subordinate lawyer remains responsible for a clear ethics violation even when a supervisor ordered it.',
+  'Reporting misconduct requires a substantial question about honesty, trustworthiness, or fitness—not every technical rule violation.',
+  'When client and third-party claims to funds conflict, keep the disputed portion separate while promptly releasing any undisputed portion.',
+];
+
+function talkToLinda(def) {
+  if (state.gold < LINDA_TIP_COST) {
+    showDialogue({
+      name: def.name,
+      text: `Linda keeps typing. “I am extremely busy. Come back with ${LINDA_TIP_COST} gold if you want an ethics tip.”`,
+    });
+    return;
+  }
+  showDialogue({
+    name: def.name,
+    text: `Linda glances at the clock. “I do not have time to chat. ${LINDA_TIP_COST} gold buys one concise ethics tip.”`,
+    choices: [
+      {
+        label: `Pay ${LINDA_TIP_COST} gold for a tip`,
+        fn: () => {
+          if (state.gold < LINDA_TIP_COST) return;
+          state.gold -= LINDA_TIP_COST;
+          state.tipsPurchased++;
+          save();
+          updateHUD();
+          const tip = ETHICS_TIPS[Math.floor(Math.random() * ETHICS_TIPS.length)];
+          showDialogue({ name: 'Linda Firestone — Ethics Tip', text: tip });
+        },
+      },
+      { label: 'Let her work' },
+    ],
+  });
+}
+
 // ---------------------------------------------------------------------------
-// Travel menu — the world beyond is Office, Apartment, and a closed courthouse
+// Travel menu — the world beyond is the office complex, apartment, and court
 // ---------------------------------------------------------------------------
 function openTravelMenu() {
+  if (docReview.active) stopDocumentReview(false);
   const choices = [];
   if (state.zone !== 'office') {
     choices.push({ label: 'Go to the Law Office', fn: () => enterZone('office') });
@@ -240,19 +292,12 @@ function openTravelMenu() {
   if (state.zone !== 'apartment') {
     choices.push({ label: 'Go to the Apartment', fn: () => enterZone('apartment') });
   }
-  choices.push({
-    label: 'Go to Court',
-    fn: () => showDialogue({
-      name: 'Courthouse Doors',
-      text: 'The courthouse is CLOSED. A brass sign reads: "Court is not in session. '
-        + 'No hearings today, counselor." (Court simulation is planned for a future '
-        + 'edition — see ROADMAP.md.)',
-      choices: [{ label: 'Head back' }],
-    }),
-  });
+  if (state.zone !== 'courtroom') {
+    choices.push({ label: 'Go to the Empty Courtroom', fn: () => enterZone('courtroom') });
+  }
   choices.push({ label: 'Stay here', fn: () => {} });
   showDialogue({
-    name: state.zone === 'office' ? 'Leaving the Office' : 'Leaving the Apartment',
+    name: 'Where to, counselor?',
     text: 'You step out to the street. Where to?',
     choices,
   });
@@ -263,13 +308,26 @@ function openTravelMenu() {
 // ---------------------------------------------------------------------------
 let currentScenario = null;
 
+function currentDifficulty() {
+  if (state.casesDone < 5) return 1;
+  if (state.casesDone < 12) return 2;
+  return 3;
+}
+
 function pickScenario() {
-  let pool = SCENARIOS.filter((s) => !state.seen.includes(s.id));
-  if (!pool.length) { state.seen = []; pool = SCENARIOS; }
+  const difficulty = currentDifficulty();
+  let pool = SCENARIOS.filter(
+    (scenario) => scenario.difficulty === difficulty && !state.seen.includes(scenario.id),
+  );
+  if (!pool.length) {
+    state.seen = [];
+    pool = SCENARIOS.filter((scenario) => scenario.difficulty === difficulty);
+  }
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
 function openEmail() {
+  if (docReview.active) stopDocumentReview(false);
   currentScenario = pickScenario();
   const s = currentScenario;
   const b = bonuses(state.upgrades);
@@ -277,6 +335,17 @@ function openEmail() {
   $('email-subject').textContent = s.subject;
   $('email-from').textContent = `From: ${s.from} — ${s.role}`;
   $('email-text').textContent = s.body;
+  const levelNames = { 1: 'FOUNDATION', 2: 'PRACTICE', 3: 'MPRE+' };
+  $('email-difficulty').textContent = `LEVEL ${s.difficulty} · ${levelNames[s.difficulty]}`;
+
+  const sourceEl = $('email-source');
+  if (s.sourceType === 'mpre-style') {
+    sourceEl.textContent = 'MPRE-STYLE';
+    sourceEl.title = s.sourceNote;
+    sourceEl.classList.remove('hidden');
+  } else {
+    sourceEl.classList.add('hidden');
+  }
 
   const ruleEl = $('email-rule');
   if (b.showRule) {
@@ -342,6 +411,8 @@ function answerEmail(choice) {
     deltaEl.innerHTML = `<span class="loss">−${dmg} Ethics</span> &nbsp; <span class="muted">streak reset</span>`;
   }
 
+  if (s.sourceType === 'mpre-style') appendScenarioSource(explainEl, s);
+
   if (!state.seen.includes(s.id)) state.seen.push(s.id);
   updateHUD();
   save();
@@ -355,6 +426,25 @@ function answerEmail(choice) {
   else $('email-continue').textContent = 'Next Email';
 }
 
+function appendScenarioSource(container, scenario) {
+  const source = document.createElement('div');
+  source.className = 'scenario-source';
+  source.append('Source note: ');
+  const local = document.createElement('a');
+  local.href = 'MPRE_Associate_Email_Scenarios.md';
+  local.target = '_blank';
+  local.rel = 'noopener';
+  local.textContent = 'MPRE Associate Email Scenarios';
+  source.append(local, ' · ');
+  const official = document.createElement('a');
+  official.href = scenario.sourceUrl;
+  official.target = '_blank';
+  official.rel = 'noopener';
+  official.textContent = 'NCBE preparation page';
+  source.append(official, document.createElement('br'), scenario.sourceNote);
+  container.appendChild(source);
+}
+
 function closeEmail() {
   $('email').classList.add('hidden');
   currentScenario = null;
@@ -365,6 +455,7 @@ $('email-close').addEventListener('click', closeEmail);
 // Disbarment
 // ---------------------------------------------------------------------------
 function gameOver() {
+  stopDocumentReview(false);
   inGame = false;
   $('hud').classList.add('hidden');
   hideDialogue();
@@ -382,6 +473,7 @@ $('gameover-restart').addEventListener('click', () => {
 // Shops, record, rest, wardrobe, help
 // ---------------------------------------------------------------------------
 function openPanel(title) {
+  if (docReview.active) stopDocumentReview(false);
   $('panel-title').textContent = title;
   $('panel-tabs').innerHTML = '';
   $('panel-body').innerHTML = '';
@@ -390,6 +482,150 @@ function openPanel(title) {
   return $('panel-body');
 }
 $('panel-close').addEventListener('click', () => $('panel').classList.add('hidden'));
+
+function openRuleLibrary() {
+  if (!hasUpgrade('subscription')) {
+    showDialogue({
+      name: 'Ethics Treatise Shelf',
+      text: 'The shelf holds only a bar directory. Buy the Ethics Treatise Shelf upgrade to unlock the searchable rule library.',
+    });
+    return;
+  }
+
+  const body = openPanel('Ethics Treatise Rule Library');
+  const tabs = $('panel-tabs');
+
+  function selectSet(set) {
+    for (const button of tabs.querySelectorAll('button')) {
+      button.classList.toggle('active', button.dataset.set === set.id);
+    }
+    body.innerHTML = '';
+
+    const tools = document.createElement('div');
+    tools.className = 'rule-tools';
+    const search = document.createElement('input');
+    search.type = 'search';
+    search.placeholder = `Search ${set.citation} rules`;
+    search.setAttribute('aria-label', `Search ${set.title}`);
+    const official = document.createElement('a');
+    official.href = set.officialUrl;
+    official.target = '_blank';
+    official.rel = 'noopener';
+    official.textContent = 'Current official source ↗';
+    tools.append(search, official);
+    body.appendChild(tools);
+
+    const note = document.createElement('div');
+    note.className = 'rule-library-note';
+    note.textContent = `${set.snapshot}. ${set.note}`;
+    body.appendChild(note);
+
+    const results = document.createElement('div');
+    body.appendChild(results);
+
+    function renderRules() {
+      const query = search.value.trim().toLowerCase();
+      const matching = set.rules.filter((rule) => {
+        if (!query) return true;
+        return `${rule.number} ${rule.title} ${rule.text}`.toLowerCase().includes(query);
+      });
+      results.innerHTML = '';
+
+      if (!matching.length) {
+        const empty = document.createElement('div');
+        empty.className = 'rule-empty';
+        empty.textContent = 'No rules match that search.';
+        results.appendChild(empty);
+        return;
+      }
+
+      for (const rule of matching) {
+        const card = document.createElement('details');
+        card.className = 'rule-card';
+        const summary = document.createElement('summary');
+        summary.textContent = `${set.citation} ${rule.number} — ${rule.title}`;
+        card.appendChild(summary);
+
+        if (rule.text) {
+          const text = document.createElement('div');
+          text.className = 'rule-text';
+          text.textContent = rule.text;
+          card.appendChild(text);
+        } else {
+          const indexOnly = document.createElement('div');
+          indexOnly.className = 'rule-index-only';
+          indexOnly.textContent = 'This local authoring file contains the rule index but not this rule’s full text. ';
+          card.appendChild(indexOnly);
+        }
+
+        const link = document.createElement('a');
+        link.className = 'rule-source-link';
+        link.href = rule.url || set.officialUrl;
+        link.target = '_blank';
+        link.rel = 'noopener';
+        link.textContent = 'Open current official rule ↗';
+        (card.lastElementChild || card).appendChild(link);
+        results.appendChild(card);
+      }
+    }
+
+    search.addEventListener('input', renderRules);
+    renderRules();
+    search.focus();
+  }
+
+  for (const set of RULE_LIBRARY) {
+    const button = document.createElement('button');
+    button.dataset.set = set.id;
+    button.textContent = set.id === 'nevada' ? 'Nevada NRPC' : 'Arizona ER';
+    button.onclick = () => selectSet(set);
+    tabs.appendChild(button);
+  }
+  selectSet(RULE_LIBRARY[0]);
+}
+
+function startDocumentReview() {
+  if (state.zone !== 'office') {
+    toast('The active files are in the main office.');
+    return;
+  }
+  hideDialogue();
+  player.stop();
+  player.activity = 'reviewing';
+  docReview.active = true;
+  docReview.cycleStartedAt = performance.now();
+  $('work-status').classList.remove('hidden');
+  updateDocumentReview(docReview.cycleStartedAt);
+  toast(`Document review started. Each one-minute cycle earns ${DOC_REVIEW_REWARD} gold.`);
+}
+
+function stopDocumentReview(showMessage = true) {
+  if (!docReview.active) return;
+  docReview.active = false;
+  if (player) player.activity = null;
+  $('work-status').classList.add('hidden');
+  if (showMessage) toast('You close the file and stand up.');
+}
+
+function updateDocumentReview(now) {
+  if (!docReview.active) return;
+  let elapsed = now - docReview.cycleStartedAt;
+  while (elapsed >= DOC_REVIEW_CYCLE_MS) {
+    state.gold += DOC_REVIEW_REWARD;
+    state.documentsReviewed++;
+    docReview.cycleStartedAt += DOC_REVIEW_CYCLE_MS;
+    elapsed -= DOC_REVIEW_CYCLE_MS;
+    save();
+    updateHUD();
+    toast(`Document review cycle complete. +${DOC_REVIEW_REWARD} gold.`);
+  }
+  const remainingMs = Math.max(0, DOC_REVIEW_CYCLE_MS - elapsed);
+  const seconds = Math.ceil(remainingMs / 1000);
+  $('review-progress-fill').style.width = `${Math.min(100, (elapsed / DOC_REVIEW_CYCLE_MS) * 100)}%`;
+  $('review-time').textContent = `Next cycle in ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')} · ${state.documentsReviewed} completed`;
+}
+
+$('btn-stop-review').addEventListener('click', () => stopDocumentReview());
 
 function openShop(title, catalog) {
   const body = openPanel(title);
@@ -432,6 +668,8 @@ function openRecord() {
     <div class="row-item"><div class="grow"><h4>Scenarios answered</h4></div><div class="meta">${state.casesDone}</div></div>
     <div class="row-item"><div class="grow"><h4>Answered correctly</h4></div><div class="meta">${state.correctDone} (${acc}%)</div></div>
     <div class="row-item"><div class="grow"><h4>Current streak</h4></div><div class="meta">x${state.streak}</div></div>
+    <div class="row-item"><div class="grow"><h4>Document-review cycles</h4></div><div class="meta">${state.documentsReviewed}</div></div>
+    <div class="row-item"><div class="grow"><h4>Linda’s ethics tips</h4></div><div class="meta">${state.tipsPurchased}</div></div>
     <div class="row-item"><div class="grow"><h4>Gold</h4></div><div class="meta">🪙 ${Math.floor(state.gold)}</div></div>
     <div class="row-item"><div class="grow"><h4>Ethics</h4></div><div class="meta">⚖ ${state.ethics}/${maxEthics()}</div></div>
     <div class="row-item"><div class="grow"><h4>Upgrades owned</h4></div><div class="meta">${state.upgrades.length}</div></div>`;
@@ -457,6 +695,22 @@ function doRest() {
   toast(`You rest and reflect on your professional obligations. +${state.ethics - before} Ethics.`);
 }
 
+function drinkCoffee() {
+  if (!hasUpgrade('coffee')) {
+    toast('The counter is empty. Buy the Coffee Machine from the furniture catalog first.');
+    return;
+  }
+  if (state.ethics >= maxEthics()) {
+    toast('Your Ethics is already full. Save the coffee for a harder day.');
+    return;
+  }
+  const before = state.ethics;
+  healEthics(COFFEE_ETHICS_RESTORE);
+  save();
+  updateHUD();
+  toast(`You drink a strong cup of coffee. +${state.ethics - before} Ethics.`);
+}
+
 function openWardrobe() {
   if (!hasUpgrade('wardrobe_rack')) {
     toast('A single suit hangs here. The Wardrobe Rack upgrade unlocks more colors.');
@@ -476,10 +730,17 @@ function openWardrobe() {
 function openHelp() {
   const body = openPanel('How LawScape Works');
   body.innerHTML = `
-    <div class="help-lede">Your first goal: open <b>BarMail</b>, answer an ethics dilemma, and earn your first gold.</div>
+    <div class="help-lede">Your first goal: answer a <b>BarMail</b> dilemma or complete a one-minute document-review cycle to earn gold.</div>
     <div class="row-item"><div class="grow"><h4>💻 BarMail</h4>
       <p>Click your office computer or use the BarMail quick action. Partners and clients send
-      requests — many of them unethical. Choose your reply.</p></div></div>
+      requests — many of them unethical. Questions advance from Foundation to Practice to MPRE+
+      as your record grows.</p></div></div>
+    <div class="row-item"><div class="grow"><h4>🗄 Document Review</h4>
+      <p>Use the filing cabinet in the main office. Your attorney sits and reviews files;
+      every uninterrupted one-minute cycle earns 5 gold.</p></div></div>
+    <div class="row-item"><div class="grow"><h4>📚 Ethics Treatises</h4>
+      <p>Buy the Ethics Treatise Shelf upgrade, then use the bookshelf to search the bundled
+      Nevada rules and Arizona rule index.</p></div></div>
     <div class="row-item"><div class="grow"><h4>🖱 Movement</h4>
       <p>Click or tap a floor tile to walk. You can also use WASD or the arrow keys. Select
       a highlighted person or object to walk over and interact.</p></div></div>
@@ -493,7 +754,8 @@ function openHelp() {
       <p>Ethics at zero = YOU GOT DISBARRED — GAME OVER. You restart from nothing: no gold,
       no items, no upgrades.</p></div></div>
     <div class="row-item"><div class="grow"><h4>🏛 Court</h4>
-      <p>Closed for now — court simulation is on the roadmap (ROADMAP.md).</p></div></div>`;
+      <p>The furnished courtroom is open to explore, but no matters or court personnel are
+      on calendar yet.</p></div></div>`;
 }
 
 $('btn-help').addEventListener('click', openHelp);
@@ -675,11 +937,11 @@ function startGame() {
   inGame = true;
   if (state.casesDone === 0) {
     showDialogue({
-      name: 'Marcus Hargrove, Senior Partner',
-      text: `Welcome to the firm, ${state.name}. Your inbox is on the computer — BarMail. `
-        + 'Answer well and the gold flows. Answer badly and the Ethics bar drops. '
-        + 'At zero, the Bar takes your license. No pressure.',
-      choices: [{ label: 'Understood.' }],
+      name: 'Liz Loza, Secretary',
+      text: `Welcome to Hardsell & Firestone, ${state.name}. BarMail is on your computer, `
+        + 'the filing cabinet has documents to review, and Mr. Johnson called about his case. '
+        + 'Jim Hardsell is busy. Linda Firestone charges for advice. Get to work.',
+      choices: [{ label: 'On it.' }],
     });
   }
 }
@@ -707,6 +969,7 @@ function loop(now) {
 
   if (inGame) {
     player.update(dt);
+    updateDocumentReview(now);
     state.pos = { x: player.tileX, y: player.tileY };
     const t = now / 1000;
     renderer.render(zone, player, npcs, hover, t);
@@ -748,5 +1011,7 @@ window.LS = {
   get player() { return player; },
   get zone() { return zone; },
   targetAt, isWalkable, renderer,
+  currentDifficulty,
+  get docReview() { return { ...docReview }; },
   get inGame() { return inGame; },
 };

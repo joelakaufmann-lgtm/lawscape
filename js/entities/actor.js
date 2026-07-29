@@ -13,6 +13,7 @@ export class Actor {
     this.path = [];
     this.facing = 1;              // -1 left, 1 right (screen-space flip)
     this.onArrive = null;         // callback when path completes
+    this.activity = null;         // null | 'reviewing'
   }
 
   get walking() { return this.path.length > 0; }
@@ -55,7 +56,8 @@ export class Actor {
 
   // Draw at screen point (sx, sy) = center of the tile under the feet.
   draw(ctx, sx, sy, t, isPlayer = false) {
-    const bob = this.walking ? Math.sin(t * 12) * 1.6 : 0;
+    const seated = this.activity === 'reviewing';
+    const bob = this.walking && !seated ? Math.sin(t * 12) * 1.6 : 0;
     const f = this.facing;
     const suit = this.look.suit || PAL.navy;
     const skin = PAL.skin[this.look.skin ?? 0] || PAL.skin[0];
@@ -72,12 +74,23 @@ export class Actor {
     ctx.ellipse(sx, sy + 2, 11, 5, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    const y0 = sy - bob;
+    const y0 = sy - bob + (seated ? 6 : 0);
+    if (seated) {
+      ctx.fillStyle = PAL.woodDark;
+      ctx.beginPath();
+      ctx.roundRect(sx - 11, y0 - 25, 22, 24, 4);
+      ctx.fill();
+    }
     // legs
     ctx.fillStyle = shade(suit, -0.25);
-    const stride = this.walking ? Math.sin(t * 12) * 3 : 0;
-    ctx.fillRect(sx - 5, y0 - 12 + Math.max(0, stride), 4, 12 - Math.max(0, stride));
-    ctx.fillRect(sx + 1, y0 - 12 + Math.max(0, -stride), 4, 12 - Math.max(0, -stride));
+    const stride = this.walking && !seated ? Math.sin(t * 12) * 3 : 0;
+    if (seated) {
+      ctx.fillRect(sx - 8, y0 - 11, 7, 8);
+      ctx.fillRect(sx + 1, y0 - 11, 7, 8);
+    } else {
+      ctx.fillRect(sx - 5, y0 - 12 + Math.max(0, stride), 4, 12 - Math.max(0, stride));
+      ctx.fillRect(sx + 1, y0 - 12 + Math.max(0, -stride), 4, 12 - Math.max(0, -stride));
+    }
     // body (suit)
     ctx.fillStyle = suit;
     ctx.beginPath();
@@ -162,7 +175,18 @@ export class Actor {
     }
 
     // briefcase for the player
-    if (isPlayer) {
+    if (isPlayer && seated) {
+      const pageY = y0 - 17 + Math.sin(t * 1.8) * 0.5;
+      ctx.fillStyle = PAL.parchment;
+      ctx.fillRect(sx - 12, pageY, 24, 12);
+      ctx.strokeStyle = PAL.brass;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(sx - 12, pageY, 24, 12);
+      ctx.fillStyle = PAL.ink;
+      for (let line = 0; line < 3; line++) {
+        ctx.fillRect(sx - 8, pageY + 3 + line * 3, 16, 1);
+      }
+    } else if (isPlayer) {
       ctx.fillStyle = PAL.woodDark;
       ctx.beginPath();
       ctx.roundRect(sx + 9 * f - 4, y0 - 16, 9, 7, 1.5);

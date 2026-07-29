@@ -9,6 +9,7 @@ const staging = path.join(projectRoot, '.dist-staging');
 const files = [
   'index.html',
   'LICENSE',
+  'MPRE_Associate_Email_Scenarios.md',
   'README.md',
   '.nojekyll',
   'css/style.css',

@@ -5,9 +5,9 @@
 **Answer the rule. Build your practice. Protect your license.**
 
 LawScape is a free, old-school browser RPG about legal ethics. Create an
-attorney, explore an isometric law office and apartment, answer professional
-responsibility dilemmas in BarMail, earn gold, and improve your practice
-without losing your license.
+attorney, explore an isometric law firm, apartment, and courtroom, answer
+professional-responsibility dilemmas in BarMail, review documents, earn gold,
+and improve your practice without losing your license.
 
 The game is plain HTML, CSS, and JavaScript. It has no account, backend,
 tracking, external assets, or runtime dependencies.
@@ -29,18 +29,31 @@ Your progress is stored only in that browser.
 
 ## What is playable
 
-- 21 legal-ethics scenarios involving trust accounting, conflicts, candor,
+- 29 legal-ethics scenarios involving trust accounting, conflicts, candor,
   confidentiality, the no-contact rule, solicitation, fee splitting,
   spoliation, and reporting misconduct.
+- Three progressive difficulty tiers, including eight original MPRE-style
+  workplace-email scenarios with source notes and official NCBE preparation
+  links.
 - Character creation with appearance options.
-- An explorable law office and apartment.
+- Six explorable zones: the main office, Jim Hardsell’s corner office, Linda
+  Firestone’s office, a conference room, an apartment, and a furnished but
+  intentionally empty courtroom.
+- One-minute document-review cycles at the filing cabinet that earn five gold.
+- A searchable ethics-treatise reader built from the project’s local Nevada and
+  Arizona rule material, with links to the current official sources.
+- Office characters Liz Loza, Riley Readsalot, Jim Hardsell, and Linda
+  Firestone, each with a distinct role or interaction.
 - Gold, Ethics health, answer streaks, rest, upgrades, and persistent saves.
+- Purchasable coffee that restores two Ethics points per drink and five-gold
+  ethics tips from Linda.
 - A professional record, NPC conversations, travel, minimap, and responsive
   desktop/mobile controls.
 - Disbarment at zero Ethics, which resets the saved game.
 
-The courthouse is intentionally closed in this edition. Court simulation is a
-future feature described in [ROADMAP.md](ROADMAP.md).
+The courtroom is open for exploration but intentionally has no people or
+hearings yet. Interactive court simulation remains a future feature described
+in [ROADMAP.md](ROADMAP.md).
 
 ## Run the developer preview
 
@@ -63,6 +76,14 @@ npm test
 `js/lawscape.bundle.js` is generated and committed so players can open the game
 from disk. Edit the source modules rather than the bundle.
 
+When the local rule-authoring Markdown changes, regenerate the public,
+browser-readable snapshot before building:
+
+```sh
+npm run rules:build
+npm run build
+```
+
 ## Publish on GitHub Pages
 
 The repository includes automated validation and GitHub Pages workflows.
@@ -81,7 +102,7 @@ The workflow builds a small `dist/` package containing only the playable site.
 index.html                 Browser entry point
 css/style.css              Responsive game interface
 js/main.js                 Game flow and interactions
-js/data/                   Ethics scenarios and upgrades
+js/data/                   Scenarios, rule library, upgrades, and economy data
 js/engine/                 Isometric rendering and pathfinding
 js/entities/               Player and NPC actors
 js/ui/                     HUD and dialogue
@@ -94,8 +115,14 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines and
 [SECURITY.md](SECURITY.md) for the project’s security model.
 
 Local authoring corpora and packaged ethics-agent archives are intentionally
-excluded from the public repository. The playable scenario data and rule
-references needed by the game are contained in `js/data/ethics.js`.
+excluded from the public repository. The generated, player-readable rule
+snapshot is committed as `js/data/rules.js`; gameplay scenarios live in
+`js/data/ethics.js` and `js/data/mpre.js`.
+
+The MPRE-style scenarios are original LawScape adaptations for educational
+practice. They are not official NCBE questions and do not reproduce secure
+exam content. See [MPRE_Associate_Email_Scenarios.md](MPRE_Associate_Email_Scenarios.md)
+for the local scenario notes and the official NCBE preparation link.
 
 ## Educational disclaimer
 

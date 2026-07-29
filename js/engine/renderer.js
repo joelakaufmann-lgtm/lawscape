@@ -21,6 +21,7 @@ const WALL_COLORS = {
   marble: PAL.marbleDark,
   green: PAL.archiveGreen,
   burgundy: '#5d3540',
+  navy: PAL.navy,
 };
 
 export class WorldRenderer {

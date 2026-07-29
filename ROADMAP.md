@@ -6,10 +6,11 @@ earning gold for sound professional-responsibility judgment and losing
 Ethics health for violations — until the Ethics bar hits zero and you are
 disbarred.
 
-## Current version (v1.0)
+## Current launch candidate
 
-- Third-person isometric world: your **Law Office** and your **Apartment**,
-  both upgradeable with gold.
+- Third-person isometric world with six zones: the **Main Office**, partner
+  offices for **Jim Hardsell** and **Linda Firestone**, a **Conference Room**,
+  your **Apartment**, and a furnished but intentionally empty **Courtroom**.
 - **BarMail** ethics minigame: an in-game computer with an email inbox.
   Scenarios are drawn from the professional-responsibility topics covered by
   a local `Ethics Agents` authoring corpus (Arizona ERs under
@@ -18,6 +19,16 @@ disbarred.
   the tribunal, the no-contact rule, confidentiality, solicitation and
   advertising, fee splitting, subordinate-lawyer duties, spoliation,
   reporting misconduct, and more.
+- Three progressive difficulty tiers with original **MPRE-style** workplace
+  emails clearly labeled as adaptations and linked to NCBE’s public preparation
+  page.
+- Repeatable **Document Review** at the filing cabinet: the attorney sits for a
+  one-minute work cycle and earns five gold.
+- A searchable **Ethics Treatise Rule Library** generated from local Nevada and
+  Arizona authoring files, with official-source links and snapshot warnings.
+- Office NPCs and upgrades: Liz Loza’s reminders, Riley Readsalot’s paralegal
+  protection, Jim Hardsell’s studied silence, Linda Firestone’s five-gold
+  ethics tips, and a coffee machine that restores two Ethics points.
 - Gold rewards for correct answers, Ethics-bar damage (with a rule-cited
   explanation) for wrong ones, streak healing for two correct in a row,
   and permadeath: **YOU GOT DISBARRED — GAME OVER** wipes the save.
@@ -27,8 +38,8 @@ disbarred.
 
 ### Court Simulation (headline feature)
 
-The courthouse currently appears in the travel menu but is **closed**.
-A future edition will open it with a full court simulation:
+The courtroom is now open and furnished, but no people or matters are on its
+calendar. A future edition will add a full court simulation:
 
 - Hearing and trial minigames: objections, candor-to-the-tribunal dilemmas
   (ER 3.3 / NRPC 3.3), witness-coaching traps (ER 3.4), and trial publicity
@@ -42,14 +53,11 @@ A future edition will open it with a full court simulation:
 
 - **More jurisdictions**: toggle between Arizona (ER), Nevada (NRPC), and
   California scenario packs, mirroring the three `ethics-check-*` skills.
-- **Difficulty tiers**: subtler fact patterns (screening, imputation,
-  prospective-client conflicts under ER 1.18) unlocked by reputation.
 - **Law Library zone**: research minigame to earn a hint before answering
   a BarMail scenario.
 - **Ethics CLE system**: spend gold on CLE courses that restore Ethics.
 - **Cosmetics**: robes, briefcases, office art, apartment views.
 - **Sound**: OSRS-style level-up jingle on streak heals.
-- **Mobile/touch controls.**
 
 ## Contributing
 

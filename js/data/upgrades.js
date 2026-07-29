@@ -9,17 +9,17 @@ export const OFFICE_UPGRADES = [
     desc: 'BarMail shows which Rule of Professional Conduct is implicated before you answer. Your bookshelf fills up.' },
   { id: 'seating', name: 'Client Seating Area', cost: 220,
     desc: 'Grateful clients tip: +10 gold flat on every correct answer. A respectable sofa appears.' },
-  { id: 'paralegal', name: 'Paralegal Desk (Riley)', cost: 450,
-    desc: 'Riley flags disasters before you hit send: very wrong answers deal 15 damage instead of 25.' },
-  { id: 'conference', name: 'Conference Room Setup', cost: 900,
-    desc: '+25% gold from correct answers and an executive desk. The firm looks like a firm.' },
+  { id: 'paralegal', name: 'Paralegal Upgrade — Riley Readsalot', cost: 450,
+    desc: 'Riley Readsalot flags disasters before you hit send: very wrong answers deal 15 damage instead of 25.' },
+  { id: 'conference', name: 'Conference Room AV Upgrade', cost: 900,
+    desc: '+25% gold from correct answers and upgraded case-presentation equipment.' },
 ];
 
 export const APARTMENT_UPGRADES = [
   { id: 'mattress', name: 'Better Mattress', cost: 80,
     desc: '+20 max Ethics. A principled attorney is a well-rested attorney.' },
   { id: 'coffee', name: 'Coffee Machine', cost: 120,
-    desc: 'Streak heals restore +5 more Ethics. Clarity in a cup.' },
+    desc: 'Drink a cup to restore 2 Ethics. Clarity in a cup.' },
   { id: 'wardrobe_rack', name: 'Wardrobe Rack', cost: 160,
     desc: 'Unlocks suit color changes at the wardrobe.' },
   { id: 'homedesk', name: 'Home CLE Desk', cost: 260,
@@ -43,7 +43,7 @@ export function bonuses(upgrades) {
     goldFlat: has('seating') ? 10 : 0,
     showRule: has('subscription'),
     veryWrongDmg: has('paralegal') ? 15 : 25,
-    streakHealBonus: has('coffee') ? 5 : 0,
+    streakHealBonus: 0,
     restHeal: 15 + (has('homedesk') ? 10 : 0),
     restCooldownMs: has('kitchen') ? 120_000 : 240_000,
   };

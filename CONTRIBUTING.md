@@ -12,6 +12,10 @@ Thanks for helping improve LawScape.
 `js/lawscape.bundle.js` is generated. Please edit the source modules rather
 than the bundle.
 
+If you change a local ethics-rule authoring file, run `npm run rules:build`
+before the normal build. Review the generated `js/data/rules.js` for snapshot
+dates, source labels, and official links.
+
 ## Scenario contributions
 
 Ethics scenarios belong in `js/data/ethics.js`. Each scenario needs:
@@ -24,6 +28,11 @@ Ethics scenarios belong in `js/data/ethics.js`. Each scenario needs:
 
 Please cite primary legal authority in the pull-request description when adding
 or materially changing a scenario.
+
+MPRE-style contributions must be original adaptations, clearly identified as
+unofficial practice material, and linked to NCBE’s public preparation page.
+Do not copy secure, recalled, or live examination questions. Place new
+adaptations in `js/data/mpre.js`.
 
 ## Pull requests
 
