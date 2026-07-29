@@ -22,10 +22,10 @@
     const { Actor } = require("js/entities/actor.js");
     const { updateHUD, setZoneName, toast, hoverLabel, drawMinimap } = require("js/ui/hud.js");
     const { showDialogue, hideDialogue, dialogueOpen } = require("js/ui/dialogue.js");
-    const { SCENARIOS, WRONG_DMG, STREAK_HEAL } = require("js/data/ethics.js");
+    const { SCENARIOS, STREAK_HEAL } = require("js/data/ethics.js");
     const { OFFICE_UPGRADES, APARTMENT_UPGRADES, bonuses } = require("js/data/upgrades.js");
     const { RULE_LIBRARY } = require("js/data/rules.js");
-    const { COFFEE_ETHICS_RESTORE, DOC_REVIEW_CYCLE_MS, DOC_REVIEW_REWARD, LINDA_TIP_COST, RILEY_HINT_COST, rileyHintEligible, } = require("js/data/work.js");
+    const { COFFEE_ETHICS_RESTORE, DOC_REVIEW_CYCLE_MS, DOC_REVIEW_REWARD, LINDA_TIP_COST, RILEY_HINT_COST, WHISKEY_ETHICS_DAMAGE, WHISKEY_SLOW_MS, LAWYER_ASSISTANCE_PHONE, LAWYER_ASSISTANCE_URL, rileyHintEligible, wrongAnswerDamage, } = require("js/data/work.js");
 
     const $ = (id) => document.getElementById(id);
 
@@ -42,6 +42,9 @@
     let clickFx = null;       // { x, y, at } — OSRS yellow X on click
     let inGame = false;
     const docReview = { active: false, cycleStartedAt: 0 };
+    const PLAYER_BASE_SPEED = 4;
+    let whiskeySlowUntil = 0;
+    let watchReturnPos = null;
 
     function currentZone() { return ZONES[state.zone] || ZONES.office; }
 
@@ -155,6 +158,7 @@
         toast('Document review stopped. Click again to move.');
         return;
       }
+      if (player.activity === 'watching') stopWatchingTV();
       if (dialogueOpen()) hideDialogue();
       const target = targetAt(e.offsetX, e.offsetY);
       if (!target) return;
@@ -188,6 +192,7 @@
 
     function moveBy(dx, dy) {
       if (!inGame || overlayOpen() || dialogueOpen() || player.walking || docReview.active) return;
+      if (player.activity === 'watching') stopWatchingTV();
       const dest = { x: player.tileX + dx, y: player.tileY + dy };
       if (!isWalkable(dest.x, dest.y)) return;
       player.setPath([dest]);
@@ -217,30 +222,65 @@
         case 'flavor_coffee':
           drinkCoffee();
           break;
+        case 'watch_tv': watchTV(); break;
+        case 'whiskey': offerWhiskey(); break;
         default: break;
       }
     }
 
     function talkTo(def) {
       if (def.talk === 'jim') {
-        toast('Jim Hardsell does not look up from his work.');
+        const lines = [
+          'Jim reminds you of his email that said “pls fix.”',
+          'Jim is on a client call.',
+          'Jim Hardsell does not look up from his work.',
+        ];
+        showDialogue({ name: def.name, text: lines[Math.floor(Math.random() * lines.length)] });
       } else if (def.talk === 'linda') {
         talkToLinda(def);
       } else if (def.talk === 'secretary') {
-        const lines = [
-          'Get back to work.',
-          'You have emails to answer and documents to review.',
-          'Mr. Johnson called regarding his case.',
-        ];
+        const lines = lizLines();
         showDialogue({ name: def.name, text: lines[Math.floor(Math.random() * lines.length)] });
       } else if (def.talk === 'paralegal') {
+        const lines = [
+          'I would read the treatises again if I were you.',
+          'I read everything before it goes out. While I am on the team, wrong answers cost half as much Ethics.',
+          'If you own the Ethics Treatise Shelf, I can research a relevant-rule hint for 100 gold.',
+        ];
         showDialogue({
           name: def.name,
-          text: 'Riley Readsalot here. I read everything before it goes out. Truly catastrophic answers cost 15 Ethics instead of 25 while I am on the team.',
+          text: lines[Math.floor(Math.random() * lines.length)],
         });
       } else {
         showDialogue({ name: def.name, text: '...' });
       }
+    }
+
+    function lizLines() {
+      const paralegal = hasUpgrade('paralegal');
+      const windowOwned = hasUpgrade('office_window');
+      const chair = hasUpgrade('liz_chair');
+      const plants = hasUpgrade('houseplants');
+      const artwork = hasUpgrade('artwork');
+      const improvedOffice = paralegal && windowOwned;
+      const lines = [
+        'You have emails to answer and documents to review.',
+        'Mr. Johnson called regarding his case.',
+        'Did you read Mr. Hardsell’s email?',
+        'Can you help me? All Mr. Hardsell’s email said was “plz fix.”',
+      ];
+
+      if (!improvedOffice) lines.push('Get back to work.');
+      if (!paralegal) lines.push('We should hire a paralegal.');
+      if (!chair) lines.push('I sure wish I could sit down.', 'I can’t wait to go home.');
+      if (plants) {
+        lines.push('Can you please water the plants?', 'These plants help make this place feel like less of a prison.');
+      }
+      if (artwork) lines.push('This beautiful painting sure does add to the warmth of this office.');
+      if (improvedOffice) {
+        lines.push('Hello, how are you?', 'I’m proud of the work we do for our clients.');
+      }
+      return lines;
     }
 
     const ETHICS_TIPS = [
@@ -255,6 +295,13 @@
     ];
 
     function talkToLinda(def) {
+      if (!hasUpgrade('paralegal')) {
+        showDialogue({
+          name: def.name,
+          text: 'Linda barely looks up. “My advice? Hire Riley Readsalot. Then come back if you still need an ethics tip.”',
+        });
+        return;
+      }
       if (state.gold < LINDA_TIP_COST) {
         showDialogue({
           name: def.name,
@@ -418,6 +465,7 @@
         const earned = Math.round(s.gold * b.goldMult + b.goldFlat);
         state.gold += earned;
         state.streak++;
+        state.wrongStreak = 0;
         state.correctDone++;
         let healed = 0;
         if (state.streak >= 2) {
@@ -433,7 +481,8 @@
           + (healed > 0 ? ` &nbsp; <span class="gain">+${healed} Ethics (streak x${state.streak}!)</span>`
                         : ` &nbsp; <span class="muted">streak x${state.streak} — one more for an Ethics heal</span>`);
       } else {
-        const dmg = choice.grade === 'very_wrong' ? b.veryWrongDmg : WRONG_DMG;
+        state.wrongStreak++;
+        const dmg = wrongAnswerDamage(state.wrongStreak, hasUpgrade('paralegal'));
         state.streak = 0;
         disbarred = damageEthics(dmg);
         verdictEl.textContent = choice.grade === 'very_wrong'
@@ -441,7 +490,9 @@
           : '✖ Ethically wrong.';
         verdictEl.className = 'bad';
         explainEl.textContent = `Why you lost Ethics — ${choice.why}`;
-        deltaEl.innerHTML = `<span class="loss">−${dmg} Ethics</span> &nbsp; <span class="muted">streak reset</span>`;
+        const rileyNote = hasUpgrade('paralegal') ? ' · Riley cut the damage in half' : '';
+        deltaEl.innerHTML = `<span class="loss">−${dmg} Ethics</span> &nbsp; `
+          + `<span class="muted">wrong-answer streak x${state.wrongStreak}${rileyNote}</span>`;
       }
 
       if (s.sourceType === 'mpre-style') appendScenarioSource(explainEl, s);
@@ -705,8 +756,11 @@
           btn.disabled = state.gold < u.cost;
           btn.onclick = () => {
             if (state.gold < u.cost) return;
+            const previousMax = maxEthics();
             state.gold -= u.cost;
             state.upgrades.push(u.id);
+            const addedEthicsCapacity = maxEthics() - previousMax;
+            if (addedEthicsCapacity > 0) healEthics(addedEthicsCapacity);
             save();
             updateHUD();
             toast(`Purchased: ${u.name}`);
@@ -728,6 +782,7 @@
         <div class="row-item"><div class="grow"><h4>Scenarios answered</h4></div><div class="meta">${state.casesDone}</div></div>
         <div class="row-item"><div class="grow"><h4>Answered correctly</h4></div><div class="meta">${state.correctDone} (${acc}%)</div></div>
         <div class="row-item"><div class="grow"><h4>Current streak</h4></div><div class="meta">x${state.streak}</div></div>
+        <div class="row-item"><div class="grow"><h4>Wrong-answer streak</h4></div><div class="meta">x${state.wrongStreak}</div></div>
         <div class="row-item"><div class="grow"><h4>Document-review cycles</h4></div><div class="meta">${state.documentsReviewed}</div></div>
         <div class="row-item"><div class="grow"><h4>Linda’s ethics tips</h4></div><div class="meta">${state.tipsPurchased}</div></div>
         <div class="row-item"><div class="grow"><h4>Riley’s rule hints</h4></div><div class="meta">${state.hintsPurchased}</div></div>
@@ -772,6 +827,81 @@
       toast(`You drink a strong cup of coffee. +${state.ethics - before} Ethics.`);
     }
 
+    function watchTV() {
+      if (!hasUpgrade('cityview')) return;
+      watchReturnPos = { x: player.x, y: player.y };
+      player.stop();
+      player.x = 4.5;
+      player.y = 5;
+      player.activity = 'watching';
+      showDialogue({
+        name: 'City View Apartment',
+        text: 'You sit on the couch facing the television and let the city lights flicker beyond the window.',
+        choices: [{ label: 'Stand up', fn: stopWatchingTV }],
+      });
+    }
+
+    function stopWatchingTV() {
+      if (!player || player.activity !== 'watching') return;
+      player.activity = null;
+      if (watchReturnPos) {
+        player.x = watchReturnPos.x;
+        player.y = watchReturnPos.y;
+      }
+      watchReturnPos = null;
+    }
+
+    function offerWhiskey() {
+      if (state.whiskeyDrinks > 0) {
+        showDialogue({
+          name: 'A Professional Warning',
+          text: `A second drink at work is a warning sign. Substance use can impair a lawyer’s competence and judgment. `
+            + `Confidential help for Nevada lawyers is available from Lawyers Concerned for Lawyers at ${LAWYER_ASSISTANCE_PHONE}.`,
+          choices: [
+            {
+              label: 'Open confidential help page',
+              fn: () => window.open(LAWYER_ASSISTANCE_URL, '_blank', 'noopener'),
+            },
+            { label: 'Step away from the cart' },
+          ],
+        });
+        return;
+      }
+      showDialogue({
+        name: 'Jim Hardsell’s Bar Cart',
+        text: 'Mr. Hardsell insists that you pour yourself a glass.',
+        choices: [
+          { label: 'Yes, pour a glass', fn: drinkWhiskey },
+          { label: 'No, stay sharp' },
+        ],
+      });
+    }
+
+    function drinkWhiskey() {
+      state.whiskeyDrinks++;
+      const disbarred = damageEthics(WHISKEY_ETHICS_DAMAGE);
+      save();
+      updateHUD();
+      if (disbarred) {
+        gameOver();
+        return;
+      }
+      showDialogue({
+        name: 'Professional Judgment',
+        text: `The drink slows your movement for 40 seconds and costs ${WHISKEY_ETHICS_DAMAGE} Ethics. `
+          + 'Pressure from a supervisor does not excuse impaired professional judgment.',
+        choices: [
+          {
+            label: 'Walk it off',
+            fn: () => {
+              whiskeySlowUntil = performance.now() + WHISKEY_SLOW_MS;
+              toast('Your movement is impaired for 40 seconds.');
+            },
+          },
+        ],
+      });
+    }
+
     function openWardrobe() {
       if (!hasUpgrade('wardrobe_rack')) {
         toast('A single suit hangs here. The Wardrobe Rack upgrade unlocks more colors.');
@@ -801,7 +931,7 @@
           every uninterrupted one-minute cycle earns 5 gold.</p></div></div>
         <div class="row-item"><div class="grow"><h4>📚 Ethics Treatises</h4>
           <p>Buy the Ethics Treatise Shelf upgrade, then use the bookshelf to search the bundled
-          Nevada rules and Arizona rule index.</p></div></div>
+          Nevada, Arizona, and California references.</p></div></div>
         <div class="row-item"><div class="grow"><h4>🖱 Movement</h4>
           <p>Click or tap a floor tile to walk. You can also use WASD or the arrow keys. Select
           a highlighted person or object to walk over and interact.</p></div></div>
@@ -810,7 +940,11 @@
           in the office, furniture catalog at home).</p></div></div>
         <div class="row-item"><div class="grow"><h4>⚖ Ethics Bar</h4>
           <p>Wrong answers damage your Ethics — the game explains the violated rule every time.
-          Two correct answers in a row start healing it. Resting in your bed helps too.</p></div></div>
+          Damage rises from 20 to 30 and then 40 as wrong answers pile up; Riley halves it.
+          Two correct answers in a row start healing Ethics. Resting in your bed helps too.</p></div></div>
+        <div class="row-item"><div class="grow"><h4>🥃 Professional Wellbeing</h4>
+          <p>Jim’s office bar cart demonstrates how alcohol can impair judgment and movement.
+          Returning for another drink provides a confidential lawyer-assistance resource.</p></div></div>
         <div class="row-item"><div class="grow"><h4>☠ Disbarment</h4>
           <p>Ethics at zero = YOU GOT DISBARRED — GAME OVER. You restart from nothing: no gold,
           no items, no upgrades.</p></div></div>
@@ -983,7 +1117,7 @@
     function startGame() {
       player = new Actor(state.pos.x, state.pos.y,
         { suit: state.suitColor, gender: state.gender, skin: state.skin,
-          hair: state.hair, hairStyle: state.hairStyle, eye: state.eye }, { speed: 4 });
+          hair: state.hair, hairStyle: state.hairStyle, eye: state.eye }, { speed: PLAYER_BASE_SPEED });
       zone = currentZone();
       if (!isWalkable(player.tileX, player.tileY)) {
         state.pos = { ...zone.spawn };
@@ -1029,6 +1163,7 @@
       lastT = now;
 
       if (inGame) {
+        player.speed = now < whiskeySlowUntil ? PLAYER_BASE_SPEED / 2 : PLAYER_BASE_SPEED;
         player.update(dt);
         updateDocumentReview(now);
         state.pos = { x: player.tileX, y: player.tileY };
@@ -1101,6 +1236,7 @@
         gold: 0,
         ethics: BASE_MAX_ETHICS,
         streak: 0,             // consecutive correct answers
+        wrongStreak: 0,        // consecutive wrong answers
         casesDone: 0,          // total scenarios answered
         correctDone: 0,        // total answered correctly
         documentsReviewed: 0,  // completed one-minute document-review cycles
@@ -1111,6 +1247,7 @@
         zone: 'office',
         pos: { x: 6, y: 10 },
         lastRestAt: 0,
+        whiskeyDrinks: 0,      // first drink teaches impairment; a second prompts help
       };
     }
 
@@ -1128,7 +1265,10 @@
     }
 
     function maxEthics() {
-      return BASE_MAX_ETHICS + (hasUpgrade('mattress') ? 20 : 0);
+      return BASE_MAX_ETHICS
+        + (hasUpgrade('mattress') ? 20 : 0)
+        + (hasUpgrade('kitchen') ? 10 : 0)
+        + (hasUpgrade('liz_chair') ? 10 : 0);
     }
 
     function healEthics(n) {
@@ -1193,7 +1333,7 @@
         },
         props: [
           { type: 'desk', x: 6, y: 1,
-            tier: () => (hasUpgrade('conference') ? 2 : hasUpgrade('subscription') ? 1 : 0),
+            tier: () => (hasUpgrade('subscription') ? 1 : 0),
             monitors: () => (hasUpgrade('monitor') ? 2 : 1),
             interact: { label: 'Your Computer — BarMail', action: 'email' } },
           { type: 'caseboard', x: 2, y: 1,
@@ -1203,12 +1343,15 @@
           { type: 'clientchair', x: 5, y: 4 },
           { type: 'cabinet', x: 12, y: 3,
             interact: { label: 'Office Upgrades Catalog', action: 'shop_office' } },
-          { type: 'filingstation', x: 11, y: 6,
+          { type: 'filingstation', x: 1, y: 3,
             interact: { label: 'Filing Cabinet — Review Documents', action: 'doc_review' } },
-          { type: 'sofa', x: 1, y: 6, visible: () => hasUpgrade('seating') },
           { type: 'paralegaldesk', x: 1, y: 8 },
           { type: 'paralegaldesk', x: 9, y: 8, visible: () => hasUpgrade('paralegal') },
-          { type: 'plant', x: 1, y: 4 },
+          { type: 'officechair', x: 3, y: 8, visible: () => hasUpgrade('liz_chair') },
+          { type: 'plant', x: 1, y: 6, visible: () => hasUpgrade('houseplants') },
+          { type: 'plant', x: 4, y: 1, visible: () => hasUpgrade('houseplants') },
+          { type: 'porthole', x: 5, y: 0, visible: () => hasUpgrade('office_window') },
+          { type: 'dotpainting', x: 8, y: 0, visible: () => hasUpgrade('artwork') },
         ],
         portals: [
           { x: 13, y: 2, label: 'Jim Hardsell’s Corner Office', to: 'corner_office' },
@@ -1246,7 +1389,9 @@
           { type: 'executivedesk', x: 3, y: 3, nameplate: true },
           { type: 'clientchair', x: 3, y: 5 },
           { type: 'clientchair', x: 6, y: 5 },
-          { type: 'plant', x: 8, y: 5 },
+          { type: 'plant', x: 1, y: 5 },
+          { type: 'barcart', x: 8, y: 5,
+            interact: { label: 'Bar Cart — Decanter and Glass', action: 'whiskey' } },
         ],
         portals: [
           { x: 5, y: 7, label: 'Return to the Main Office', to: 'office', dest: { x: 12, y: 2 } },
@@ -1282,7 +1427,7 @@
         ],
         npcs: [
           { id: 'linda', name: 'Linda Firestone, Partner', x: 4, y: 2,
-            look: { suit: '#6e2436', gender: 'female', skin: 1, hair: 0, hairStyle: 1, eye: 1 },
+            look: { suit: '#6e2436', gender: 'female', skin: 1, hair: 2, hairStyle: 1, eye: 1 },
             icon: 'dot', talk: 'linda' },
         ],
       },
@@ -1355,16 +1500,19 @@
         props: [
           { type: 'bed', x: 1, y: 1, tier: () => (hasUpgrade('mattress') ? 1 : 0),
             interact: { label: 'Bed — Rest (restore Ethics)', action: 'rest' } },
-          { type: 'kitchenette', x: 5, y: 1, nice: () => hasUpgrade('kitchen') },
+          { type: 'kitchenette', x: 5, y: 1, visible: () => !hasUpgrade('kitchen') },
+          { type: 'stove', x: 5, y: 1, visible: () => hasUpgrade('kitchen') },
+          { type: 'fridge', x: 7, y: 1, visible: () => hasUpgrade('kitchen') },
           { type: 'coffeemachine', x: 8, y: 2, owned: () => hasUpgrade('coffee'),
             interact: { label: 'Coffee Machine', action: 'flavor_coffee' } },
           { type: 'wardrobe', x: 8, y: 4, interact: { label: 'Wardrobe', action: 'wardrobe' } },
           { type: 'cabinet', x: 1, y: 4,
             interact: { label: 'Furniture Catalog', action: 'shop_apartment' } },
-          { type: 'homedesk', x: 8, y: 6, visible: () => hasUpgrade('homedesk') },
+          { type: 'wallclock', x: 8, y: 0, visible: () => hasUpgrade('homedesk') },
           { type: 'wallwindow', x: 3, y: 0, visible: () => hasUpgrade('cityview') },
           { type: 'tv', x: 5, y: 3, visible: () => hasUpgrade('cityview') },
-          { type: 'sofa', x: 3, y: 5, visible: () => hasUpgrade('cityview') },
+          { type: 'sofa', x: 4, y: 5, visible: () => hasUpgrade('cityview'),
+            interact: { label: 'Couch — Sit and Watch TV', action: 'watch_tv' } },
           { type: 'plant', x: 1, y: 6 },
         ],
         portals: [
@@ -1691,6 +1839,44 @@
           ctx.stroke();
         },
       },
+      porthole: {
+        w: 1, h: 1, solid: false, noShadow: true,
+        draw(ctx, ox, oy, prop, t) {
+          const glow = 0.45 + Math.sin(t * 0.7) * 0.08;
+          ctx.fillStyle = PAL.brass;
+          ctx.beginPath();
+          ctx.arc(ox, oy - 34, 13, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#152a43';
+          ctx.beginPath();
+          ctx.arc(ox, oy - 34, 9, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = `rgba(217,182,86,${glow})`;
+          ctx.fillRect(ox - 3, oy - 37, 2, 3);
+          ctx.fillRect(ox + 3, oy - 32, 2, 3);
+        },
+      },
+      dotpainting: {
+        w: 2, h: 1, solid: false, noShadow: true,
+        draw(ctx, ox, oy) {
+          const leftBottom = { x: ox - 20, y: oy - 12 };
+          const rightBottom = { x: ox + 20, y: oy + 8 };
+          const leftTop = { x: leftBottom.x, y: leftBottom.y - 42 };
+          const rightTop = { x: rightBottom.x, y: rightBottom.y - 42 };
+          ctx.fillStyle = PAL.brass;
+          quad(ctx,
+            leftTop.x - 3, leftTop.y - 3, rightTop.x + 3, rightTop.y - 3,
+            rightBottom.x + 3, rightBottom.y + 3, leftBottom.x - 3, leftBottom.y + 3);
+          ctx.fillStyle = '#faf8f0';
+          quad(ctx,
+            leftTop.x, leftTop.y, rightTop.x, rightTop.y,
+            rightBottom.x, rightBottom.y, leftBottom.x, leftBottom.y);
+          ctx.fillStyle = PAL.ink;
+          ctx.beginPath();
+          ctx.arc(ox, oy - 23, 6, 0, Math.PI * 2);
+          ctx.fill();
+        },
+      },
       caseboard: {
         w: 2, h: 1, solid: true,
         draw(ctx, ox, oy) {
@@ -1725,6 +1911,22 @@
           box(ctx, ox, oy, -0.28, -0.32, 0.56, 0.14, 34, PAL.burgundy);
         },
       },
+      officechair: {
+        w: 1, h: 1, solid: true,
+        draw(ctx, ox, oy) {
+          box(ctx, ox, oy, -0.28, -0.28, 0.56, 0.56, 11, PAL.ink, 8);
+          box(ctx, ox, oy, -0.28, -0.32, 0.56, 0.12, 34, PAL.ink, 8);
+          const c = p(ox, oy, 0, 0);
+          ctx.strokeStyle = PAL.stoneDark;
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(c.x, c.y - 5);
+          ctx.lineTo(c.x, c.y + 7);
+          ctx.moveTo(c.x - 10, c.y + 10);
+          ctx.lineTo(c.x + 10, c.y + 10);
+          ctx.stroke();
+        },
+      },
       cabinet: {
         w: 1, h: 1, solid: true,
         draw(ctx, ox, oy) {
@@ -1742,6 +1944,34 @@
           box(ctx, ox, oy, -0.4, -0.3, 1.8, 0.16, 30, PAL.navy);
           box(ctx, ox, oy, -0.4, -0.25, 0.16, 0.6, 22, PAL.navyLight);
           box(ctx, ox, oy, 1.24, -0.25, 0.16, 0.6, 22, PAL.navyLight);
+        },
+      },
+      barcart: {
+        w: 1, h: 1, solid: true,
+        draw(ctx, ox, oy) {
+          box(ctx, ox, oy, -0.34, -0.3, 0.68, 0.6, 8, PAL.woodDark, 16);
+          box(ctx, ox, oy, -0.34, -0.3, 0.68, 0.6, 5, PAL.brass, 31);
+          const c = p(ox, oy, 0, 0);
+          ctx.fillStyle = '#8a4d2e';
+          ctx.beginPath();
+          ctx.roundRect(c.x - 10, c.y - 56, 12, 22, 3);
+          ctx.fill();
+          ctx.fillStyle = PAL.brassLight;
+          ctx.fillRect(c.x - 7, c.y - 60, 6, 5);
+          ctx.strokeStyle = PAL.parchment;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(c.x + 8, c.y - 49);
+          ctx.lineTo(c.x + 8, c.y - 38);
+          ctx.arc(c.x + 8, c.y - 52, 5, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.fillStyle = '#b06c39';
+          ctx.fillRect(c.x + 4, c.y - 51, 8, 3);
+          ctx.fillStyle = PAL.ink;
+          ctx.beginPath();
+          ctx.arc(c.x - 15, c.y - 3, 5, 0, Math.PI * 2);
+          ctx.arc(c.x + 15, c.y + 5, 5, 0, Math.PI * 2);
+          ctx.fill();
         },
       },
       paralegaldesk: {
@@ -1918,6 +2148,59 @@
           ctx.fillStyle = PAL.ink;
           ctx.beginPath(); ctx.ellipse(c.x - 12, c.y - 27, 8, 4, 0, 0, Math.PI * 2); ctx.fill();
           if (nice) { ctx.fillStyle = PAL.brass; ctx.fillRect(c.x + 8, c.y - 32, 4, 8); }
+        },
+      },
+      stove: {
+        w: 2, h: 1, solid: true,
+        draw(ctx, ox, oy) {
+          box(ctx, ox, oy, -0.4, -0.3, 1.8, 0.6, 28, PAL.marble);
+          const c = p(ox, oy, 0.5, 0);
+          ctx.fillStyle = PAL.ink;
+          for (const dx of [-25, 2, 25]) {
+            ctx.beginPath();
+            ctx.ellipse(c.x + dx, c.y - 31, 7, 4, 0, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.fillStyle = PAL.brass;
+          for (const dx of [-20, -7, 6, 19]) ctx.fillRect(c.x + dx, c.y - 20, 4, 3);
+        },
+      },
+      fridge: {
+        w: 1, h: 1, solid: true,
+        draw(ctx, ox, oy) {
+          box(ctx, ox, oy, -0.34, -0.3, 0.68, 0.6, 58, PAL.marbleDark);
+          const c = p(ox, oy, 0, 0.25);
+          ctx.strokeStyle = PAL.stoneDark;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(c.x - 18, c.y - 34);
+          ctx.lineTo(c.x + 18, c.y - 16);
+          ctx.stroke();
+          ctx.fillStyle = PAL.stoneDark;
+          ctx.fillRect(c.x + 8, c.y - 49, 3, 14);
+          ctx.fillRect(c.x + 8, c.y - 31, 3, 11);
+        },
+      },
+      wallclock: {
+        w: 1, h: 1, solid: false, noShadow: true,
+        draw(ctx, ox, oy, prop, t) {
+          ctx.fillStyle = PAL.woodDark;
+          ctx.beginPath();
+          ctx.arc(ox, oy - 38, 13, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = PAL.parchment;
+          ctx.beginPath();
+          ctx.arc(ox, oy - 38, 10, 0, Math.PI * 2);
+          ctx.fill();
+          const angle = (t % 60) / 60 * Math.PI * 2 - Math.PI / 2;
+          ctx.strokeStyle = PAL.ink;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(ox, oy - 38);
+          ctx.lineTo(ox + Math.cos(angle) * 7, oy - 38 + Math.sin(angle) * 7);
+          ctx.moveTo(ox, oy - 38);
+          ctx.lineTo(ox + 2, oy - 44);
+          ctx.stroke();
         },
       },
       homedesk: {
@@ -2313,7 +2596,7 @@
         this.path = [];
         this.facing = 1;              // -1 left, 1 right (screen-space flip)
         this.onArrive = null;         // callback when path completes
-        this.activity = null;         // null | 'reviewing'
+        this.activity = null;         // null | 'reviewing' | 'watching'
       }
 
       get walking() { return this.path.length > 0; }
@@ -2356,7 +2639,7 @@
 
       // Draw at screen point (sx, sy) = center of the tile under the feet.
       draw(ctx, sx, sy, t, isPlayer = false) {
-        const seated = this.activity === 'reviewing';
+        const seated = this.activity === 'reviewing' || this.activity === 'watching';
         const bob = this.walking && !seated ? Math.sin(t * 12) * 1.6 : 0;
         const f = this.facing;
         const suit = this.look.suit || PAL.navy;
@@ -2375,7 +2658,7 @@
         ctx.fill();
 
         const y0 = sy - bob + (seated ? 6 : 0);
-        if (seated) {
+        if (this.activity === 'reviewing') {
           ctx.fillStyle = PAL.woodDark;
           ctx.beginPath();
           ctx.roundRect(sx - 11, y0 - 25, 22, 24, 4);
@@ -2409,9 +2692,12 @@
         ctx.fillStyle = this.npc ? shade(suit, -0.3) : PAL.burgundy;
         ctx.fillRect(sx - 1, y0 - 25, 2, 7);
         // arms
+        ctx.fillStyle = suit;
+        ctx.fillRect(sx - hw - 3, y0 - 28, 4, 14);
+        ctx.fillRect(sx + hw - 1, y0 - 28, 4, 14);
         ctx.fillStyle = shade(suit, -0.12);
-        ctx.fillRect(sx - hw - 2, y0 - 28, 3, 14);
-        ctx.fillRect(sx + hw - 1, y0 - 28, 3, 14);
+        ctx.fillRect(sx - hw - 3, y0 - 17, 4, 3);
+        ctx.fillRect(sx + hw - 1, y0 - 17, 4, 3);
 
         // curly/afro halo sits behind the head
         if (style === 4) {
@@ -2475,7 +2761,7 @@
         }
 
         // briefcase for the player
-        if (isPlayer && seated) {
+        if (isPlayer && this.activity === 'reviewing') {
           const pageY = y0 - 17 + Math.sin(t * 1.8) * 0.5;
           ctx.fillStyle = PAL.parchment;
           ctx.fillRect(sx - 12, pageY, 24, 12);
@@ -2486,7 +2772,7 @@
           for (let line = 0; line < 3; line++) {
             ctx.fillRect(sx - 8, pageY + 3 + line * 3, 16, 1);
           }
-        } else if (isPlayer) {
+        } else if (isPlayer && !seated) {
           ctx.fillStyle = PAL.woodDark;
           ctx.beginPath();
           ctx.roundRect(sx + 9 * f - 4, y0 - 16, 9, 7, 1.5);
@@ -2627,8 +2913,8 @@
     // rules. No invented cases, no invented rule text.
     //
     // grade: 'correct'    -> earn gold, streak++, streak of 2+ heals Ethics
-    //        'wrong'      -> lose WRONG_DMG Ethics, streak resets
-    //        'very_wrong' -> lose VERY_WRONG_DMG Ethics, streak resets
+    //        'wrong'      -> lose escalating Ethics damage, streak resets
+    //        'very_wrong' -> same escalating damage with a more serious verdict
     //
     // Every non-correct choice carries a `why` explaining the violation and the
     // rule, shown to the player when they lose Ethics.
@@ -2636,8 +2922,6 @@
     const { MPRE_SCENARIOS } = require("js/data/mpre.js");
     const { ADDITIONAL_MPRE_SCENARIOS } = require("js/data/mpre-additional.js");
 
-    const WRONG_DMG = 10;
-    const VERY_WRONG_DMG = 25;
     const STREAK_HEAL = 10;
 
     const CORE_SCENARIOS = [
@@ -3081,7 +3365,7 @@
       ...MPRE_SCENARIOS,
       ...ADDITIONAL_MPRE_SCENARIOS,
     ];
-    Object.assign(exports, { WRONG_DMG, VERY_WRONG_DMG, STREAK_HEAL, SCENARIOS });
+    Object.assign(exports, { STREAK_HEAL, SCENARIOS });
   },
   "js/data/mpre.js": (exports, require) => {
     // Original LawScape email adaptations of concepts covered by NCBE's free MPRE
@@ -3320,8 +3604,8 @@
     Object.assign(exports, { MPRE_SCENARIOS });
   },
   "js/data/mpre-additional.js": (exports, require) => {
-    // Generated from MPRE_Associate_Email_Scenarios_Additional_20.md.
-    // Run npm run mpre:build after editing that source file.
+    // Generated from MPRE_Associate_Email_Scenarios_Additional_20.md and MPRE_Associate_Email_Scenarios_Additional_41.md.
+    // Run npm run mpre:build after editing either source file.
 
     const ADDITIONAL_MPRE_SCENARIOS = [
       {
@@ -4023,6 +4307,1441 @@
             "why": "ABA Model Code of Judicial Conduct Rule 2.11(A)(3): A judge must disqualify when the judge or spouse has a qualifying economic interest in a party."
           }
         ]
+      },
+      {
+        "id": "mpre_extra_36_the_e_discovery_platform",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Morgan Li",
+        "role": "Litigation Partner",
+        "subject": "Can we run the document production ourselves?",
+        "body": "We must review and produce several million emails. No one on our team understands the new review platform, its privilege filters, or how it handles metadata. The client wants to avoid the cost of an e-discovery specialist.\n\nI am considering having a junior associate upload the files and begin production immediately, learning the platform along the way. What do our professional obligations require?",
+        "gold": 55,
+        "rule": "ABA Model Rule 1.1, Comment 8",
+        "choices": [
+          {
+            "grade": "wrong",
+            "text": "The proposed approach is proper because technological tasks are outside a lawyer's duty of competence.",
+            "why": "ABA Model Rule 1.1, Comment 8: Competence includes keeping abreast of relevant technology or obtaining qualified assistance before using it."
+          },
+          {
+            "grade": "correct",
+            "text": "The team must obtain the necessary technological competence through study or qualified assistance before using the platform in a way that risks the client's matter."
+          },
+          {
+            "grade": "wrong",
+            "text": "The proposed approach is proper if the client signs a waiver of competent representation.",
+            "why": "ABA Model Rule 1.1, Comment 8: Competence includes keeping abreast of relevant technology or obtaining qualified assistance before using it."
+          },
+          {
+            "grade": "wrong",
+            "text": "Only the partner needs technological competence; the lawyers performing the review do not.",
+            "why": "ABA Model Rule 1.1, Comment 8: Competence includes keeping abreast of relevant technology or obtaining qualified assistance before using it."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_37_accepting_the_settlement_without_calling",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Sophia Reed",
+        "role": "Client",
+        "subject": "Did the firm have authority to settle?",
+        "body": "I authorized the firm to negotiate my employment claim, but I never authorized anyone to accept a particular amount. Yesterday, opposing counsel offered $180,000. Your partner believed it was an excellent result and accepted it before consulting me.\n\nWas the partner permitted to make that decision?",
+        "gold": 55,
+        "rule": "ABA Model Rule 1.2(a)",
+        "choices": [
+          {
+            "grade": "wrong",
+            "text": "Yes. A lawyer controls all decisions made during settlement negotiations.",
+            "why": "ABA Model Rule 1.2(a): The client decides whether to settle; negotiation authority alone does not necessarily authorize acceptance."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes. General authority to negotiate automatically includes authority to accept any reasonable offer.",
+            "why": "ABA Model Rule 1.2(a): The client decides whether to settle; negotiation authority alone does not necessarily authorize acceptance."
+          },
+          {
+            "grade": "wrong",
+            "text": "No, but only because the offer exceeded $100,000.",
+            "why": "ABA Model Rule 1.2(a): The client decides whether to settle; negotiation authority alone does not necessarily authorize acceptance."
+          },
+          {
+            "grade": "correct",
+            "text": "No. The client decides whether to settle, and the lawyer lacked authority to accept the offer."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_38_drafting_only_the_answer",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Amelia Grant",
+        "role": "Partner",
+        "subject": "Limited-scope landlord matter",
+        "body": "A small-business owner cannot afford full representation in a straightforward eviction case. She wants us only to analyze the complaint and draft her answer; she will appear without us after that. The limitation is reasonable under the circumstances.\n\nWe carefully explained what we will and will not do, and she gave informed consent. May we accept the limited engagement?",
+        "gold": 55,
+        "rule": "ABA Model Rule 1.2(c)",
+        "choices": [
+          {
+            "grade": "correct",
+            "text": "Yes. A lawyer may reasonably limit the scope of a representation when the client gives informed consent."
+          },
+          {
+            "grade": "wrong",
+            "text": "No. Every litigation engagement must continue through final judgment.",
+            "why": "ABA Model Rule 1.2(c): A representation may be reasonably limited when the client gives informed consent."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes, but only if opposing counsel consents.",
+            "why": "ABA Model Rule 1.2(c): A representation may be reasonably limited when the client gives informed consent."
+          },
+          {
+            "grade": "wrong",
+            "text": "No. A client may never appear without counsel after receiving limited legal assistance.",
+            "why": "ABA Model Rule 1.2(c): A representation may be reasonably limited when the client gives informed consent."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_39_explaining_the_criminal_law_boundary",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Daniel Cho",
+        "role": "Partner",
+        "subject": "Advice about a proposed payment system",
+        "body": "A business client described a proposed payment system that might violate federal reporting laws. I explained the statutes, the possible criminal consequences, and the unresolved legal questions. I advised the client not to proceed unless the plan could be brought into compliance.\n\nI did not suggest concealment or help implement an unlawful plan. The client later used my legal analysis to design a criminal scheme without telling me. Did my original advice violate the rules?",
+        "gold": 55,
+        "rule": "ABA Model Rule 1.2(d), Comment 9",
+        "choices": [
+          {
+            "grade": "wrong",
+            "text": "Yes. A lawyer may not discuss the legal consequences of conduct that might become criminal.",
+            "why": "ABA Model Rule 1.2(d), Comment 9: A lawyer may explain legal consequences and the law's application but may not counsel or assist crime or fraud."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes. A client's later misuse of advice automatically makes the lawyer a participant.",
+            "why": "ABA Model Rule 1.2(d), Comment 9: A lawyer may explain legal consequences and the law's application but may not counsel or assist crime or fraud."
+          },
+          {
+            "grade": "correct",
+            "text": "No. A lawyer may explain legal consequences and help a client make a good-faith determination of the law's validity, scope, meaning, or application."
+          },
+          {
+            "grade": "wrong",
+            "text": "No, but only because the lawyer did not charge for implementing the scheme.",
+            "why": "ABA Model Rule 1.2(d), Comment 9: A lawyer may explain legal consequences and the law's application but may not counsel or assist crime or fraud."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_40_the_uncommunicated_plea_offer",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Eric Nolan",
+        "role": "Criminal Defense Partner",
+        "subject": "Plea offer I intend to reject",
+        "body": "The prosecutor offered our client a plea carrying six months in custody instead of the five-year sentence charged. I believe our suppression motion will win, and the client previously told me only that he hoped to avoid incarceration.\n\nI plan to reject the offer without telling him because discussing it may weaken his resolve. Is that permissible?",
+        "gold": 55,
+        "rule": "ABA Model Rule 1.4, Comment 2",
+        "choices": [
+          {
+            "grade": "wrong",
+            "text": "Yes. Defense counsel may withhold any offer the lawyer reasonably believes is unfavorable.",
+            "why": "ABA Model Rule 1.4, Comment 2: A lawyer must promptly communicate a plea offer unless the client has already authorized acceptance or rejection."
+          },
+          {
+            "grade": "correct",
+            "text": "No. A lawyer must promptly communicate a plea offer unless the client has previously authorized its acceptance or rejection."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes. Litigation strategy is exclusively the lawyer's decision.",
+            "why": "ABA Model Rule 1.4, Comment 2: A lawyer must promptly communicate a plea offer unless the client has already authorized acceptance or rejection."
+          },
+          {
+            "grade": "wrong",
+            "text": "No, but only if the suppression motion ultimately fails.",
+            "why": "ABA Model Rule 1.4, Comment 2: A lawyer must promptly communicate a plea offer unless the client has already authorized acceptance or rejection."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_41_the_missed_renewal_filing",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Lena Brooks",
+        "role": "Partner",
+        "subject": "Error in ongoing patent matter",
+        "body": "While we continue to represent a technology client, I discovered that our team missed a renewal filing. The error materially damaged the client's rights and could cause the client to reconsider both its strategy and whether to keep our firm.\n\nWe may be able to mitigate some of the harm. Must we tell the client about the error now?",
+        "gold": 55,
+        "rule": "ABA Model Rule 1.4; ABA Formal Opinion 481",
+        "choices": [
+          {
+            "grade": "correct",
+            "text": "Yes. A material error in an ongoing representation must be disclosed when a reasonable client would consider it important to the representation or the lawyer-client relationship."
+          },
+          {
+            "grade": "wrong",
+            "text": "No. The firm may wait until all possible corrective measures have failed.",
+            "why": "ABA Model Rule 1.4; ABA Formal Opinion 481: A material error in an ongoing representation must be disclosed when a reasonable client would consider it important."
+          },
+          {
+            "grade": "wrong",
+            "text": "No. A lawyer never has to disclose the lawyer's own mistake.",
+            "why": "ABA Model Rule 1.4; ABA Formal Opinion 481: A material error in an ongoing representation must be disclosed when a reasonable client would consider it important."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes, but only if the client first asks whether an error occurred.",
+            "why": "ABA Model Rule 1.4; ABA Formal Opinion 481: A material error in an ongoing representation must be disclosed when a reasonable client would consider it important."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_42_the_omitted_discipline_on_a_bar_application",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Admissions Committee Counsel",
+        "role": "Firm Correspondent",
+        "subject": "Applicant's incomplete disclosure",
+        "body": "A bar applicant knowingly omitted a prior professional-license suspension from his application. During the admissions investigation, the committee directly asked whether his filing was complete. He repeated the false answer and refused to correct the record.\n\nIs the applicant's conduct proper?",
+        "gold": 55,
+        "rule": "ABA Model Rule 8.1",
+        "choices": [
+          {
+            "grade": "wrong",
+            "text": "Yes. Bar applicants are not bound by professional-conduct rules until admission.",
+            "why": "ABA Model Rule 8.1: A bar applicant may not knowingly make a material false statement or fail to correct a known misapprehension."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes. A licensing suspension outside the legal profession is never relevant.",
+            "why": "ABA Model Rule 8.1: A bar applicant may not knowingly make a material false statement or fail to correct a known misapprehension."
+          },
+          {
+            "grade": "wrong",
+            "text": "No, but only if the omission would automatically disqualify the applicant.",
+            "why": "ABA Model Rule 8.1: A bar applicant may not knowingly make a material false statement or fail to correct a known misapprehension."
+          },
+          {
+            "grade": "correct",
+            "text": "No. An applicant may not knowingly make a material false statement or fail to correct a known misapprehension in an admissions matter."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_43_a_contingent_fee_for_an_acquittal",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Cameron Price",
+        "role": "Client",
+        "subject": "Fee based on winning the criminal case",
+        "body": "I cannot pay a large fee now. I propose that the firm receive $75,000 only if I am acquitted of the felony charge and nothing if I am convicted. The amount would be reasonable for the work involved.\n\nMay the firm accept that arrangement?",
+        "gold": 55,
+        "rule": "ABA Model Rule 1.5(d)(2)",
+        "choices": [
+          {
+            "grade": "wrong",
+            "text": "Yes. Any reasonable contingent fee is permissible.",
+            "why": "ABA Model Rule 1.5(d)(2): Contingent fees are prohibited for representing a defendant in a criminal case."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes, if the agreement is signed by the client.",
+            "why": "ABA Model Rule 1.5(d)(2): Contingent fees are prohibited for representing a defendant in a criminal case."
+          },
+          {
+            "grade": "correct",
+            "text": "No. A lawyer may not charge a contingent fee for representing a defendant in a criminal case."
+          },
+          {
+            "grade": "wrong",
+            "text": "No, unless the prosecutor also approves the arrangement.",
+            "why": "ABA Model Rule 1.5(d)(2): Contingent fees are prohibited for representing a defendant in a criminal case."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_44_recovering_past_due_support",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Marisol Vega",
+        "role": "Family-Law Partner",
+        "subject": "Contingent fee for unpaid support judgment",
+        "body": "A former spouse already has a final court order awarding support. The obligor has ignored it for three years. The client wants us to pursue the accumulated unpaid balance for a reasonable percentage of whatever we recover.\n\nWould that contingent-fee arrangement be permissible?",
+        "gold": 55,
+        "rule": "ABA Model Rule 1.5, Comment 6",
+        "choices": [
+          {
+            "grade": "wrong",
+            "text": "No. Contingent fees are prohibited in every matter connected to domestic relations.",
+            "why": "ABA Model Rule 1.5, Comment 6: The domestic-relations prohibition does not extend to recovery of post-judgment balances already due."
+          },
+          {
+            "grade": "correct",
+            "text": "Yes. The prohibition does not bar a reasonable contingent fee to recover post-judgment amounts already due under an existing support order."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes, but only if the former spouses remarry first.",
+            "why": "ABA Model Rule 1.5, Comment 6: The domestic-relations prohibition does not extend to recovery of post-judgment balances already due."
+          },
+          {
+            "grade": "wrong",
+            "text": "No, because any fee based on a financial recovery is necessarily unreasonable.",
+            "why": "ABA Model Rule 1.5, Comment 6: The domestic-relations prohibition does not extend to recovery of post-judgment balances already due."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_45_fraud_on_a_personal_mortgage_application",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Managing Committee",
+        "role": "Firm Correspondent",
+        "subject": "Partner's conduct outside the firm",
+        "body": "A partner knowingly fabricated income records on her personal mortgage application. The conduct had nothing to do with a client, a court, or the practice of law.\n\nCan the partner nevertheless be disciplined under the professional-conduct rules?",
+        "gold": 55,
+        "rule": "ABA Model Rule 8.4(c)",
+        "choices": [
+          {
+            "grade": "wrong",
+            "text": "No. Personal dishonesty is outside the disciplinary system.",
+            "why": "ABA Model Rule 8.4(c): Dishonesty, fraud, deceit, or misrepresentation may be professional misconduct outside client work."
+          },
+          {
+            "grade": "wrong",
+            "text": "No. Discipline is available only when a client loses money.",
+            "why": "ABA Model Rule 8.4(c): Dishonesty, fraud, deceit, or misrepresentation may be professional misconduct outside client work."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes, but only if the partner is criminally convicted first.",
+            "why": "ABA Model Rule 8.4(c): Dishonesty, fraud, deceit, or misrepresentation may be professional misconduct outside client work."
+          },
+          {
+            "grade": "correct",
+            "text": "Yes. Conduct involving dishonesty, fraud, deceit, or misrepresentation may constitute professional misconduct even outside legal practice."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_46_the_final_disclosure_order",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Rachel Singh",
+        "role": "Partner",
+        "subject": "Court order requiring client records",
+        "body": "A court ordered us to produce confidential client records. We asserted every nonfrivolous privilege and confidentiality objection, sought appropriate review, and lost. The order is now enforceable.\n\nMay we comply?",
+        "gold": 55,
+        "rule": "ABA Model Rule 1.6(b)(6), Comment 15",
+        "choices": [
+          {
+            "grade": "correct",
+            "text": "Yes. A lawyer may disclose information to comply with a court order, but should limit the disclosure to what the lawyer reasonably believes is required."
+          },
+          {
+            "grade": "wrong",
+            "text": "No. Confidentiality always overrides a final court order.",
+            "why": "ABA Model Rule 1.6(b)(6), Comment 15: A lawyer may comply with a court order after asserting appropriate claims and should disclose only what is required."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes. The order permits public release of the client's entire file.",
+            "why": "ABA Model Rule 1.6(b)(6), Comment 15: A lawyer may comply with a court order after asserting appropriate claims and should disclose only what is required."
+          },
+          {
+            "grade": "wrong",
+            "text": "No, unless the client gives informed consent after the order is entered.",
+            "why": "ABA Model Rule 1.6(b)(6), Comment 15: A lawyer may comply with a court order after asserting appropriate claims and should disclose only what is required."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_47_misconduct_learned_from_the_client",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Alex Moreno",
+        "role": "Partner",
+        "subject": "Reporting a former lawyer",
+        "body": "During a confidential consultation, our current client gave us reliable information showing that her former lawyer stole money from her trust account. The conduct raises a substantial question about that lawyer's honesty. Our client refuses to authorize disclosure, and no confidentiality exception applies.\n\nMust we report the former lawyer?",
+        "gold": 55,
+        "rule": "ABA Model Rule 8.3(c)",
+        "choices": [
+          {
+            "grade": "wrong",
+            "text": "Yes. The reporting rule always overrides client confidentiality.",
+            "why": "ABA Model Rule 8.3(c): The reporting duty does not require disclosure of information protected by Rule 1.6."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes. Theft from a trust account can never be protected information.",
+            "why": "ABA Model Rule 8.3(c): The reporting duty does not require disclosure of information protected by Rule 1.6."
+          },
+          {
+            "grade": "correct",
+            "text": "No. The reporting rule does not require disclosure of information otherwise protected by the confidentiality rule."
+          },
+          {
+            "grade": "wrong",
+            "text": "No, because trust-account theft does not concern a lawyer's honesty or fitness.",
+            "why": "ABA Model Rule 8.3(c): The reporting duty does not require disclosure of information protected by Rule 1.6."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_48_buying_the_property_next_door",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Priya Nair",
+        "role": "General Counsel",
+        "subject": "Lawyer used our confidential expansion plans",
+        "body": "Our outside lawyer learned during the representation that we planned to acquire a specific warehouse. Before we could make an offer, the lawyer secretly purchased the neighboring parcel because our project would increase its value.\n\nThe lawyer did not reveal our information to anyone, but used it for personal gain without our consent. Was that proper?",
+        "gold": 55,
+        "rule": "ABA Model Rule 1.8(b)",
+        "choices": [
+          {
+            "grade": "wrong",
+            "text": "Yes. The rule prohibits disclosure, not personal use.",
+            "why": "ABA Model Rule 1.8(b): A lawyer may not use representation information to a client's disadvantage without informed consent or other authorization."
+          },
+          {
+            "grade": "correct",
+            "text": "No. A lawyer may not use information relating to a representation to the client's disadvantage without informed consent or another rule-based authorization."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes. The neighboring parcel was not itself the subject of the representation.",
+            "why": "ABA Model Rule 1.8(b): A lawyer may not use representation information to a client's disadvantage without informed consent or other authorization."
+          },
+          {
+            "grade": "wrong",
+            "text": "No, but only if the client's plan was protected by the evidentiary privilege.",
+            "why": "ABA Model Rule 1.8(b): A lawyer may not use representation information to a client's disadvantage without informed consent or other authorization."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_49_suing_an_existing_client_in_an_unrelated_matter",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "James Porter",
+        "role": "Conflicts Partner",
+        "subject": "Direct adversity to Alpha Foods",
+        "body": "Our regulatory group currently represents Alpha Foods. A potential new client wants our litigation group to sue Alpha in a completely unrelated lease dispute. The two teams would share no confidential information, but Alpha refuses to consent.\n\nMay the firm accept the lawsuit?",
+        "gold": 55,
+        "rule": "ABA Model Rule 1.7(a), (b)",
+        "choices": [
+          {
+            "grade": "correct",
+            "text": "No. Suing a current client creates direct adversity even when the matters are unrelated, and the required informed consent has not been obtained."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes. Unrelated matters can never create a current-client conflict.",
+            "why": "ABA Model Rule 1.7(a), (b): Direct adversity to a current client creates a conflict even in an unrelated matter."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes. Ethical walls automatically cure direct adversity between current clients.",
+            "why": "ABA Model Rule 1.7(a), (b): Direct adversity to a current client creates a conflict even in an unrelated matter."
+          },
+          {
+            "grade": "wrong",
+            "text": "No, but only if the lease dispute is substantially related to the regulatory work.",
+            "why": "ABA Model Rule 1.7(a), (b): Direct adversity to a current client creates a conflict even in an unrelated matter."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_50_opposing_clients_in_the_same_lawsuit",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Dana Cole",
+        "role": "Partner",
+        "subject": "Driver and passenger both want our firm",
+        "body": "After a collision, we jointly represented a driver and passenger in claims against the other vehicle. New evidence now places them directly against one another in the same lawsuit, and each wants to assert a claim against the other.\n\nBoth are willing to consent in writing. May one lawyer continue to represent both?",
+        "gold": 55,
+        "rule": "ABA Model Rule 1.7(b)(3)",
+        "choices": [
+          {
+            "grade": "wrong",
+            "text": "Yes. Written consent makes every concurrent conflict waivable.",
+            "why": "ABA Model Rule 1.7(b)(3): One lawyer cannot represent current clients asserting claims against each other in the same litigation."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes. Their original alignment controls for the remainder of the case.",
+            "why": "ABA Model Rule 1.7(b)(3): One lawyer cannot represent current clients asserting claims against each other in the same litigation."
+          },
+          {
+            "grade": "wrong",
+            "text": "No, but only because motor-vehicle cases have special conflict rules.",
+            "why": "ABA Model Rule 1.7(b)(3): One lawyer cannot represent current clients asserting claims against each other in the same litigation."
+          },
+          {
+            "grade": "correct",
+            "text": "No. A lawyer may not represent opposing current clients asserting claims against one another in the same litigation, even with consent."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_51_the_sophisticated_client_s_advance_waiver",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Teresa Wu",
+        "role": "Conflicts Partner",
+        "subject": "Scope of advance conflict waiver",
+        "body": "A sophisticated corporate client, advised by independent counsel, signed an advance waiver. The document specifically identified the types of unrelated matters in which we might oppose the company, described the likely classes of adverse clients, and explained the material risks.\n\nA new, consentable, unrelated matter falls squarely within that description. Is the advance waiver necessarily ineffective merely because it was signed before the conflict arose?",
+        "gold": 55,
+        "rule": "ABA Model Rule 1.7, Comment 22",
+        "choices": [
+          {
+            "grade": "wrong",
+            "text": "Yes. Consent can be informed only after a conflict has matured.",
+            "why": "ABA Model Rule 1.7, Comment 22: A specific advance waiver by a sophisticated client may provide informed consent to a future consentable conflict."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes. Advance waivers are valid only for individual clients.",
+            "why": "ABA Model Rule 1.7, Comment 22: A specific advance waiver by a sophisticated client may provide informed consent to a future consentable conflict."
+          },
+          {
+            "grade": "correct",
+            "text": "No. A sufficiently specific waiver by a sophisticated client may constitute informed consent to a future consentable conflict."
+          },
+          {
+            "grade": "wrong",
+            "text": "No. Any general statement authorizing all future conflicts is automatically effective.",
+            "why": "ABA Model Rule 1.7, Comment 22: A specific advance waiver by a sophisticated client may provide informed consent to a future consentable conflict."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_52_a_lawyer_s_family_relationship",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Celeste Martin",
+        "role": "Managing Partner",
+        "subject": "Is this personal conflict firm-wide?",
+        "body": "One of our lawyers cannot represent a plaintiff because the defendant's CEO is the lawyer's sibling, creating a significant personal-interest conflict. Another lawyer at our firm has no relationship with the sibling, and there is no significant risk that the first lawyer's personal interest will materially limit the second lawyer's representation.\n\nIs the second lawyer automatically disqualified?",
+        "gold": 55,
+        "rule": "ABA Model Rule 1.10(a)(1)",
+        "choices": [
+          {
+            "grade": "wrong",
+            "text": "Yes. Every conflict of one lawyer is imputed to the entire firm.",
+            "why": "ABA Model Rule 1.10(a)(1): A personal-interest conflict is not imputed without a significant risk of materially limiting the remaining lawyers."
+          },
+          {
+            "grade": "correct",
+            "text": "No. A purely personal-interest conflict is not imputed when it creates no significant risk of materially limiting the other lawyers."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes. Family relationships always create nonwaivable firm-wide conflicts.",
+            "why": "ABA Model Rule 1.10(a)(1): A personal-interest conflict is not imputed without a significant risk of materially limiting the remaining lawyers."
+          },
+          {
+            "grade": "wrong",
+            "text": "No, but only if the opposing party consents.",
+            "why": "ABA Model Rule 1.10(a)(1): A personal-interest conflict is not imputed without a significant risk of materially limiting the remaining lawyers."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_53_the_lateral_who_learned_nothing",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Omar Fields",
+        "role": "Conflicts Counsel",
+        "subject": "New associate's former firm",
+        "body": "Our new associate's former firm represents a plaintiff in pending litigation. The associate never worked on the matter, never discussed it, and acquired no protected information material to it.\n\nOur firm has been asked to represent the defendant. Is the associate personally disqualified merely because her former firm handled the plaintiff's case?",
+        "gold": 55,
+        "rule": "ABA Model Rule 1.9(b)",
+        "choices": [
+          {
+            "grade": "wrong",
+            "text": "Yes. Employment at the former firm creates an irrebuttable presumption of knowledge.",
+            "why": "ABA Model Rule 1.9(b): A lawyer moving firms is not personally barred by a former-firm matter without protected information material to it."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes. Every client of a lawyer's former firm becomes that lawyer's former client.",
+            "why": "ABA Model Rule 1.9(b): A lawyer moving firms is not personally barred by a former-firm matter without protected information material to it."
+          },
+          {
+            "grade": "wrong",
+            "text": "No, but only if the plaintiff gives informed written consent.",
+            "why": "ABA Model Rule 1.9(b): A lawyer moving firms is not personally barred by a former-firm matter without protected information material to it."
+          },
+          {
+            "grade": "correct",
+            "text": "No. The moving lawyer is not barred under the former-firm rule without protected information material to the matter."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_54_documentary_rights_during_the_case",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Anthony Mills",
+        "role": "Criminal Defense Partner",
+        "subject": "Documentary producer's fee proposal",
+        "body": "A producer has offered to buy the exclusive rights to our client's story. Before the criminal case ends, the client wants to assign our firm part of those documentary rights in place of a portion of our fee.\n\nMay the firm negotiate that agreement now?",
+        "gold": 55,
+        "rule": "ABA Model Rule 1.8(d)",
+        "choices": [
+          {
+            "grade": "correct",
+            "text": "No. Before the representation concludes, a lawyer may not negotiate for literary or media rights based substantially on information relating to the representation."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes. A client may always pay legal fees with any form of property.",
+            "why": "ABA Model Rule 1.8(d): A lawyer may not negotiate media or literary rights based substantially on representation information before the matter concludes."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes, if the value of the rights equals the unpaid fees.",
+            "why": "ABA Model Rule 1.8(d): A lawyer may not negotiate media or literary rights based substantially on representation information before the matter concludes."
+          },
+          {
+            "grade": "wrong",
+            "text": "No, because lawyers may never acquire media rights concerning a former client's matter.",
+            "why": "ABA Model Rule 1.8(d): A lawyer may not negotiate media or literary rights based substantially on representation information before the matter concludes."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_55_groceries_for_a_pro_bono_client",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Hannah Bell",
+        "role": "Pro Bono Partner",
+        "subject": "Emergency grocery assistance",
+        "body": "I represent an indigent tenant without charging a fee. After the representation began, I learned that she could not buy food for her children. I gave her a modest grocery card.\n\nI never promised assistance before retention, did not use it to induce her to remain a client, will not seek repayment, and do not advertise such gifts. Was the gift permissible?",
+        "gold": 55,
+        "rule": "ABA Model Rule 1.8(e)(3)",
+        "choices": [
+          {
+            "grade": "wrong",
+            "text": "No. A lawyer may provide only court costs, never basic living assistance.",
+            "why": "ABA Model Rule 1.8(e)(3): The rule permits modest basic-needs gifts to indigent pro bono clients when its anti-inducement and other safeguards are met."
+          },
+          {
+            "grade": "wrong",
+            "text": "No. Any financial help creates an impermissible proprietary interest in the case.",
+            "why": "ABA Model Rule 1.8(e)(3): The rule permits modest basic-needs gifts to indigent pro bono clients when its anti-inducement and other safeguards are met."
+          },
+          {
+            "grade": "correct",
+            "text": "Yes. The model rule permits a modest basic-needs gift to an indigent pro bono client when its safeguards are satisfied."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes, but only if the lawyer deducts the amount from a future recovery.",
+            "why": "ABA Model Rule 1.8(e)(3): The rule permits modest basic-needs gifts to indigent pro bono clients when its anti-inducement and other safeguards are met."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_56_the_former_mediator",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Benjamin Clark",
+        "role": "Partner",
+        "subject": "Representation after mediation",
+        "body": "Last year, I served as the mediator in a commercial dispute. The mediation failed, and one party now wants me to represent it in that same dispute.\n\nEvery party to the mediation has given informed consent confirmed in writing. May I accept?",
+        "gold": 55,
+        "rule": "ABA Model Rule 1.12(a)",
+        "choices": [
+          {
+            "grade": "wrong",
+            "text": "No. A former mediator may never represent anyone in the same matter.",
+            "why": "ABA Model Rule 1.12(a): A former third-party neutral may represent a party in the same matter only with every party's informed written consent."
+          },
+          {
+            "grade": "correct",
+            "text": "Yes. Representation in the same matter is permitted when all parties give the required informed written consent."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes. Consent from the new client alone is sufficient.",
+            "why": "ABA Model Rule 1.12(a): A former third-party neutral may represent a party in the same matter only with every party's informed written consent."
+          },
+          {
+            "grade": "wrong",
+            "text": "No, unless the court appoints the former mediator as counsel.",
+            "why": "ABA Model Rule 1.12(a): A former third-party neutral may represent a party in the same matter only with every party's informed written consent."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_57_interviewing_the_company_s_employee",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Ingrid Park",
+        "role": "Partner",
+        "subject": "Upjohn warning for accounting interview",
+        "body": "We represent a corporation in an internal investigation. We are about to interview an employee whose conduct may expose both the company and the employee to liability. The employee appears to believe that our firm represents him personally.\n\nWhat should we do before continuing?",
+        "gold": 55,
+        "rule": "ABA Model Rule 1.13(f)",
+        "choices": [
+          {
+            "grade": "correct",
+            "text": "Explain that the organization is the client, clarify that the lawyer does not represent the employee, and advise the employee to consider separate counsel if the interests may conflict."
+          },
+          {
+            "grade": "wrong",
+            "text": "Say nothing because identifying the organizational client would breach confidentiality.",
+            "why": "ABA Model Rule 1.13(f): An organization lawyer must clarify the client's identity when a constituent's interests may be adverse."
+          },
+          {
+            "grade": "wrong",
+            "text": "Agree to represent the employee automatically because he works for the client.",
+            "why": "ABA Model Rule 1.13(f): An organization lawyer must clarify the client's identity when a constituent's interests may be adverse."
+          },
+          {
+            "grade": "wrong",
+            "text": "Tell the employee that everything he says will remain confidential from the corporation.",
+            "why": "ABA Model Rule 1.13(f): An organization lawyer must clarify the client's identity when a constituent's interests may be adverse."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_58_protecting_a_client_with_diminished_capacity",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Erin Matthews",
+        "role": "Partner",
+        "subject": "Elderly client facing immediate exploitation",
+        "body": "A longtime elderly client has significantly diminished decision-making capacity. A caregiver is rapidly transferring the client's savings, placing the client at risk of substantial financial harm. The client cannot adequately protect herself.\n\nMay we contact a protective agency or seek appointment of a guardian despite the ordinary confidentiality concerns?",
+        "gold": 55,
+        "rule": "ABA Model Rule 1.14(b), (c)",
+        "choices": [
+          {
+            "grade": "wrong",
+            "text": "No. A lawyer must follow every instruction of a client with diminished capacity.",
+            "why": "ABA Model Rule 1.14(b), (c): A lawyer may take reasonably necessary protective action and make narrowly limited disclosures for a client at risk."
+          },
+          {
+            "grade": "wrong",
+            "text": "No. Protective action is available only after all money has been lost.",
+            "why": "ABA Model Rule 1.14(b), (c): A lawyer may take reasonably necessary protective action and make narrowly limited disclosures for a client at risk."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes. Diminished capacity automatically terminates the attorney-client relationship.",
+            "why": "ABA Model Rule 1.14(b), (c): A lawyer may take reasonably necessary protective action and make narrowly limited disclosures for a client at risk."
+          },
+          {
+            "grade": "correct",
+            "text": "Yes. The lawyer may take reasonably necessary protective action and reveal information only to the extent reasonably necessary to protect the client."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_59_the_lawyer_s_cognitive_impairment",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Firm General Counsel",
+        "role": "Firm Correspondent",
+        "subject": "Partner can no longer manage cases",
+        "body": "A partner has developed a serious cognitive condition. Multiple medical assessments and recent work errors show that the condition materially impairs the partner's ability to represent clients competently.\n\nMay the partner continue handling active matters while the firm quietly monitors the situation?",
+        "gold": 55,
+        "rule": "ABA Model Rule 1.16(a)(2)",
+        "choices": [
+          {
+            "grade": "wrong",
+            "text": "Yes. Withdrawal for impairment is always optional.",
+            "why": "ABA Model Rule 1.16(a)(2): Withdrawal is mandatory when the lawyer's condition materially impairs the representation."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes, if no client has yet filed a complaint.",
+            "why": "ABA Model Rule 1.16(a)(2): Withdrawal is mandatory when the lawyer's condition materially impairs the representation."
+          },
+          {
+            "grade": "correct",
+            "text": "No. A lawyer must withdraw when a physical or mental condition materially impairs the ability to represent the client."
+          },
+          {
+            "grade": "wrong",
+            "text": "No, but only if a disciplinary authority first orders withdrawal.",
+            "why": "ABA Model Rule 1.16(a)(2): Withdrawal is mandatory when the lawyer's condition materially impairs the representation."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_60_discharged_but_ordered_to_remain",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Felicia Adams",
+        "role": "Litigation Partner",
+        "subject": "Client fired me; judge denied withdrawal",
+        "body": "Our client discharged me during trial. I immediately moved to withdraw, but the judge denied the motion because departure would disrupt the proceeding and ordered me to continue through the verdict.\n\nWhat must I do?",
+        "gold": 55,
+        "rule": "ABA Model Rule 1.16(c)",
+        "choices": [
+          {
+            "grade": "wrong",
+            "text": "Stop work immediately because a discharged lawyer can never continue.",
+            "why": "ABA Model Rule 1.16(c): A lawyer must continue when a tribunal orders continued representation despite otherwise valid grounds to withdraw."
+          },
+          {
+            "grade": "correct",
+            "text": "Continue as ordered by the tribunal while protecting the client's interests, despite otherwise having good cause to terminate."
+          },
+          {
+            "grade": "wrong",
+            "text": "Continue only if the former client signs a new engagement letter.",
+            "why": "ABA Model Rule 1.16(c): A lawyer must continue when a tribunal orders continued representation despite otherwise valid grounds to withdraw."
+          },
+          {
+            "grade": "wrong",
+            "text": "Ignore the order and have another firm appear without court approval.",
+            "why": "ABA Model Rule 1.16(c): A lawyer must continue when a tribunal orders continued representation despite otherwise valid grounds to withdraw."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_61_selling_an_entire_practice_area",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Judith Evans",
+        "role": "Retiring Partner",
+        "subject": "Sale of immigration practice",
+        "body": "I plan to sell my entire immigration-law practice to another competent firm and stop accepting immigration matters. Each client will receive written notice of the sale, the proposed purchaser, the right to choose other counsel or retrieve the file, and the 90-day consent rule. Client fees will not increase because of the sale.\n\nIs such a sale permissible under the model rule?",
+        "gold": 55,
+        "rule": "ABA Model Rule 1.17",
+        "choices": [
+          {
+            "grade": "correct",
+            "text": "Yes. A lawyer may sell an entire practice or an entire practice area when the rule's cessation, notice, client-choice, and fee protections are satisfied."
+          },
+          {
+            "grade": "wrong",
+            "text": "No. The goodwill of a law practice may never be sold.",
+            "why": "ABA Model Rule 1.17: A sale is permitted when the entire practice or practice area is sold with cessation, notice, choice, and fee protections."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes, but the clients lose their right to select other counsel.",
+            "why": "ABA Model Rule 1.17: A sale is permitted when the entire practice or practice area is sold with cessation, notice, choice, and fee protections."
+          },
+          {
+            "grade": "wrong",
+            "text": "No, unless the seller also leaves every other area of legal practice.",
+            "why": "ABA Model Rule 1.17: A sale is permitted when the entire practice or practice area is sold with cessation, notice, choice, and fee protections."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_62_moral_considerations_in_legal_advice",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Theo Grant",
+        "role": "Client",
+        "subject": "Advice about closing our only rural plant",
+        "body": "Closing our plant would be lawful and profitable, but it would eliminate most jobs in a small town. I asked our lawyer for legal advice. She also discussed the likely moral, economic, and social consequences of the closure.\n\nWas it proper for her to address considerations beyond the letter of the law?",
+        "gold": 55,
+        "rule": "ABA Model Rule 2.1",
+        "choices": [
+          {
+            "grade": "wrong",
+            "text": "No. Legal advice must exclude all moral and social considerations.",
+            "why": "ABA Model Rule 2.1: Candid legal advice may include relevant moral, economic, social, and political considerations."
+          },
+          {
+            "grade": "wrong",
+            "text": "No. Discussing economic consequences converts the lawyer into a business partner.",
+            "why": "ABA Model Rule 2.1: Candid legal advice may include relevant moral, economic, social, and political considerations."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes, but only if the lawyer is also licensed as a financial adviser.",
+            "why": "ABA Model Rule 2.1: Candid legal advice may include relevant moral, economic, social, and political considerations."
+          },
+          {
+            "grade": "correct",
+            "text": "Yes. In giving candid advice, a lawyer may refer to moral, economic, social, and political factors relevant to the client's situation."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_63_extensions_requested_only_to_exhaust_the_opponent",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Patrick Ross",
+        "role": "Client",
+        "subject": "Keep delaying until they run out of money",
+        "body": "The opponent is financially weak. I want the firm to request repeated extensions and continuances solely to increase its costs and pressure it to abandon a valid claim. The requests would serve no substantial purpose related to the merits or our legitimate litigation needs.\n\nMust the firm follow my instruction?",
+        "gold": 55,
+        "rule": "ABA Model Rule 3.2",
+        "choices": [
+          {
+            "grade": "wrong",
+            "text": "Yes. A client may choose any lawful litigation tactic.",
+            "why": "ABA Model Rule 3.2: A lawyer must make reasonable efforts to expedite litigation consistent with client interests."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes. Delay is proper whenever it improves settlement leverage.",
+            "why": "ABA Model Rule 3.2: A lawyer must make reasonable efforts to expedite litigation consistent with client interests."
+          },
+          {
+            "grade": "correct",
+            "text": "No. A lawyer must make reasonable efforts to expedite litigation consistent with the client's interests and may not use delay solely to frustrate the process."
+          },
+          {
+            "grade": "wrong",
+            "text": "No, but only after the judge denies three extension requests.",
+            "why": "ABA Model Rule 3.2: A lawyer must make reasonable efforts to expedite litigation consistent with client interests."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_64_evidence_the_lawyer_suspects_is_false",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Gabrielle Stone",
+        "role": "Trial Partner",
+        "subject": "Witness I distrust",
+        "body": "In a civil trial, the client wants us to call a nonclient witness. I reasonably believe the witness will lie, but I do not know that the proposed testimony is false. The witness is not a criminal defendant testifying in her own defense.\n\nMay I refuse to offer the testimony?",
+        "gold": 55,
+        "rule": "ABA Model Rule 3.3(a)(3)",
+        "choices": [
+          {
+            "grade": "correct",
+            "text": "Yes. A lawyer may refuse to offer evidence the lawyer reasonably believes is false, except for the testimony of a criminal defendant."
+          },
+          {
+            "grade": "wrong",
+            "text": "No. A lawyer must present every witness requested by a civil client.",
+            "why": "ABA Model Rule 3.3(a)(3): A lawyer may refuse evidence reasonably believed false, except a criminal defendant's own testimony."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes, because a reasonable belief requires the lawyer to report the witness to the court immediately.",
+            "why": "ABA Model Rule 3.3(a)(3): A lawyer may refuse evidence reasonably believed false, except a criminal defendant's own testimony."
+          },
+          {
+            "grade": "wrong",
+            "text": "No. Refusal is permitted only after the witness admits the intended lie.",
+            "why": "ABA Model Rule 3.3(a)(3): A lawyer may refuse evidence reasonably believed false, except a criminal defendant's own testimony."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_65_the_expert_s_success_bonus",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Kelly Monroe",
+        "role": "Partner",
+        "subject": "Expert wants payment only if we win",
+        "body": "Our damages expert proposed receiving $75,000 if the client wins at trial and nothing if the client loses. The amount would compensate the expert for time spent preparing and testifying.\n\nMay we agree?",
+        "gold": 55,
+        "rule": "ABA Model Rule 3.4(b), Comment 3",
+        "choices": [
+          {
+            "grade": "wrong",
+            "text": "Yes. Experts may be paid on any terms agreed with the client.",
+            "why": "ABA Model Rule 3.4(b), Comment 3: Reasonable expert compensation is allowed, but payment may not be contingent on the outcome."
+          },
+          {
+            "grade": "correct",
+            "text": "No. A lawyer may compensate an expert reasonably for professional services but may not make the payment contingent on the case's outcome."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes. The prohibition on contingent payments applies only to fact witnesses.",
+            "why": "ABA Model Rule 3.4(b), Comment 3: Reasonable expert compensation is allowed, but payment may not be contingent on the outcome."
+          },
+          {
+            "grade": "wrong",
+            "text": "No. A lawyer may never compensate an expert witness.",
+            "why": "ABA Model Rule 3.4(b), Comment 3: Reasonable expert compensation is allowed, but payment may not be contingent on the outcome."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_66_asking_an_employee_not_to_volunteer_information",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Nathan Cole",
+        "role": "Partner",
+        "subject": "Request to company employee",
+        "body": "We represent a corporation in litigation. A current logistics employee has relevant information, but no subpoena requires her to speak with the opponent. We want to ask her not to volunteer information.\n\nShe is our client's employee, and we reasonably believe that remaining silent will not adversely affect her interests. May we make the request?",
+        "gold": 55,
+        "rule": "ABA Model Rule 3.4(f)",
+        "choices": [
+          {
+            "grade": "wrong",
+            "text": "No. A lawyer may never ask anyone to refrain from volunteering information.",
+            "why": "ABA Model Rule 3.4(f): A request to refrain from volunteering information may be made to a client's employee when that person's interests will not be harmed."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes. A lawyer may prevent any witness from responding to a valid subpoena.",
+            "why": "ABA Model Rule 3.4(f): A request to refrain from volunteering information may be made to a client's employee when that person's interests will not be harmed."
+          },
+          {
+            "grade": "wrong",
+            "text": "No. The exception applies only to relatives of individual clients.",
+            "why": "ABA Model Rule 3.4(f): A request to refrain from volunteering information may be made to a client's employee when that person's interests will not be harmed."
+          },
+          {
+            "grade": "correct",
+            "text": "Yes. A lawyer may make the request to a client's employee or agent when the lawyer reasonably believes the person's interests will not be adversely affected."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_67_quietly_viewing_a_juror_s_public_profile",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Simone Taylor",
+        "role": "Trial Partner",
+        "subject": "Juror social-media research",
+        "body": "During trial, our research team viewed a juror's public social-media page. The team did not follow, friend, message, react to, or otherwise contact the juror, and the platform did not notify the juror that the page had been viewed.\n\nDid the passive review itself violate the rule against juror communications?",
+        "gold": 55,
+        "rule": "ABA Model Rule 3.5(b); ABA Formal Opinion 466",
+        "choices": [
+          {
+            "grade": "wrong",
+            "text": "Yes. Any online research about a sitting juror is prohibited.",
+            "why": "ABA Model Rule 3.5(b); ABA Formal Opinion 466: Passive review of public juror information is generally not a communication."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes. Viewing public information is the same as sending the juror a message.",
+            "why": "ABA Model Rule 3.5(b); ABA Formal Opinion 466: Passive review of public juror information is generally not a communication."
+          },
+          {
+            "grade": "correct",
+            "text": "No. Passive review of publicly available information that does not communicate with the juror is generally permissible."
+          },
+          {
+            "grade": "wrong",
+            "text": "No, because represented parties may freely communicate with jurors online.",
+            "why": "ABA Model Rule 3.5(b); ABA Formal Opinion 466: Passive review of public juror information is generally not a communication."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_68_a_limited_response_to_prejudicial_publicity",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Marcus Hall",
+        "role": "Partner",
+        "subject": "Responding to false accusations in the press",
+        "body": "Opposing counsel publicly made false statements that create a substantial undue prejudicial effect against our client in a pending case. Neither our client nor anyone acting for us initiated the publicity.\n\nMay we make a narrowly tailored public statement limited to information reasonably necessary to protect the client from that prejudice?",
+        "gold": 55,
+        "rule": "ABA Model Rule 3.6(c)",
+        "choices": [
+          {
+            "grade": "correct",
+            "text": "Yes. The lawyer may make a limited protective response reasonably necessary to mitigate substantial undue prejudice caused by recent publicity not initiated by the lawyer or client."
+          },
+          {
+            "grade": "wrong",
+            "text": "No. A lawyer in pending litigation may never speak publicly.",
+            "why": "ABA Model Rule 3.6(c): A narrowly limited reply may mitigate substantial undue prejudice caused by recent publicity from another source."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes. The opponent's statement permits unlimited discussion of all evidence in the case.",
+            "why": "ABA Model Rule 3.6(c): A narrowly limited reply may mitigate substantial undue prejudice caused by recent publicity from another source."
+          },
+          {
+            "grade": "wrong",
+            "text": "No, unless the trial judge first approves the exact wording.",
+            "why": "ABA Model Rule 3.6(c): A narrowly limited reply may mitigate substantial undue prejudice caused by recent publicity from another source."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_69_subpoenaing_defense_counsel",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Andrea Bell",
+        "role": "Chief Prosecutor",
+        "subject": "Lawyer as grand-jury witness",
+        "body": "We want to subpoena a lawyer to provide evidence about a former client in a criminal investigation. The information is not privileged, is essential to completing the investigation, and no feasible alternative source exists.\n\nWould issuing the subpoena violate the prosecutor's special duties?",
+        "gold": 55,
+        "rule": "ABA Model Rule 3.8(e)",
+        "choices": [
+          {
+            "grade": "wrong",
+            "text": "Yes. A prosecutor may never subpoena a lawyer regarding a client.",
+            "why": "ABA Model Rule 3.8(e): A prosecutor may subpoena a lawyer when the evidence is unprivileged, essential, and unavailable by a feasible alternative."
+          },
+          {
+            "grade": "correct",
+            "text": "No. The subpoena may issue when the information is unprivileged, essential, and unavailable from another feasible source."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes. The prosecutor must abandon the investigation whenever a lawyer has relevant evidence.",
+            "why": "ABA Model Rule 3.8(e): A prosecutor may subpoena a lawyer when the evidence is unprivileged, essential, and unavailable by a feasible alternative."
+          },
+          {
+            "grade": "wrong",
+            "text": "No, because attorney-client privilege never applies in criminal matters.",
+            "why": "ABA Model Rule 3.8(e): A prosecutor may subpoena a lawyer when the evidence is unprivileged, essential, and unavailable by a feasible alternative."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_70_the_video_that_tends_to_negate_guilt",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Deputy District Attorney",
+        "role": "Firm Correspondent",
+        "subject": "Surveillance footage not yet disclosed",
+        "body": "We possess surveillance footage showing a person who resembles someone other than the accused leaving the crime scene. The evidence tends to negate the accused's guilt, although I still believe the remaining evidence is sufficient to convict.\n\nI withheld the footage because I do not think it will change the verdict. Was that proper?",
+        "gold": 55,
+        "rule": "ABA Model Rule 3.8(d)",
+        "choices": [
+          {
+            "grade": "wrong",
+            "text": "Yes. Prosecutors disclose only evidence they believe will produce an acquittal.",
+            "why": "ABA Model Rule 3.8(d): A prosecutor must timely disclose information tending to negate guilt or mitigate the offense."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes. The defense must first make a specific request for the footage.",
+            "why": "ABA Model Rule 3.8(d): A prosecutor must timely disclose information tending to negate guilt or mitigate the offense."
+          },
+          {
+            "grade": "wrong",
+            "text": "No, but only if a court has already ruled the footage admissible.",
+            "why": "ABA Model Rule 3.8(d): A prosecutor must timely disclose information tending to negate guilt or mitigate the offense."
+          },
+          {
+            "grade": "correct",
+            "text": "No. A prosecutor must timely disclose evidence or information known to the prosecutor that tends to negate guilt or mitigate the offense, absent an authorized protective order."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_71_lying_about_insurance_limits",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Devon Wright",
+        "role": "Partner",
+        "subject": "Statement made during settlement talks",
+        "body": "During settlement negotiations, our lawyer knew the defendant had $1 million in available insurance coverage. Hoping to reduce the demand, the lawyer stated as a fact that only $100,000 in coverage existed.\n\nWas that permissible negotiation conduct?",
+        "gold": 55,
+        "rule": "ABA Model Rule 4.1(a)",
+        "choices": [
+          {
+            "grade": "wrong",
+            "text": "Yes. Every statement made during settlement negotiations is nonactionable puffing.",
+            "why": "ABA Model Rule 4.1(a): A lawyer may not knowingly make a false statement of material fact during negotiation."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes. A lawyer may make false statements if the client authorizes them.",
+            "why": "ABA Model Rule 4.1(a): A lawyer may not knowingly make a false statement of material fact during negotiation."
+          },
+          {
+            "grade": "correct",
+            "text": "No. A lawyer may not knowingly make a false statement of material fact to a third person during a representation."
+          },
+          {
+            "grade": "wrong",
+            "text": "No, but only if the case ultimately settles for more than $100,000.",
+            "why": "ABA Model Rule 4.1(a): A lawyer may not knowingly make a false statement of material fact during negotiation."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_72_the_unrepresented_founder_thinks_we_are_neutral",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Elisa Moore",
+        "role": "Transactions Partner",
+        "subject": "Founder misunderstands our role",
+        "body": "We represent an investor negotiating with a startup founder who has no lawyer. The founder told us that she assumes our firm is neutral and protecting both sides. Her interests are reasonably likely to conflict with our client's.\n\nWhat should we do?",
+        "gold": 55,
+        "rule": "ABA Model Rule 4.3",
+        "choices": [
+          {
+            "grade": "correct",
+            "text": "Correct the misunderstanding about our role and avoid giving legal advice other than recommending that she obtain counsel."
+          },
+          {
+            "grade": "wrong",
+            "text": "Remain silent because the founder is responsible for discovering whom we represent.",
+            "why": "ABA Model Rule 4.3: A lawyer must correct an unrepresented person's misunderstanding and avoid conflicting legal advice beyond recommending counsel."
+          },
+          {
+            "grade": "wrong",
+            "text": "Give the founder detailed legal advice so that the negotiation remains fair.",
+            "why": "ABA Model Rule 4.3: A lawyer must correct an unrepresented person's misunderstanding and avoid conflicting legal advice beyond recommending counsel."
+          },
+          {
+            "grade": "wrong",
+            "text": "Withdraw automatically from representing the investor.",
+            "why": "ABA Model Rule 4.3: A lawyer must correct an unrepresented person's misunderstanding and avoid conflicting legal advice beyond recommending counsel."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_73_the_misaddressed_privileged_email",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Aaron Patel",
+        "role": "Partner",
+        "subject": "Opposing counsel accidentally copied us",
+        "body": "Opposing counsel mistakenly emailed us a document that was obviously intended for the opposing client and appears privileged. We recognized the mistake immediately.\n\nWhat does the model rule require us to do?",
+        "gold": 55,
+        "rule": "ABA Model Rule 4.4(b)",
+        "choices": [
+          {
+            "grade": "wrong",
+            "text": "Delete it without telling anyone.",
+            "why": "ABA Model Rule 4.4(b): A lawyer who knows a document was inadvertently sent must promptly notify the sender."
+          },
+          {
+            "grade": "correct",
+            "text": "Promptly notify the sender; questions about return, destruction, or use are determined by other law or professional judgment beyond the notification requirement."
+          },
+          {
+            "grade": "wrong",
+            "text": "Read and distribute it immediately because accidental transmission waives every protection.",
+            "why": "ABA Model Rule 4.4(b): A lawyer who knows a document was inadvertently sent must promptly notify the sender."
+          },
+          {
+            "grade": "wrong",
+            "text": "File it publicly so the court can decide ownership.",
+            "why": "ABA Model Rule 4.4(b): A lawyer who knows a document was inadvertently sent must promptly notify the sender."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_74_paying_the_marketing_company_a_percentage",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Firm Marketing Director",
+        "role": "Firm Correspondent",
+        "subject": "Performance compensation proposal",
+        "body": "An online marketing company proposes receiving 5% of every legal fee collected from clients generated by its advertising campaign. The company is not owned by lawyers and will perform no legal work.\n\nMay the firm accept that compensation structure?",
+        "gold": 55,
+        "rule": "ABA Model Rule 5.4(a)",
+        "choices": [
+          {
+            "grade": "wrong",
+            "text": "Yes. Nonlawyers may receive any percentage if they perform marketing work.",
+            "why": "ABA Model Rule 5.4(a): A percentage of legal fees ordinarily may not be shared with a nonlawyer marketing company."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes. The arrangement is permissible if the total fee charged to each client is reasonable.",
+            "why": "ABA Model Rule 5.4(a): A percentage of legal fees ordinarily may not be shared with a nonlawyer marketing company."
+          },
+          {
+            "grade": "wrong",
+            "text": "No, but only if the marketing company influences litigation strategy.",
+            "why": "ABA Model Rule 5.4(a): A percentage of legal fees ordinarily may not be shared with a nonlawyer marketing company."
+          },
+          {
+            "grade": "correct",
+            "text": "No. Paying a nonlawyer a percentage of legal fees is prohibited fee sharing unless a specific exception applies."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_75_the_associate_s_noncompetition_clause",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "William Scott",
+        "role": "Managing Partner",
+        "subject": "Two-year practice restriction",
+        "body": "Our proposed employment agreement says that, after leaving the firm, an associate may not practice family law anywhere in the county for two years. The restriction is unrelated to retirement benefits.\n\nIs the clause proper?",
+        "gold": 55,
+        "rule": "ABA Model Rule 5.6(a)",
+        "choices": [
+          {
+            "grade": "wrong",
+            "text": "Yes. Law firms may use the same noncompetition clauses as other businesses.",
+            "why": "ABA Model Rule 5.6(a): Lawyer employment agreements may not restrict post-departure practice except concerning retirement benefits."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes. The restriction is proper because it lasts only two years.",
+            "why": "ABA Model Rule 5.6(a): Lawyer employment agreements may not restrict post-departure practice except concerning retirement benefits."
+          },
+          {
+            "grade": "correct",
+            "text": "No. A lawyer may not participate in an employment agreement restricting the right to practice after termination, except for an agreement concerning retirement benefits."
+          },
+          {
+            "grade": "wrong",
+            "text": "No, but only if the associate already has clients in the county.",
+            "why": "ABA Model Rule 5.6(a): Lawyer employment agreements may not restrict post-departure practice except concerning retirement benefits."
+          }
+        ]
+      },
+      {
+        "id": "mpre_extra_76_the_judicial_candidate_s_eviction_promise",
+        "difficulty": 3,
+        "sourceType": "mpre-style",
+        "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
+        "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
+        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "from": "Judicial Campaign Committee",
+        "role": "Firm Correspondent",
+        "subject": "Proposed statement about rent-withholding cases",
+        "body": "A judicial candidate wants to say: \"If elected, I promise that I will always order eviction whenever a tenant withholds rent, regardless of the tenant's defense.\"\n\nMay the candidate make that promise?",
+        "gold": 55,
+        "rule": "ABA Model Code of Judicial Conduct Rule 4.1(A)(13)",
+        "choices": [
+          {
+            "grade": "correct",
+            "text": "No. A judicial candidate may not make pledges, promises, or commitments about likely cases that are inconsistent with impartial performance of judicial duties."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes. Campaign statements can never violate judicial-conduct rules.",
+            "why": "ABA Model Code of Judicial Conduct Rule 4.1(A)(13): A candidate may not promise a predetermined result inconsistent with impartial adjudication."
+          },
+          {
+            "grade": "wrong",
+            "text": "Yes. The promise is permissible because landlord-tenant law is a public issue.",
+            "why": "ABA Model Code of Judicial Conduct Rule 4.1(A)(13): A candidate may not promise a predetermined result inconsistent with impartial adjudication."
+          },
+          {
+            "grade": "wrong",
+            "text": "No, but only if an eviction case is already pending before that candidate.",
+            "why": "ABA Model Code of Judicial Conduct Rule 4.1(A)(13): A candidate may not promise a predetermined result inconsistent with impartial adjudication."
+          }
+        ]
       }
     ];
     Object.assign(exports, { ADDITIONAL_MPRE_SCENARIOS });
@@ -4035,29 +5754,33 @@
     const OFFICE_UPGRADES = [
       { id: 'monitor', name: 'Second Monitor', cost: 60,
         desc: '+15% gold from correct answers. A second screen appears on your desk.' },
-      { id: 'subscription', name: 'Ethics Treatise Shelf', cost: 140,
+      { id: 'subscription', name: 'Ethics Treatise Shelf', cost: 250,
         desc: 'Unlocks the searchable Nevada, Arizona, and California reference library. Required for Riley’s paid ethics hints.' },
-      { id: 'seating', name: 'Client Seating Area', cost: 220,
-        desc: 'Grateful clients tip: +10 gold flat on every correct answer. A respectable sofa appears.' },
-      { id: 'paralegal', name: 'Paralegal Upgrade — Riley Readsalot', cost: 450,
-        desc: 'Very wrong answers deal 15 damage instead of 25. With the treatise shelf, Riley can research a relevant-rule hint for 100 gold.' },
-      { id: 'conference', name: 'Conference Room AV Upgrade', cost: 900,
-        desc: '+25% gold from correct answers and upgraded case-presentation equipment.' },
+      { id: 'liz_chair', name: 'Chair for Liz Loza', cost: 250,
+        desc: '+10 max Ethics. At last, Liz has somewhere to sit.' },
+      { id: 'houseplants', name: 'Houseplants', cost: 500,
+        desc: 'Maybe this will cheer Liz up. Adds greenery and slightly improves her mood.' },
+      { id: 'paralegal', name: 'Paralegal Upgrade — Riley Readsalot', cost: 2000,
+        desc: 'Riley halves Ethics damage from wrong answers. With the treatise shelf, Riley can research a relevant-rule hint for 100 gold.' },
+      { id: 'office_window', name: 'Office Upgrade', cost: 2000,
+        desc: 'You convince the partners to give you a window. It is a tiny porthole, but it is yours.' },
+      { id: 'artwork', name: 'Artwork', cost: 2000,
+        desc: 'A single black dot on a white canvas adds unmistakable warmth to the office.' },
     ];
 
     const APARTMENT_UPGRADES = [
       { id: 'mattress', name: 'Better Mattress', cost: 80,
         desc: '+20 max Ethics. A principled attorney is a well-rested attorney.' },
-      { id: 'coffee', name: 'Coffee Machine', cost: 120,
+      { id: 'coffee', name: 'Coffee Machine', cost: 500,
         desc: 'Drink a cup to restore 2 Ethics. Clarity in a cup.' },
       { id: 'wardrobe_rack', name: 'Wardrobe Rack', cost: 160,
         desc: 'Unlocks suit color changes at the wardrobe.' },
-      { id: 'homedesk', name: 'Home CLE Desk', cost: 260,
-        desc: 'Evening ethics study: resting in bed restores +10 more Ethics.' },
+      { id: 'homedesk', name: 'Clock', cost: 260,
+        desc: 'Adds a wall clock. Keeping a healthy sleep schedule makes bed rest restore +10 more Ethics.' },
       { id: 'kitchen', name: 'Kitchen Upgrade', cost: 400,
-        desc: 'Home cooking: bed rest available every 2 minutes instead of 4.' },
+        desc: '+10 max Ethics and faster rest. Cooking food in your kitchen fuels ethical decision-making ability.' },
       { id: 'cityview', name: 'City View Apartment', cost: 1200,
-        desc: '+25% gold from correct answers. Adds a skyline window, couch, and television to the apartment.' },
+        desc: '+25% gold from correct answers. Adds a skyline window, television, and a couch where you can sit and watch.' },
     ];
 
     function findUpgrade(id) {
@@ -4068,10 +5791,8 @@
     function bonuses(upgrades) {
       const has = (id) => upgrades.includes(id);
       return {
-        goldMult: 1 + (has('monitor') ? 0.15 : 0) + (has('conference') ? 0.25 : 0)
-                    + (has('cityview') ? 0.25 : 0),
-        goldFlat: has('seating') ? 10 : 0,
-        veryWrongDmg: has('paralegal') ? 15 : 25,
+        goldMult: 1 + (has('monitor') ? 0.15 : 0) + (has('cityview') ? 0.25 : 0),
+        goldFlat: 0,
         streakHealBonus: 0,
         restHeal: 15 + (has('homedesk') ? 10 : 0),
         restCooldownMs: has('kitchen') ? 120_000 : 240_000,
@@ -5378,11 +7099,20 @@
     const COFFEE_ETHICS_RESTORE = 2;
     const LINDA_TIP_COST = 5;
     const RILEY_HINT_COST = 100;
+    const WHISKEY_ETHICS_DAMAGE = 2;
+    const WHISKEY_SLOW_MS = 40_000;
+    const LAWYER_ASSISTANCE_PHONE = '866-828-0022';
+    const LAWYER_ASSISTANCE_URL = 'https://nvbar.org/for-lawyers/resources/wellbeing/lcl/';
 
     function rileyHintEligible(upgrades) {
       return upgrades.includes('paralegal') && upgrades.includes('subscription');
     }
-    Object.assign(exports, { DOC_REVIEW_CYCLE_MS, DOC_REVIEW_REWARD, COFFEE_ETHICS_RESTORE, LINDA_TIP_COST, RILEY_HINT_COST, rileyHintEligible });
+
+    function wrongAnswerDamage(wrongStreak, rileyHired = false) {
+      const damage = wrongStreak >= 4 ? 40 : wrongStreak >= 2 ? 30 : 20;
+      return rileyHired ? Math.ceil(damage / 2) : damage;
+    }
+    Object.assign(exports, { DOC_REVIEW_CYCLE_MS, DOC_REVIEW_REWARD, COFFEE_ETHICS_RESTORE, LINDA_TIP_COST, RILEY_HINT_COST, WHISKEY_ETHICS_DAMAGE, WHISKEY_SLOW_MS, LAWYER_ASSISTANCE_PHONE, LAWYER_ASSISTANCE_URL, rileyHintEligible, wrongAnswerDamage });
   }
   };
   const cache = Object.create(null);

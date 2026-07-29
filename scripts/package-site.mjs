@@ -11,6 +11,7 @@ const files = [
   'LICENSE',
   'MPRE_Associate_Email_Scenarios.md',
   'MPRE_Associate_Email_Scenarios_Additional_20.md',
+  'MPRE_Associate_Email_Scenarios_Additional_41.md',
   'California References',
   'README.md',
   '.nojekyll',

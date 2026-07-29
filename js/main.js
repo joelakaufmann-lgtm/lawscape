@@ -14,7 +14,7 @@ import { findPath, adjacentTile } from './engine/pathfind.js';
 import { Actor } from './entities/actor.js';
 import { updateHUD, setZoneName, toast, hoverLabel, drawMinimap } from './ui/hud.js';
 import { showDialogue, hideDialogue, dialogueOpen } from './ui/dialogue.js';
-import { SCENARIOS, WRONG_DMG, STREAK_HEAL } from './data/ethics.js';
+import { SCENARIOS, STREAK_HEAL } from './data/ethics.js';
 import { OFFICE_UPGRADES, APARTMENT_UPGRADES, bonuses } from './data/upgrades.js';
 import { RULE_LIBRARY } from './data/rules.js';
 import {
@@ -23,7 +23,12 @@ import {
   DOC_REVIEW_REWARD,
   LINDA_TIP_COST,
   RILEY_HINT_COST,
+  WHISKEY_ETHICS_DAMAGE,
+  WHISKEY_SLOW_MS,
+  LAWYER_ASSISTANCE_PHONE,
+  LAWYER_ASSISTANCE_URL,
   rileyHintEligible,
+  wrongAnswerDamage,
 } from './data/work.js';
 
 const $ = (id) => document.getElementById(id);
@@ -41,6 +46,9 @@ let hover = null;         // { tiles, label, run } — current mouse target
 let clickFx = null;       // { x, y, at } — OSRS yellow X on click
 let inGame = false;
 const docReview = { active: false, cycleStartedAt: 0 };
+const PLAYER_BASE_SPEED = 4;
+let whiskeySlowUntil = 0;
+let watchReturnPos = null;
 
 function currentZone() { return ZONES[state.zone] || ZONES.office; }
 
@@ -154,6 +162,7 @@ canvas.addEventListener('click', (e) => {
     toast('Document review stopped. Click again to move.');
     return;
   }
+  if (player.activity === 'watching') stopWatchingTV();
   if (dialogueOpen()) hideDialogue();
   const target = targetAt(e.offsetX, e.offsetY);
   if (!target) return;
@@ -187,6 +196,7 @@ function overlayOpen() {
 
 function moveBy(dx, dy) {
   if (!inGame || overlayOpen() || dialogueOpen() || player.walking || docReview.active) return;
+  if (player.activity === 'watching') stopWatchingTV();
   const dest = { x: player.tileX + dx, y: player.tileY + dy };
   if (!isWalkable(dest.x, dest.y)) return;
   player.setPath([dest]);
@@ -216,30 +226,65 @@ function runAction(action) {
     case 'flavor_coffee':
       drinkCoffee();
       break;
+    case 'watch_tv': watchTV(); break;
+    case 'whiskey': offerWhiskey(); break;
     default: break;
   }
 }
 
 function talkTo(def) {
   if (def.talk === 'jim') {
-    toast('Jim Hardsell does not look up from his work.');
+    const lines = [
+      'Jim reminds you of his email that said “pls fix.”',
+      'Jim is on a client call.',
+      'Jim Hardsell does not look up from his work.',
+    ];
+    showDialogue({ name: def.name, text: lines[Math.floor(Math.random() * lines.length)] });
   } else if (def.talk === 'linda') {
     talkToLinda(def);
   } else if (def.talk === 'secretary') {
-    const lines = [
-      'Get back to work.',
-      'You have emails to answer and documents to review.',
-      'Mr. Johnson called regarding his case.',
-    ];
+    const lines = lizLines();
     showDialogue({ name: def.name, text: lines[Math.floor(Math.random() * lines.length)] });
   } else if (def.talk === 'paralegal') {
+    const lines = [
+      'I would read the treatises again if I were you.',
+      'I read everything before it goes out. While I am on the team, wrong answers cost half as much Ethics.',
+      'If you own the Ethics Treatise Shelf, I can research a relevant-rule hint for 100 gold.',
+    ];
     showDialogue({
       name: def.name,
-      text: 'Riley Readsalot here. I read everything before it goes out. Truly catastrophic answers cost 15 Ethics instead of 25 while I am on the team.',
+      text: lines[Math.floor(Math.random() * lines.length)],
     });
   } else {
     showDialogue({ name: def.name, text: '...' });
   }
+}
+
+function lizLines() {
+  const paralegal = hasUpgrade('paralegal');
+  const windowOwned = hasUpgrade('office_window');
+  const chair = hasUpgrade('liz_chair');
+  const plants = hasUpgrade('houseplants');
+  const artwork = hasUpgrade('artwork');
+  const improvedOffice = paralegal && windowOwned;
+  const lines = [
+    'You have emails to answer and documents to review.',
+    'Mr. Johnson called regarding his case.',
+    'Did you read Mr. Hardsell’s email?',
+    'Can you help me? All Mr. Hardsell’s email said was “plz fix.”',
+  ];
+
+  if (!improvedOffice) lines.push('Get back to work.');
+  if (!paralegal) lines.push('We should hire a paralegal.');
+  if (!chair) lines.push('I sure wish I could sit down.', 'I can’t wait to go home.');
+  if (plants) {
+    lines.push('Can you please water the plants?', 'These plants help make this place feel like less of a prison.');
+  }
+  if (artwork) lines.push('This beautiful painting sure does add to the warmth of this office.');
+  if (improvedOffice) {
+    lines.push('Hello, how are you?', 'I’m proud of the work we do for our clients.');
+  }
+  return lines;
 }
 
 const ETHICS_TIPS = [
@@ -254,6 +299,13 @@ const ETHICS_TIPS = [
 ];
 
 function talkToLinda(def) {
+  if (!hasUpgrade('paralegal')) {
+    showDialogue({
+      name: def.name,
+      text: 'Linda barely looks up. “My advice? Hire Riley Readsalot. Then come back if you still need an ethics tip.”',
+    });
+    return;
+  }
   if (state.gold < LINDA_TIP_COST) {
     showDialogue({
       name: def.name,
@@ -417,6 +469,7 @@ function answerEmail(choice) {
     const earned = Math.round(s.gold * b.goldMult + b.goldFlat);
     state.gold += earned;
     state.streak++;
+    state.wrongStreak = 0;
     state.correctDone++;
     let healed = 0;
     if (state.streak >= 2) {
@@ -432,7 +485,8 @@ function answerEmail(choice) {
       + (healed > 0 ? ` &nbsp; <span class="gain">+${healed} Ethics (streak x${state.streak}!)</span>`
                     : ` &nbsp; <span class="muted">streak x${state.streak} — one more for an Ethics heal</span>`);
   } else {
-    const dmg = choice.grade === 'very_wrong' ? b.veryWrongDmg : WRONG_DMG;
+    state.wrongStreak++;
+    const dmg = wrongAnswerDamage(state.wrongStreak, hasUpgrade('paralegal'));
     state.streak = 0;
     disbarred = damageEthics(dmg);
     verdictEl.textContent = choice.grade === 'very_wrong'
@@ -440,7 +494,9 @@ function answerEmail(choice) {
       : '✖ Ethically wrong.';
     verdictEl.className = 'bad';
     explainEl.textContent = `Why you lost Ethics — ${choice.why}`;
-    deltaEl.innerHTML = `<span class="loss">−${dmg} Ethics</span> &nbsp; <span class="muted">streak reset</span>`;
+    const rileyNote = hasUpgrade('paralegal') ? ' · Riley cut the damage in half' : '';
+    deltaEl.innerHTML = `<span class="loss">−${dmg} Ethics</span> &nbsp; `
+      + `<span class="muted">wrong-answer streak x${state.wrongStreak}${rileyNote}</span>`;
   }
 
   if (s.sourceType === 'mpre-style') appendScenarioSource(explainEl, s);
@@ -704,8 +760,11 @@ function openShop(title, catalog) {
       btn.disabled = state.gold < u.cost;
       btn.onclick = () => {
         if (state.gold < u.cost) return;
+        const previousMax = maxEthics();
         state.gold -= u.cost;
         state.upgrades.push(u.id);
+        const addedEthicsCapacity = maxEthics() - previousMax;
+        if (addedEthicsCapacity > 0) healEthics(addedEthicsCapacity);
         save();
         updateHUD();
         toast(`Purchased: ${u.name}`);
@@ -727,6 +786,7 @@ function openRecord() {
     <div class="row-item"><div class="grow"><h4>Scenarios answered</h4></div><div class="meta">${state.casesDone}</div></div>
     <div class="row-item"><div class="grow"><h4>Answered correctly</h4></div><div class="meta">${state.correctDone} (${acc}%)</div></div>
     <div class="row-item"><div class="grow"><h4>Current streak</h4></div><div class="meta">x${state.streak}</div></div>
+    <div class="row-item"><div class="grow"><h4>Wrong-answer streak</h4></div><div class="meta">x${state.wrongStreak}</div></div>
     <div class="row-item"><div class="grow"><h4>Document-review cycles</h4></div><div class="meta">${state.documentsReviewed}</div></div>
     <div class="row-item"><div class="grow"><h4>Linda’s ethics tips</h4></div><div class="meta">${state.tipsPurchased}</div></div>
     <div class="row-item"><div class="grow"><h4>Riley’s rule hints</h4></div><div class="meta">${state.hintsPurchased}</div></div>
@@ -771,6 +831,81 @@ function drinkCoffee() {
   toast(`You drink a strong cup of coffee. +${state.ethics - before} Ethics.`);
 }
 
+function watchTV() {
+  if (!hasUpgrade('cityview')) return;
+  watchReturnPos = { x: player.x, y: player.y };
+  player.stop();
+  player.x = 4.5;
+  player.y = 5;
+  player.activity = 'watching';
+  showDialogue({
+    name: 'City View Apartment',
+    text: 'You sit on the couch facing the television and let the city lights flicker beyond the window.',
+    choices: [{ label: 'Stand up', fn: stopWatchingTV }],
+  });
+}
+
+function stopWatchingTV() {
+  if (!player || player.activity !== 'watching') return;
+  player.activity = null;
+  if (watchReturnPos) {
+    player.x = watchReturnPos.x;
+    player.y = watchReturnPos.y;
+  }
+  watchReturnPos = null;
+}
+
+function offerWhiskey() {
+  if (state.whiskeyDrinks > 0) {
+    showDialogue({
+      name: 'A Professional Warning',
+      text: `A second drink at work is a warning sign. Substance use can impair a lawyer’s competence and judgment. `
+        + `Confidential help for Nevada lawyers is available from Lawyers Concerned for Lawyers at ${LAWYER_ASSISTANCE_PHONE}.`,
+      choices: [
+        {
+          label: 'Open confidential help page',
+          fn: () => window.open(LAWYER_ASSISTANCE_URL, '_blank', 'noopener'),
+        },
+        { label: 'Step away from the cart' },
+      ],
+    });
+    return;
+  }
+  showDialogue({
+    name: 'Jim Hardsell’s Bar Cart',
+    text: 'Mr. Hardsell insists that you pour yourself a glass.',
+    choices: [
+      { label: 'Yes, pour a glass', fn: drinkWhiskey },
+      { label: 'No, stay sharp' },
+    ],
+  });
+}
+
+function drinkWhiskey() {
+  state.whiskeyDrinks++;
+  const disbarred = damageEthics(WHISKEY_ETHICS_DAMAGE);
+  save();
+  updateHUD();
+  if (disbarred) {
+    gameOver();
+    return;
+  }
+  showDialogue({
+    name: 'Professional Judgment',
+    text: `The drink slows your movement for 40 seconds and costs ${WHISKEY_ETHICS_DAMAGE} Ethics. `
+      + 'Pressure from a supervisor does not excuse impaired professional judgment.',
+    choices: [
+      {
+        label: 'Walk it off',
+        fn: () => {
+          whiskeySlowUntil = performance.now() + WHISKEY_SLOW_MS;
+          toast('Your movement is impaired for 40 seconds.');
+        },
+      },
+    ],
+  });
+}
+
 function openWardrobe() {
   if (!hasUpgrade('wardrobe_rack')) {
     toast('A single suit hangs here. The Wardrobe Rack upgrade unlocks more colors.');
@@ -800,7 +935,7 @@ function openHelp() {
       every uninterrupted one-minute cycle earns 5 gold.</p></div></div>
     <div class="row-item"><div class="grow"><h4>📚 Ethics Treatises</h4>
       <p>Buy the Ethics Treatise Shelf upgrade, then use the bookshelf to search the bundled
-      Nevada rules and Arizona rule index.</p></div></div>
+      Nevada, Arizona, and California references.</p></div></div>
     <div class="row-item"><div class="grow"><h4>🖱 Movement</h4>
       <p>Click or tap a floor tile to walk. You can also use WASD or the arrow keys. Select
       a highlighted person or object to walk over and interact.</p></div></div>
@@ -809,7 +944,11 @@ function openHelp() {
       in the office, furniture catalog at home).</p></div></div>
     <div class="row-item"><div class="grow"><h4>⚖ Ethics Bar</h4>
       <p>Wrong answers damage your Ethics — the game explains the violated rule every time.
-      Two correct answers in a row start healing it. Resting in your bed helps too.</p></div></div>
+      Damage rises from 20 to 30 and then 40 as wrong answers pile up; Riley halves it.
+      Two correct answers in a row start healing Ethics. Resting in your bed helps too.</p></div></div>
+    <div class="row-item"><div class="grow"><h4>🥃 Professional Wellbeing</h4>
+      <p>Jim’s office bar cart demonstrates how alcohol can impair judgment and movement.
+      Returning for another drink provides a confidential lawyer-assistance resource.</p></div></div>
     <div class="row-item"><div class="grow"><h4>☠ Disbarment</h4>
       <p>Ethics at zero = YOU GOT DISBARRED — GAME OVER. You restart from nothing: no gold,
       no items, no upgrades.</p></div></div>
@@ -982,7 +1121,7 @@ $('btn-start').addEventListener('click', () => {
 function startGame() {
   player = new Actor(state.pos.x, state.pos.y,
     { suit: state.suitColor, gender: state.gender, skin: state.skin,
-      hair: state.hair, hairStyle: state.hairStyle, eye: state.eye }, { speed: 4 });
+      hair: state.hair, hairStyle: state.hairStyle, eye: state.eye }, { speed: PLAYER_BASE_SPEED });
   zone = currentZone();
   if (!isWalkable(player.tileX, player.tileY)) {
     state.pos = { ...zone.spawn };
@@ -1028,6 +1167,7 @@ function loop(now) {
   lastT = now;
 
   if (inGame) {
+    player.speed = now < whiskeySlowUntil ? PLAYER_BASE_SPEED / 2 : PLAYER_BASE_SPEED;
     player.update(dt);
     updateDocumentReview(now);
     state.pos = { x: player.tileX, y: player.tileY };

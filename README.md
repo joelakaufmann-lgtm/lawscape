@@ -29,10 +29,10 @@ Your progress is stored only in that browser.
 
 ## What is playable
 
-- 49 legal-ethics scenarios involving trust accounting, conflicts, candor,
+- 90 legal-ethics scenarios involving trust accounting, conflicts, candor,
   confidentiality, the no-contact rule, solicitation, fee splitting,
   spoliation, and reporting misconduct.
-- Three progressive difficulty tiers, including 28 original MPRE-style
+- Three progressive difficulty tiers, including 69 original MPRE-style
   workplace-email scenarios with source notes and official NCBE preparation
   links.
 - Character creation with appearance options.
@@ -46,12 +46,22 @@ Your progress is stored only in that browser.
 - Office characters Liz Loza, Riley Readsalot, Jim Hardsell, and Linda
   Firestone, each with a distinct role or interaction.
 - Gold, Ethics health, answer streaks, rest, upgrades, and persistent saves.
-- Purchasable coffee that restores two Ethics points per drink and five-gold
-  ethics tips from Linda.
+- Wrong-answer damage rises from 20 to 30 and then 40 during a consecutive
+  mistake streak; hiring Riley Readsalot for 2,000 gold halves that damage.
+- Purchasable coffee restores two Ethics points per drink, and Linda sells
+  five-gold ethics tips after steering new players toward hiring Riley.
 - Optional relevant-rule hints cost 100 gold and require both Riley Readsalot
   and the Ethics Treatise Shelf; buying the shelf alone never reveals a rule.
-- The City View Apartment upgrade adds a wall-mounted skyline window, couch,
-  and television.
+- Office upgrades add Liz’s chair, houseplants, a tiny porthole window, and
+  modern art; Liz’s mood and dialogue improve as working conditions do.
+- The City View Apartment upgrade adds a wall-mounted skyline window and a
+  couch positioned in front of an interactive television. The kitchen adds a
+  stove, fridge, and ten max Ethics; the Clock adds ten extra Ethics to rest.
+- Jim’s bar cart teaches an impairment lesson: a drink costs two Ethics and
+  slows movement for 40 seconds. A second attempt directs Nevada attorneys to
+  the State Bar’s confidential
+  [Lawyers Concerned for Lawyers](https://nvbar.org/for-lawyers/resources/wellbeing/lcl/)
+  hotline at 866-828-0022.
 - A professional record, NPC conversations, travel, minimap, and responsive
   desktop/mobile controls.
 - Disbarment at zero Ethics, which resets the saved game.
@@ -127,8 +137,9 @@ scenarios live in `js/data/ethics.js`, `js/data/mpre.js`, and generated
 
 The MPRE-style scenarios are original LawScape adaptations for educational
 practice. They are not official NCBE questions and do not reproduce secure
-exam content. See [MPRE_Associate_Email_Scenarios.md](MPRE_Associate_Email_Scenarios.md)
-and [the additional 20-question set](MPRE_Associate_Email_Scenarios_Additional_20.md)
+exam content. See [MPRE_Associate_Email_Scenarios.md](MPRE_Associate_Email_Scenarios.md),
+[the additional 20-question set](MPRE_Associate_Email_Scenarios_Additional_20.md),
+and [the additional 41-question set](MPRE_Associate_Email_Scenarios_Additional_41.md)
 for local scenario notes and official reference links.
 
 ## Educational disclaimer

@@ -21,6 +21,7 @@ export function freshState() {
     gold: 0,
     ethics: BASE_MAX_ETHICS,
     streak: 0,             // consecutive correct answers
+    wrongStreak: 0,        // consecutive wrong answers
     casesDone: 0,          // total scenarios answered
     correctDone: 0,        // total answered correctly
     documentsReviewed: 0,  // completed one-minute document-review cycles
@@ -31,6 +32,7 @@ export function freshState() {
     zone: 'office',
     pos: { x: 6, y: 10 },
     lastRestAt: 0,
+    whiskeyDrinks: 0,      // first drink teaches impairment; a second prompts help
   };
 }
 
@@ -48,7 +50,10 @@ export function hasUpgrade(id) {
 }
 
 export function maxEthics() {
-  return BASE_MAX_ETHICS + (hasUpgrade('mattress') ? 20 : 0);
+  return BASE_MAX_ETHICS
+    + (hasUpgrade('mattress') ? 20 : 0)
+    + (hasUpgrade('kitchen') ? 10 : 0)
+    + (hasUpgrade('liz_chair') ? 10 : 0);
 }
 
 export function healEthics(n) {

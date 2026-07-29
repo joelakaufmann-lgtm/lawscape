@@ -19,7 +19,7 @@ disbarred.
   the tribunal, the no-contact rule, confidentiality, solicitation and
   advertising, fee splitting, subordinate-lawyer duties, spoliation,
   reporting misconduct, and more.
-- Three progressive difficulty tiers with 28 original **MPRE-style** workplace
+- Three progressive difficulty tiers with 69 original **MPRE-style** workplace
   emails clearly labeled as adaptations and linked to NCBE’s public preparation
   page.
 - Repeatable **Document Review** at the filing cabinet: the attorney sits for a

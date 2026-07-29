@@ -13,7 +13,7 @@ export class Actor {
     this.path = [];
     this.facing = 1;              // -1 left, 1 right (screen-space flip)
     this.onArrive = null;         // callback when path completes
-    this.activity = null;         // null | 'reviewing'
+    this.activity = null;         // null | 'reviewing' | 'watching'
   }
 
   get walking() { return this.path.length > 0; }
@@ -56,7 +56,7 @@ export class Actor {
 
   // Draw at screen point (sx, sy) = center of the tile under the feet.
   draw(ctx, sx, sy, t, isPlayer = false) {
-    const seated = this.activity === 'reviewing';
+    const seated = this.activity === 'reviewing' || this.activity === 'watching';
     const bob = this.walking && !seated ? Math.sin(t * 12) * 1.6 : 0;
     const f = this.facing;
     const suit = this.look.suit || PAL.navy;
@@ -75,7 +75,7 @@ export class Actor {
     ctx.fill();
 
     const y0 = sy - bob + (seated ? 6 : 0);
-    if (seated) {
+    if (this.activity === 'reviewing') {
       ctx.fillStyle = PAL.woodDark;
       ctx.beginPath();
       ctx.roundRect(sx - 11, y0 - 25, 22, 24, 4);
@@ -109,9 +109,12 @@ export class Actor {
     ctx.fillStyle = this.npc ? shade(suit, -0.3) : PAL.burgundy;
     ctx.fillRect(sx - 1, y0 - 25, 2, 7);
     // arms
+    ctx.fillStyle = suit;
+    ctx.fillRect(sx - hw - 3, y0 - 28, 4, 14);
+    ctx.fillRect(sx + hw - 1, y0 - 28, 4, 14);
     ctx.fillStyle = shade(suit, -0.12);
-    ctx.fillRect(sx - hw - 2, y0 - 28, 3, 14);
-    ctx.fillRect(sx + hw - 1, y0 - 28, 3, 14);
+    ctx.fillRect(sx - hw - 3, y0 - 17, 4, 3);
+    ctx.fillRect(sx + hw - 1, y0 - 17, 4, 3);
 
     // curly/afro halo sits behind the head
     if (style === 4) {
@@ -175,7 +178,7 @@ export class Actor {
     }
 
     // briefcase for the player
-    if (isPlayer && seated) {
+    if (isPlayer && this.activity === 'reviewing') {
       const pageY = y0 - 17 + Math.sin(t * 1.8) * 0.5;
       ctx.fillStyle = PAL.parchment;
       ctx.fillRect(sx - 12, pageY, 24, 12);
@@ -186,7 +189,7 @@ export class Actor {
       for (let line = 0; line < 3; line++) {
         ctx.fillRect(sx - 8, pageY + 3 + line * 3, 16, 1);
       }
-    } else if (isPlayer) {
+    } else if (isPlayer && !seated) {
       ctx.fillStyle = PAL.woodDark;
       ctx.beginPath();
       ctx.roundRect(sx + 9 * f - 4, y0 - 16, 9, 7, 1.5);

@@ -8,8 +8,8 @@
 // rules. No invented cases, no invented rule text.
 //
 // grade: 'correct'    -> earn gold, streak++, streak of 2+ heals Ethics
-//        'wrong'      -> lose WRONG_DMG Ethics, streak resets
-//        'very_wrong' -> lose VERY_WRONG_DMG Ethics, streak resets
+//        'wrong'      -> lose escalating Ethics damage, streak resets
+//        'very_wrong' -> same escalating damage with a more serious verdict
 //
 // Every non-correct choice carries a `why` explaining the violation and the
 // rule, shown to the player when they lose Ethics.
@@ -17,8 +17,6 @@
 import { MPRE_SCENARIOS } from './mpre.js';
 import { ADDITIONAL_MPRE_SCENARIOS } from './mpre-additional.js';
 
-export const WRONG_DMG = 10;
-export const VERY_WRONG_DMG = 25;
 export const STREAK_HEAL = 10;
 
 const CORE_SCENARIOS = [

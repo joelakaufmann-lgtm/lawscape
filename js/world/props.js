@@ -313,6 +313,44 @@ export const PROPS = {
       ctx.stroke();
     },
   },
+  porthole: {
+    w: 1, h: 1, solid: false, noShadow: true,
+    draw(ctx, ox, oy, prop, t) {
+      const glow = 0.45 + Math.sin(t * 0.7) * 0.08;
+      ctx.fillStyle = PAL.brass;
+      ctx.beginPath();
+      ctx.arc(ox, oy - 34, 13, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#152a43';
+      ctx.beginPath();
+      ctx.arc(ox, oy - 34, 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = `rgba(217,182,86,${glow})`;
+      ctx.fillRect(ox - 3, oy - 37, 2, 3);
+      ctx.fillRect(ox + 3, oy - 32, 2, 3);
+    },
+  },
+  dotpainting: {
+    w: 2, h: 1, solid: false, noShadow: true,
+    draw(ctx, ox, oy) {
+      const leftBottom = { x: ox - 20, y: oy - 12 };
+      const rightBottom = { x: ox + 20, y: oy + 8 };
+      const leftTop = { x: leftBottom.x, y: leftBottom.y - 42 };
+      const rightTop = { x: rightBottom.x, y: rightBottom.y - 42 };
+      ctx.fillStyle = PAL.brass;
+      quad(ctx,
+        leftTop.x - 3, leftTop.y - 3, rightTop.x + 3, rightTop.y - 3,
+        rightBottom.x + 3, rightBottom.y + 3, leftBottom.x - 3, leftBottom.y + 3);
+      ctx.fillStyle = '#faf8f0';
+      quad(ctx,
+        leftTop.x, leftTop.y, rightTop.x, rightTop.y,
+        rightBottom.x, rightBottom.y, leftBottom.x, leftBottom.y);
+      ctx.fillStyle = PAL.ink;
+      ctx.beginPath();
+      ctx.arc(ox, oy - 23, 6, 0, Math.PI * 2);
+      ctx.fill();
+    },
+  },
   caseboard: {
     w: 2, h: 1, solid: true,
     draw(ctx, ox, oy) {
@@ -347,6 +385,22 @@ export const PROPS = {
       box(ctx, ox, oy, -0.28, -0.32, 0.56, 0.14, 34, PAL.burgundy);
     },
   },
+  officechair: {
+    w: 1, h: 1, solid: true,
+    draw(ctx, ox, oy) {
+      box(ctx, ox, oy, -0.28, -0.28, 0.56, 0.56, 11, PAL.ink, 8);
+      box(ctx, ox, oy, -0.28, -0.32, 0.56, 0.12, 34, PAL.ink, 8);
+      const c = p(ox, oy, 0, 0);
+      ctx.strokeStyle = PAL.stoneDark;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(c.x, c.y - 5);
+      ctx.lineTo(c.x, c.y + 7);
+      ctx.moveTo(c.x - 10, c.y + 10);
+      ctx.lineTo(c.x + 10, c.y + 10);
+      ctx.stroke();
+    },
+  },
   cabinet: {
     w: 1, h: 1, solid: true,
     draw(ctx, ox, oy) {
@@ -364,6 +418,34 @@ export const PROPS = {
       box(ctx, ox, oy, -0.4, -0.3, 1.8, 0.16, 30, PAL.navy);
       box(ctx, ox, oy, -0.4, -0.25, 0.16, 0.6, 22, PAL.navyLight);
       box(ctx, ox, oy, 1.24, -0.25, 0.16, 0.6, 22, PAL.navyLight);
+    },
+  },
+  barcart: {
+    w: 1, h: 1, solid: true,
+    draw(ctx, ox, oy) {
+      box(ctx, ox, oy, -0.34, -0.3, 0.68, 0.6, 8, PAL.woodDark, 16);
+      box(ctx, ox, oy, -0.34, -0.3, 0.68, 0.6, 5, PAL.brass, 31);
+      const c = p(ox, oy, 0, 0);
+      ctx.fillStyle = '#8a4d2e';
+      ctx.beginPath();
+      ctx.roundRect(c.x - 10, c.y - 56, 12, 22, 3);
+      ctx.fill();
+      ctx.fillStyle = PAL.brassLight;
+      ctx.fillRect(c.x - 7, c.y - 60, 6, 5);
+      ctx.strokeStyle = PAL.parchment;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(c.x + 8, c.y - 49);
+      ctx.lineTo(c.x + 8, c.y - 38);
+      ctx.arc(c.x + 8, c.y - 52, 5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = '#b06c39';
+      ctx.fillRect(c.x + 4, c.y - 51, 8, 3);
+      ctx.fillStyle = PAL.ink;
+      ctx.beginPath();
+      ctx.arc(c.x - 15, c.y - 3, 5, 0, Math.PI * 2);
+      ctx.arc(c.x + 15, c.y + 5, 5, 0, Math.PI * 2);
+      ctx.fill();
     },
   },
   paralegaldesk: {
@@ -540,6 +622,59 @@ export const PROPS = {
       ctx.fillStyle = PAL.ink;
       ctx.beginPath(); ctx.ellipse(c.x - 12, c.y - 27, 8, 4, 0, 0, Math.PI * 2); ctx.fill();
       if (nice) { ctx.fillStyle = PAL.brass; ctx.fillRect(c.x + 8, c.y - 32, 4, 8); }
+    },
+  },
+  stove: {
+    w: 2, h: 1, solid: true,
+    draw(ctx, ox, oy) {
+      box(ctx, ox, oy, -0.4, -0.3, 1.8, 0.6, 28, PAL.marble);
+      const c = p(ox, oy, 0.5, 0);
+      ctx.fillStyle = PAL.ink;
+      for (const dx of [-25, 2, 25]) {
+        ctx.beginPath();
+        ctx.ellipse(c.x + dx, c.y - 31, 7, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = PAL.brass;
+      for (const dx of [-20, -7, 6, 19]) ctx.fillRect(c.x + dx, c.y - 20, 4, 3);
+    },
+  },
+  fridge: {
+    w: 1, h: 1, solid: true,
+    draw(ctx, ox, oy) {
+      box(ctx, ox, oy, -0.34, -0.3, 0.68, 0.6, 58, PAL.marbleDark);
+      const c = p(ox, oy, 0, 0.25);
+      ctx.strokeStyle = PAL.stoneDark;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(c.x - 18, c.y - 34);
+      ctx.lineTo(c.x + 18, c.y - 16);
+      ctx.stroke();
+      ctx.fillStyle = PAL.stoneDark;
+      ctx.fillRect(c.x + 8, c.y - 49, 3, 14);
+      ctx.fillRect(c.x + 8, c.y - 31, 3, 11);
+    },
+  },
+  wallclock: {
+    w: 1, h: 1, solid: false, noShadow: true,
+    draw(ctx, ox, oy, prop, t) {
+      ctx.fillStyle = PAL.woodDark;
+      ctx.beginPath();
+      ctx.arc(ox, oy - 38, 13, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = PAL.parchment;
+      ctx.beginPath();
+      ctx.arc(ox, oy - 38, 10, 0, Math.PI * 2);
+      ctx.fill();
+      const angle = (t % 60) / 60 * Math.PI * 2 - Math.PI / 2;
+      ctx.strokeStyle = PAL.ink;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(ox, oy - 38);
+      ctx.lineTo(ox + Math.cos(angle) * 7, oy - 38 + Math.sin(angle) * 7);
+      ctx.moveTo(ox, oy - 38);
+      ctx.lineTo(ox + 2, oy - 44);
+      ctx.stroke();
     },
   },
   homedesk: {
