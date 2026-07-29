@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { readFile, writeFile } from 'node:fs/promises';
+import { access, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const projectRoot = path.resolve(import.meta.dirname, '..');
@@ -128,13 +128,41 @@ function parseCalifornia(source) {
   });
 }
 
-const [nevadaSource, arizonaSource, californiaSource] = await Promise.all([
-  readFile(nevadaPath, 'utf8'),
-  readFile(arizonaPath, 'utf8'),
-  readFile(californiaPath, 'utf8'),
-]);
+async function fileExists(filePath) {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
-const library = [
+async function buildRuleLibrary() {
+  const sourcePaths = [nevadaPath, arizonaPath, californiaPath];
+  const sourceAvailability = await Promise.all(sourcePaths.map(fileExists));
+  const missingSources = sourcePaths.filter((_, index) => !sourceAvailability[index]);
+
+  if (missingSources.length > 0) {
+    if (!(await fileExists(outputPath))) {
+      throw new Error(
+        `Cannot build the rule library because authoring sources and ${path.relative(projectRoot, outputPath)} are missing.`,
+      );
+    }
+
+    console.warn(
+      `Using committed ${path.relative(projectRoot, outputPath)}; local authoring sources are unavailable:\n`
+      + missingSources.map((filePath) => `- ${path.relative(projectRoot, filePath)}`).join('\n'),
+    );
+    return;
+  }
+
+  const [nevadaSource, arizonaSource, californiaSource] = await Promise.all([
+    readFile(nevadaPath, 'utf8'),
+    readFile(arizonaPath, 'utf8'),
+    readFile(californiaPath, 'utf8'),
+  ]);
+
+  const library = [
   {
     id: 'nevada',
     title: 'Nevada Rules of Professional Conduct',
@@ -190,15 +218,18 @@ const library = [
       },
     ],
   },
-];
+  ];
 
-const output = `// Generated from the local Ethics Agents authoring corpus.
+  const output = `// Generated from the local Ethics Agents authoring corpus.
 // Run npm run rules:build to refresh after those source files change.
 
 export const RULE_LIBRARY = ${JSON.stringify(library, null, 2)};
 `;
 
-await writeFile(outputPath, output);
-console.log(
-  `Built js/data/rules.js with ${library.reduce((total, set) => total + set.rules.length, 0)} indexed rules.`,
-);
+  await writeFile(outputPath, output);
+  console.log(
+    `Built js/data/rules.js with ${library.reduce((total, set) => total + set.rules.length, 0)} indexed rules.`,
+  );
+}
+
+await buildRuleLibrary();
