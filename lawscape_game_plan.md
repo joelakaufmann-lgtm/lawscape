@@ -12,6 +12,8 @@ The player starts as a new attorney with a tiny office, a modest apartment, limi
 
 The player should feel like they are building a legal career from scratch.
 
+The game is embedded with real features from the practice of law such as the helpful paralegal and the senior partner that would rather you stop bothering them. 
+
 ## 3. Core Loop
 
 1. Choose or receive a legal task.
@@ -25,7 +27,7 @@ The player should feel like they are building a legal career from scratch.
 
 ### Fun Legal Thinking
 
-The game should use legal themes without requiring real legal expertise. Mini-games should teach patterns like relevance, authority, issue spotting, source checking, and AI hallucination detection.
+The game should use legal themes and should require some real legal expertise. Mini-games should teach patterns like relevance, authority, issue spotting, source checking, and AI hallucination detection. All of the mini-games encourage critical thinking, ethics, and learning new areas of law.
 
 ### Visible Progression
 
@@ -37,7 +39,7 @@ Each mini-game should take 30 seconds to 3 minutes. The game should be playable 
 
 ### Legal AI Theme
 
-Legal AI should be a major mechanic. The player should use AI tools, check AI outputs, catch fake citations, improve prompts, and compare generated work against trusted sources.
+Legal AI should be a major mechanic. The player should use AI tools, check AI outputs, catch fake citations, improve prompts, and compare generated work against trusted sources. 
 
 ## 5. Player Creation
 
@@ -54,7 +56,10 @@ At the start, the player creates an attorney.
 
 ### Starting Practice Areas
 
+- Legal Ethics (Beta version)
+- Depositions
 - Litigation
+- Court hearings
 - Contracts
 - Criminal defense
 - Startup counsel
@@ -62,23 +67,15 @@ At the start, the player creates an attorney.
 - Privacy and AI law
 - Public interest
 
-### Starting Traits
-
-- Research Shark: earns bonus points in citation and authority games.
-- Deal Closer: earns more money from contract mini-games.
-- Courtroom Natural: performs better in argument and objection games.
-- AI Whisperer: gets better legal AI tool rewards.
-- Client Favorite: earns more reputation from client tasks.
-
 ## 6. Main Stats
 
 ### Money
 
 Used to buy upgrades, subscriptions, furniture, clothes, and tools.
 
-### Reputation
+### Ethics
 
-Unlocks better clients, harder cases, and higher-paying matters.
+Your health bar. If it runs low, the game is over.
 
 ### Focus
 
