@@ -411,6 +411,32 @@ export const PROPS = {
       ctx.fillRect(c.x - 8, c.y - 14, 8, 2);
     },
   },
+  safe: {
+    w: 1, h: 1, solid: true,
+    draw(ctx, ox, oy, prop) {
+      const empty = typeof prop.empty === 'function' ? prop.empty() : false;
+      box(ctx, ox, oy, -0.38, -0.34, 0.76, 0.68, 48, '#343941', 7);
+      const c = p(ox, oy, 0, 0.25);
+      ctx.fillStyle = '#252a31';
+      ctx.fillRect(c.x - 17, c.y - 46, 34, 31);
+      ctx.strokeStyle = PAL.brass;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(c.x - 17, c.y - 46, 34, 31);
+      ctx.beginPath();
+      ctx.arc(c.x + 7, c.y - 31, 6, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = PAL.brassLight;
+      ctx.fillRect(c.x - 11, c.y - 33, 9, 3);
+      ctx.font = 'bold 7px Georgia';
+      ctx.textAlign = 'center';
+      ctx.fillText(empty ? 'EMPTY' : 'CLIENT', c.x, c.y - 51);
+      if (!empty) {
+        for (const [dx, dy] of [[-9, -11], [0, -9], [9, -12], [-3, -15], [6, -17]]) {
+          ball(ctx, c.x + dx, c.y + dy, 3, PAL.brassLight);
+        }
+      }
+    },
+  },
   sofa: {
     w: 2, h: 1, solid: true,
     draw(ctx, ox, oy) {

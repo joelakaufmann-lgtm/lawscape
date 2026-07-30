@@ -25,7 +25,8 @@
     const { SCENARIOS, STREAK_HEAL } = require("js/data/ethics.js");
     const { OFFICE_UPGRADES, APARTMENT_UPGRADES, bonuses } = require("js/data/upgrades.js");
     const { RULE_LIBRARY } = require("js/data/rules.js");
-    const { COFFEE_ETHICS_RESTORE, DOC_REVIEW_CYCLE_MS, DOC_REVIEW_REWARD, LINDA_TIP_COST, RILEY_HINT_COST, WHISKEY_ETHICS_DAMAGE, WHISKEY_SLOW_MS, LAWYER_ASSISTANCE_PHONE, LAWYER_ASSISTANCE_URL, rileyHintEligible, wrongAnswerDamage, } = require("js/data/work.js");
+    const { COFFEE_ETHICS_RESTORE, APARTMENT_FOOD_COST, RAMEN_ETHICS_RESTORE, COOKED_MEAL_ETHICS_RESTORE, DOC_REVIEW_CYCLE_MS, DOC_REVIEW_REWARD, LINDA_TIP_COST, RILEY_HINT_COST, WHISKEY_ETHICS_DAMAGE, WHISKEY_SLOW_MS, MONEYBAGS_SAFE_GOLD, MONEYBAGS_ETHICS_DAMAGE, MONEYBAGS_GRACE_PURCHASES, LAWYER_ASSISTANCE_PHONE, LAWYER_ASSISTANCE_URL, formatBillableTime, moneybagsAuditTriggered, rileyHintEligible, wrongAnswerDamage, } = require("js/data/work.js");
+    const { GAME_VERSION, HR_CATEGORIES, findHrCategory, hrIssueUrl, hrReportText, } = require("js/data/feedback.js");
 
     const $ = (id) => document.getElementById(id);
 
@@ -45,6 +46,7 @@
     const PLAYER_BASE_SPEED = 4;
     let whiskeySlowUntil = 0;
     let watchReturnPos = null;
+    let billableUnsavedMs = 0;
 
     function currentZone() { return ZONES[state.zone] || ZONES.office; }
 
@@ -222,8 +224,11 @@
         case 'flavor_coffee':
           drinkCoffee();
           break;
+        case 'eat_ramen': eatApartmentFood('Ramen Noodles', RAMEN_ETHICS_RESTORE); break;
+        case 'cook_meal': eatApartmentFood('Home-Cooked Meal', COOKED_MEAL_ETHICS_RESTORE); break;
         case 'watch_tv': watchTV(); break;
         case 'whiskey': offerWhiskey(); break;
+        case 'moneybags_safe': openMoneybagsSafe(); break;
         default: break;
       }
     }
@@ -239,6 +244,14 @@
       } else if (def.talk === 'linda') {
         talkToLinda(def);
       } else if (def.talk === 'secretary') {
+        if (state.moneybagsStolen) {
+          showDialogue({
+            name: def.name,
+            text: 'Mr. Moneybags called about his gold coins. He says Jim’s safe is short. '
+              + 'Mr. Hardsell told me not to put that in writing.',
+          });
+          return;
+        }
         const lines = lizLines();
         showDialogue({ name: def.name, text: lines[Math.floor(Math.random() * lines.length)] });
       } else if (def.talk === 'paralegal') {
@@ -268,6 +281,7 @@
         'Mr. Johnson called regarding his case.',
         'Did you read Mr. Hardsell’s email?',
         'Can you help me? All Mr. Hardsell’s email said was “plz fix.”',
+        'If something is broken — the printer or the game itself — Email HR from BarMail. HR has not replied since 1987, but the developers do.',
       ];
 
       if (!improvedOffice) lines.push('Get back to work.');
@@ -294,24 +308,48 @@
       'When client and third-party claims to funds conflict, keep the disputed portion separate while promptly releasing any undisputed portion.',
     ];
 
+    function lindaAside() {
+      const lines = [
+        'I sure could use a vacation.',
+        'I used to think making partner meant fewer emails.',
+        'If anyone asks, this is my third cup of tea, not my fifth.',
+      ];
+      if (!hasUpgrade('office_window')) {
+        lines.push('I asked Mr. Hardsell if we could get you a window, but he said no. Sorry.');
+      }
+      return lines[Math.floor(Math.random() * lines.length)];
+    }
+
     function talkToLinda(def) {
+      if (state.moneybagsStolen) {
+        showDialogue({
+          name: def.name,
+          text: 'Linda lowers her voice. “Mr. Moneybags called about his gold coins. '
+            + 'Jim told me not to worry about it, which made me worry about it.”',
+        });
+        return;
+      }
+      const aside = lindaAside();
       if (!hasUpgrade('paralegal')) {
         showDialogue({
           name: def.name,
-          text: 'Linda barely looks up. “My advice? Hire Riley Readsalot. Then come back if you still need an ethics tip.”',
+          text: `Linda says, “${aside}” She barely looks up. `
+            + '“My advice? Hire Riley Readsalot. Then come back if you still need an ethics tip.”',
         });
         return;
       }
       if (state.gold < LINDA_TIP_COST) {
         showDialogue({
           name: def.name,
-          text: `Linda keeps typing. “I am extremely busy. Come back with ${LINDA_TIP_COST} gold if you want an ethics tip.”`,
+          text: `Linda says, “${aside}” She keeps typing. “I am extremely busy. `
+            + `Come back with ${LINDA_TIP_COST} gold if you want an ethics tip.”`,
         });
         return;
       }
       showDialogue({
         name: def.name,
-        text: `Linda glances at the clock. “I do not have time to chat. ${LINDA_TIP_COST} gold buys one concise ethics tip.”`,
+        text: `Linda says, “${aside}” She glances at the clock. “I do not have time to chat. `
+          + `${LINDA_TIP_COST} gold buys one concise ethics tip.”`,
         choices: [
           {
             label: `Pay ${LINDA_TIP_COST} gold for a tip`,
@@ -358,6 +396,24 @@
     // ---------------------------------------------------------------------------
     let currentScenario = null;
     let hintPurchasedForCurrent = false;
+
+    function billableStudyActive() {
+      return inGame
+        && document.visibilityState === 'visible'
+        && currentScenario !== null
+        && !$('email').classList.contains('hidden');
+    }
+
+    function trackBillableStudy(dt) {
+      if (!billableStudyActive()) return;
+      const elapsedMs = dt * 1000;
+      state.billableStudyMs = (state.billableStudyMs || 0) + elapsedMs;
+      billableUnsavedMs += elapsedMs;
+      if (billableUnsavedMs >= 5_000) {
+        billableUnsavedMs = 0;
+        save();
+      }
+    }
 
     function currentDifficulty() {
       if (state.casesDone < 5) return 1;
@@ -568,6 +624,8 @@
     function closeEmail() {
       $('email').classList.add('hidden');
       currentScenario = null;
+      billableUnsavedMs = 0;
+      if (inGame) save();
     }
     $('email-close').addEventListener('click', closeEmail);
     $('email-pack').addEventListener('change', (event) => {
@@ -579,17 +637,26 @@
     // ---------------------------------------------------------------------------
     // Disbarment
     // ---------------------------------------------------------------------------
-    function gameOver() {
+    const DEFAULT_GAMEOVER_TEXT = 'Your Ethics reached zero. The Presiding Disciplinary Judge '
+      + 'has entered an order of disbarment. Your license, your office, your gold, and your '
+      + 'upgrades are forfeit.';
+
+    function gameOver(reason = DEFAULT_GAMEOVER_TEXT) {
       stopDocumentReview(false);
       inGame = false;
       $('hud').classList.add('hidden');
+      $('email').classList.add('hidden');
+      $('panel').classList.add('hidden');
+      currentScenario = null;
       hideDialogue();
+      $('gameover-text').textContent = reason;
       $('gameover').classList.remove('hidden');
     }
 
     $('gameover-restart').addEventListener('click', () => {
       $('gameover').classList.add('hidden');
       reset();                       // wipe everything — you keep nothing
+      $('gameover-text').textContent = DEFAULT_GAMEOVER_TEXT;
       $('title-screen').classList.remove('hidden');
       refreshTitleButtons();
     });
@@ -802,9 +869,28 @@
             state.upgrades.push(u.id);
             const addedEthicsCapacity = maxEthics() - previousMax;
             if (addedEthicsCapacity > 0) healEthics(addedEthicsCapacity);
+            if (state.moneybagsStolen) {
+              state.moneybagsPurchases = (state.moneybagsPurchases || 0) + 1;
+            }
             save();
             updateHUD();
-            toast(`Purchased: ${u.name}`);
+            if (state.moneybagsStolen && moneybagsAuditTriggered(state.moneybagsPurchases)) {
+              state.ethics = 0;
+              save();
+              updateHUD();
+              gameOver(
+                `Your third purchase after taking Mr. Moneybags’s gold triggered a trust-account audit. `
+                + `The coins were traced from Jim Hardsell’s safe into your spending. The Presiding `
+                + `Disciplinary Judge ordered immediate disbarment. ${u.name} was not worth it.`,
+              );
+              return;
+            }
+            if (state.moneybagsStolen) {
+              const escaped = Math.min(state.moneybagsPurchases, MONEYBAGS_GRACE_PURCHASES);
+              toast(`Purchased: ${u.name}. Nobody has noticed the Moneybags gold — yet. (${escaped}/2)`);
+            } else {
+              toast(`Purchased: ${u.name}`);
+            }
             openShop(title, catalog);   // re-render with new state
           };
         }
@@ -822,11 +908,14 @@
           <p>Attorney at law, State of Juris. License status: ${state.ethics > 0 ? 'ACTIVE' : 'REVOKED'}</p></div></div>
         <div class="row-item"><div class="grow"><h4>Scenarios answered</h4></div><div class="meta">${state.casesDone}</div></div>
         <div class="row-item"><div class="grow"><h4>Answered correctly</h4></div><div class="meta">${state.correctDone} (${acc}%)</div></div>
+        <div class="row-item"><div class="grow"><h4>Billable study time</h4>
+          <p>Visible time with BarMail open</p></div><div class="meta">⏱ ${formatBillableTime(state.billableStudyMs)}</div></div>
         <div class="row-item"><div class="grow"><h4>Current streak</h4></div><div class="meta">x${state.streak}</div></div>
         <div class="row-item"><div class="grow"><h4>Wrong-answer streak</h4></div><div class="meta">x${state.wrongStreak}</div></div>
         <div class="row-item"><div class="grow"><h4>Document-review cycles</h4></div><div class="meta">${state.documentsReviewed}</div></div>
         <div class="row-item"><div class="grow"><h4>Linda’s ethics tips</h4></div><div class="meta">${state.tipsPurchased}</div></div>
         <div class="row-item"><div class="grow"><h4>Riley’s rule hints</h4></div><div class="meta">${state.hintsPurchased}</div></div>
+        <div class="row-item"><div class="grow"><h4>Emails to HR</h4></div><div class="meta">${state.hrEmailsSent || 0} sent · 0 answered</div></div>
         <div class="row-item"><div class="grow"><h4>Gold</h4></div><div class="meta">🪙 ${Math.floor(state.gold)}</div></div>
         <div class="row-item"><div class="grow"><h4>Ethics</h4></div><div class="meta">⚖ ${state.ethics}/${maxEthics()}</div></div>
         <div class="row-item"><div class="grow"><h4>Upgrades owned</h4></div><div class="meta">${state.upgrades.length}</div></div>`;
@@ -868,6 +957,27 @@
       toast(`You drink a strong cup of coffee. +${state.ethics - before} Ethics.`);
     }
 
+    function eatApartmentFood(name, ethicsRestore) {
+      if (state.ethics >= maxEthics()) {
+        toast('Your Ethics is already full. Save the food for a harder day.');
+        return;
+      }
+      if (state.gold < APARTMENT_FOOD_COST) {
+        toast(`You need ${APARTMENT_FOOD_COST} gold for ${name.toLowerCase()}.`);
+        return;
+      }
+      state.gold -= APARTMENT_FOOD_COST;
+      const before = state.ethics;
+      healEthics(ethicsRestore);
+      save();
+      updateHUD();
+      showDialogue({
+        name,
+        text: `You spend ${APARTMENT_FOOD_COST} gold and restore `
+          + `${state.ethics - before} Ethics.`,
+      });
+    }
+
     function watchTV() {
       if (!hasUpgrade('cityview')) return;
       watchReturnPos = { x: player.x, y: player.y };
@@ -877,7 +987,7 @@
       player.activity = 'watching';
       showDialogue({
         name: 'City View Apartment',
-        text: 'You sit on the couch facing the television and let the city lights flicker beyond the window.',
+        text: 'You settle onto the couch and watch the city lights flicker beyond the window.',
         choices: [{ label: 'Stand up', fn: stopWatchingTV }],
       });
     }
@@ -890,6 +1000,53 @@
         player.y = watchReturnPos.y;
       }
       watchReturnPos = null;
+    }
+
+    function openMoneybagsSafe() {
+      if (state.moneybagsStolen) {
+        showDialogue({
+          name: 'Mr. Hardsell’s Safe',
+          text: `The safe is empty. You have made ${state.moneybagsPurchases || 0} upgrade `
+            + `${state.moneybagsPurchases === 1 ? 'purchase' : 'purchases'} since taking the client’s gold.`,
+        });
+        return;
+      }
+      showDialogue({
+        name: 'Mr. Hardsell’s Safe',
+        text: 'Jim Hardsell calls over, “Feel free to take some of those gold coins out of there. '
+          + 'They belong to our client Mr. Moneybags, and he will never notice.”',
+        choices: [
+          {
+            label: `Take ${MONEYBAGS_SAFE_GOLD.toLocaleString()} client gold`,
+            fn: takeMoneybagsGold,
+          },
+          { label: 'Leave the client’s gold alone' },
+        ],
+      });
+    }
+
+    function takeMoneybagsGold() {
+      if (state.moneybagsStolen) return;
+      state.moneybagsStolen = true;
+      state.moneybagsPurchases = 0;
+      state.gold += MONEYBAGS_SAFE_GOLD;
+      const disbarred = damageEthics(MONEYBAGS_ETHICS_DAMAGE);
+      save();
+      updateHUD();
+      if (disbarred) {
+        gameOver(
+          'Taking Mr. Moneybags’s client funds exhausted your remaining Ethics. '
+          + 'The trust-account theft resulted in immediate disbarment.',
+        );
+        return;
+      }
+      showDialogue({
+        name: 'Client Trust Catastrophe',
+        text: `You take ${MONEYBAGS_SAFE_GOLD.toLocaleString()} gold and instantly lose `
+          + `${MONEYBAGS_ETHICS_DAMAGE} Ethics. Your Ethics maximum is permanently capped at 50. `
+          + 'The first two upgrade purchases may pass unnoticed. '
+          + 'A third will expose the missing client funds.',
+      });
     }
 
     function offerWhiskey() {
@@ -968,6 +1125,10 @@
           requests — many of them unethical. Choose Mixed Inbox, UK SQE Ethics, US MPRE, or
           State of Juris in the toolbar. Questions advance from Foundation to Practice to the
           advanced tier as your record grows.</p></div></div>
+        <div class="row-item"><div class="grow"><h4>⏱ Billable Hours</h4>
+          <p>The HUD timer records visible time spent with BarMail open, including reading the
+          question, choosing an answer, and studying the explanation. Exploring the office,
+          leaving the tab, and other activities do not count.</p></div></div>
         <div class="row-item"><div class="grow"><h4>🗄 Document Review</h4>
           <p>Use the filing cabinet in the main office. Your attorney sits and reviews files;
           every uninterrupted one-minute cycle earns 5 gold.</p></div></div>
@@ -982,7 +1143,8 @@
           in the office, furniture catalog at home).</p></div></div>
         <div class="row-item"><div class="grow"><h4>⚖ Ethics Bar</h4>
           <p>Wrong answers damage your Ethics — the game explains the violated rule every time.
-          Damage rises from 20 to 30 and then 40 as wrong answers pile up; Riley halves it.
+          Damage rises from 30 to 45 and then 60 as wrong answers pile up; Riley halves it.
+          Three straight mistakes can end a brand-new attorney, so read before you reply.
           Two correct answers in a row start healing Ethics. Resting in your bed helps too.</p></div></div>
         <div class="row-item"><div class="grow"><h4>🥃 Professional Wellbeing</h4>
           <p>Jim’s office bar cart demonstrates how alcohol can impair judgment and movement.
@@ -992,8 +1154,172 @@
           no items, no upgrades.</p></div></div>
         <div class="row-item"><div class="grow"><h4>🏛 Court</h4>
           <p>The furnished courtroom is open to explore, but no matters or court personnel are
-          on calendar yet.</p></div></div>`;
+          on calendar yet.</p></div></div>
+        <div class="row-item"><div class="grow"><h4>✍ Email HR</h4>
+          <p>Found a bug, or ready to complain about the working conditions at Hardsell &amp;
+          Firestone? Open BarMail and press <b>Email HR</b>. HR will not read it — but your
+          message becomes a prefilled report you can file with the developers on GitHub.</p></div></div>
+        <div class="row-item"><div class="grow"><h4>🌍 Why LawScape Exists</h4>
+          <p>The thesis: legal learning should be fun — and it should be fun to learn how
+          lawyers in other countries answer the same questions. The practice-pack selector
+          (UK SQE, US MPRE, State of Juris) is the first step; a full jurisdiction selector
+          (California, Nevada, Arizona) and a Global Law Firm mode with BarMail arriving from
+          around the world are on the roadmap.</p></div></div>`;
     }
+
+    // ---------------------------------------------------------------------------
+    // Email HR — bug reports and working-conditions complaints, in character.
+    // Nothing is transmitted anywhere: the player's text becomes a prefilled
+    // GitHub issue they may open (and edit) themselves, or copy to the clipboard.
+    // ---------------------------------------------------------------------------
+    function hrContext() {
+      return {
+        version: GAME_VERSION,
+        zone: state.zone,
+        casesDone: state.casesDone,
+        ethics: state.ethics,
+        ethicsMax: maxEthics(),
+        gold: Math.floor(state.gold),
+        upgrades: state.upgrades.length,
+        userAgent: navigator.userAgent,
+      };
+    }
+
+    function openHrEmail() {
+      const body = openPanel('✉ New Message — To: hr@hardsell-firestone.example');
+
+      const intro = document.createElement('div');
+      intro.className = 'help-lede';
+      intro.innerHTML = '<b>Human Resources — Hardsell &amp; Firestone.</b> Serving the firm’s '
+        + 'humans since 1987 with one (1) unattended inbox. Bug reports and complaints about '
+        + 'the working conditions of this virtual law firm are equally welcome and equally unread.';
+      body.appendChild(intro);
+
+      const form = document.createElement('div');
+      form.className = 'hr-form';
+
+      const categoryLabel = document.createElement('label');
+      categoryLabel.textContent = 'Nature of grievance';
+      const category = document.createElement('select');
+      for (const option of HR_CATEGORIES) {
+        const el = document.createElement('option');
+        el.value = option.id;
+        el.textContent = option.label;
+        category.appendChild(el);
+      }
+      categoryLabel.appendChild(category);
+
+      const subjectLabel = document.createElement('label');
+      subjectLabel.textContent = 'Subject';
+      const subject = document.createElement('input');
+      subject.type = 'text';
+      subject.maxLength = 80;
+      subject.placeholder = 'e.g., The coffee machine took my gold and poured nothing';
+      subjectLabel.appendChild(subject);
+
+      const messageLabel = document.createElement('label');
+      messageLabel.textContent = 'Your email to HR';
+      const message = document.createElement('textarea');
+      message.maxLength = 2000;
+      message.placeholder = 'Describe the bug (what you did, what happened, what should have '
+        + 'happened) — or the working conditions. Liz still remembers when the complaint '
+        + 'pile was short enough to see over.';
+      messageLabel.appendChild(message);
+
+      const note = document.createElement('p');
+      note.className = 'hr-fine-print';
+      note.textContent = 'Privacy notice: nothing leaves your browser when you press Send. '
+        + '“File with the Developers” opens a prefilled GitHub issue in a new tab that you '
+        + 'review, edit, and submit yourself (GitHub account required).';
+
+      const send = document.createElement('button');
+      send.type = 'button';
+      send.textContent = 'Send to HR';
+      send.onclick = () => {
+        const messageText = message.value.trim();
+        if (!messageText) {
+          toast('HR requires at least one sentence of grievance.');
+          message.focus();
+          return;
+        }
+        const subjectText = subject.value.trim() || 'No subject (HR expected nothing less)';
+        state.hrEmailsSent = (state.hrEmailsSent || 0) + 1;
+        save();
+        showHrAutoReply(body, findHrCategory(category.value), subjectText, messageText);
+      };
+
+      form.append(categoryLabel, subjectLabel, messageLabel, note, send);
+      body.appendChild(form);
+      subject.focus();
+    }
+
+    function showHrAutoReply(body, category, subjectText, messageText) {
+      body.innerHTML = '';
+      const ticket = String(state.hrEmailsSent || 1).padStart(4, '0');
+
+      const reply = document.createElement('div');
+      reply.className = 'hr-reply';
+      const head = document.createElement('h4');
+      head.textContent = `Auto-reply — RE: ${subjectText}`;
+      const text = document.createElement('p');
+      text.textContent = category.reply;
+      const meta = document.createElement('p');
+      meta.className = 'hr-ticket';
+      meta.textContent = `Ticket HR-${ticket} · Estimated HR response time: 6–8 business years. `
+        + 'The developers, however, read their docket.';
+      reply.append(head, text, meta);
+      body.appendChild(reply);
+
+      const actions = document.createElement('div');
+      actions.className = 'hr-actions';
+
+      const file = document.createElement('button');
+      file.type = 'button';
+      file.textContent = '📮 File with the Developers (GitHub)';
+      file.onclick = () => {
+        window.open(hrIssueUrl(category, subjectText, messageText, hrContext()), '_blank', 'noopener');
+      };
+
+      const copy = document.createElement('button');
+      copy.type = 'button';
+      copy.className = 'small';
+      copy.textContent = '📋 Copy report';
+      copy.onclick = async () => {
+        const report = hrReportText(category, subjectText, messageText, hrContext());
+        try {
+          await navigator.clipboard.writeText(report);
+          toast('Report copied. Paste it anywhere HR is not.');
+        } catch {
+          showHrCopyFallback(actions, report);
+        }
+      };
+
+      const done = document.createElement('button');
+      done.type = 'button';
+      done.className = 'small';
+      done.textContent = 'Return to billable work';
+      done.onclick = () => $('panel').classList.add('hidden');
+
+      actions.append(file, copy, done);
+      body.appendChild(actions);
+    }
+
+    function showHrCopyFallback(actionsEl, report) {
+      if (actionsEl.parentElement.querySelector('.hr-copy-fallback')) return;
+      const fallback = document.createElement('textarea');
+      fallback.className = 'hr-copy-fallback';
+      fallback.readOnly = true;
+      fallback.value = report;
+      actionsEl.parentElement.appendChild(fallback);
+      fallback.focus();
+      fallback.select();
+      toast('Clipboard unavailable — the report is selected below. Copy it manually.');
+    }
+
+    $('email-hr-open').addEventListener('click', () => {
+      closeEmail();
+      openHrEmail();
+    });
 
     $('btn-help').addEventListener('click', openHelp);
     $('btn-mail').addEventListener('click', () => {
@@ -1208,6 +1534,7 @@
         player.speed = now < whiskeySlowUntil ? PLAYER_BASE_SPEED / 2 : PLAYER_BASE_SPEED;
         player.update(dt);
         updateDocumentReview(now);
+        trackBillableStudy(dt);
         state.pos = { x: player.tileX, y: player.tileY };
         const t = now / 1000;
         renderer.render(zone, player, npcs, hover, t);
@@ -1238,6 +1565,9 @@
     }
 
     window.addEventListener('beforeunload', () => { if (inGame) save(); });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible' && inGame) save();
+    });
 
     refreshTitleButtons();
     document.documentElement.dataset.lawscapeReady = 'true';
@@ -1250,6 +1580,9 @@
       get zone() { return zone; },
       targetAt, isWalkable, renderer,
       currentDifficulty,
+      billableStudyActive,
+      formatBillableTime,
+      openMoneybagsSafe,
       get docReview() { return { ...docReview }; },
       get inGame() { return inGame; },
     };
@@ -1265,6 +1598,7 @@
     const SAVE_KEY = 'lawscape_save_v2';
 
     const BASE_MAX_ETHICS = 100;
+    const MONEYBAGS_MAX_ETHICS = 50;
 
     function freshState() {
       return {
@@ -1282,8 +1616,12 @@
         casesDone: 0,          // total scenarios answered
         correctDone: 0,        // total answered correctly
         documentsReviewed: 0,  // completed one-minute document-review cycles
+        billableStudyMs: 0,    // visible time spent reading/answering BarMail
         tipsPurchased: 0,      // ethics tips purchased from Linda Firestone
         hintsPurchased: 0,     // 100-gold relevant-rule research from Riley
+        hrEmailsSent: 0,       // emails to HR (bug reports / working-conditions complaints)
+        moneybagsStolen: false,    // client gold taken from Jim Hardsell's safe
+        moneybagsPurchases: 0,     // upgrade purchases made after taking the gold
         seen: [],              // scenario ids already served this cycle
         practicePack: 'mixed', // 'mixed' | 'sqe' | 'mpre' | 'juris'
         upgrades: [],
@@ -1308,6 +1646,7 @@
     }
 
     function maxEthics() {
+      if (state.moneybagsStolen) return MONEYBAGS_MAX_ETHICS;
       return BASE_MAX_ETHICS
         + (hasUpgrade('mattress') ? 20 : 0)
         + (hasUpgrade('kitchen') ? 10 : 0)
@@ -1340,6 +1679,7 @@
         if (!raw) return false;
         const data = JSON.parse(raw);
         replaceState(Object.assign(freshState(), data));
+        state.ethics = Math.min(state.ethics, maxEthics());
         return true;
       } catch { return false; }
     }
@@ -1349,7 +1689,7 @@
       try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ }
       replaceState(freshState());
     }
-    Object.assign(exports, { BASE_MAX_ETHICS, freshState, state, hasUpgrade, maxEthics, healEthics, damageEthics, save, hasSave, load, reset });
+    Object.assign(exports, { BASE_MAX_ETHICS, MONEYBAGS_MAX_ETHICS, freshState, state, hasUpgrade, maxEthics, healEthics, damageEthics, save, hasSave, load, reset });
   },
   "js/world/zones.js": (exports, require) => {
     // Zone definitions: floor tiles, props, portals, NPCs, and interaction nodes.
@@ -1358,7 +1698,7 @@
     //
     // Tile chars: 'w' wood  'r' rug  'x' void (never walkable)
 
-    const { hasUpgrade } = require("js/state.js");
+    const { hasUpgrade, state } = require("js/state.js");
 
     const inRect = (x, y, x0, y0, x1, y1) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
 
@@ -1384,7 +1724,7 @@
           { type: 'bookshelf', x: 10, y: 1, full: () => hasUpgrade('subscription'),
             interact: { label: 'Ethics Treatises — Rule Library', action: 'rules' } },
           { type: 'clientchair', x: 5, y: 4 },
-          { type: 'cabinet', x: 12, y: 3,
+          { type: 'cabinet', x: 3, y: 3,
             interact: { label: 'Office Upgrades Catalog', action: 'shop_office' } },
           { type: 'filingstation', x: 1, y: 3,
             interact: { label: 'Filing Cabinet — Review Documents', action: 'doc_review' } },
@@ -1393,7 +1733,7 @@
           { type: 'officechair', x: 3, y: 8, visible: () => hasUpgrade('liz_chair') },
           { type: 'plant', x: 1, y: 6, visible: () => hasUpgrade('houseplants') },
           { type: 'plant', x: 4, y: 1, visible: () => hasUpgrade('houseplants') },
-          { type: 'porthole', x: 5, y: 0, visible: () => hasUpgrade('office_window') },
+          { type: 'porthole', x: 0, y: 6, visible: () => hasUpgrade('office_window') },
           { type: 'dotpainting', x: 8, y: 0, visible: () => hasUpgrade('artwork') },
         ],
         portals: [
@@ -1432,7 +1772,9 @@
           { type: 'executivedesk', x: 3, y: 3, nameplate: true },
           { type: 'clientchair', x: 3, y: 5 },
           { type: 'clientchair', x: 6, y: 5 },
-          { type: 'plant', x: 1, y: 5 },
+          { type: 'plant', x: 2, y: 6 },
+          { type: 'safe', x: 1, y: 5, empty: () => state.moneybagsStolen,
+            interact: { label: 'Mr. Hardsell’s Safe — Client Gold', action: 'moneybags_safe' } },
           { type: 'barcart', x: 8, y: 5,
             interact: { label: 'Bar Cart — Decanter and Glass', action: 'whiskey' } },
         ],
@@ -1543,20 +1885,21 @@
         props: [
           { type: 'bed', x: 1, y: 1, tier: () => (hasUpgrade('mattress') ? 1 : 0),
             interact: { label: 'Bed — Rest (restore Ethics)', action: 'rest' } },
-          { type: 'kitchenette', x: 5, y: 1, visible: () => !hasUpgrade('kitchen') },
-          { type: 'stove', x: 5, y: 1, visible: () => hasUpgrade('kitchen') },
+          { type: 'kitchenette', x: 5, y: 1, visible: () => !hasUpgrade('kitchen'),
+            interact: { label: 'Ramen Noodles — 5 gold / +5 Ethics', action: 'eat_ramen' } },
+          { type: 'stove', x: 5, y: 1, visible: () => hasUpgrade('kitchen'),
+            interact: { label: 'Kitchen — Cook Meal (5 gold / +30 Ethics)', action: 'cook_meal' } },
           { type: 'fridge', x: 7, y: 1, visible: () => hasUpgrade('kitchen') },
           { type: 'coffeemachine', x: 8, y: 2, owned: () => hasUpgrade('coffee'),
             interact: { label: 'Coffee Machine', action: 'flavor_coffee' } },
-          { type: 'wardrobe', x: 8, y: 4, interact: { label: 'Wardrobe', action: 'wardrobe' } },
+          { type: 'wardrobe', x: 1, y: 5, interact: { label: 'Wardrobe', action: 'wardrobe' } },
           { type: 'cabinet', x: 1, y: 4,
             interact: { label: 'Furniture Catalog', action: 'shop_apartment' } },
-          { type: 'wallclock', x: 8, y: 0, visible: () => hasUpgrade('homedesk') },
+          { type: 'wallclock', x: 6, y: 0, visible: () => hasUpgrade('homedesk') },
           { type: 'wallwindow', x: 3, y: 0, visible: () => hasUpgrade('cityview') },
-          { type: 'tv', x: 5, y: 3, visible: () => hasUpgrade('cityview') },
           { type: 'sofa', x: 4, y: 5, visible: () => hasUpgrade('cityview'),
-            interact: { label: 'Couch — Sit and Watch TV', action: 'watch_tv' } },
-          { type: 'plant', x: 1, y: 6 },
+            interact: { label: 'Couch — Sit and Enjoy the City View', action: 'watch_tv' } },
+          { type: 'plant', x: 2, y: 6 },
         ],
         portals: [
           { x: 4, y: 8, label: 'Leave the Apartment', travel: true },
@@ -1978,6 +2321,32 @@
           ctx.fillStyle = PAL.brass;
           ctx.fillRect(c.x - 8, c.y - 34, 8, 2); ctx.fillRect(c.x - 8, c.y - 24, 8, 2);
           ctx.fillRect(c.x - 8, c.y - 14, 8, 2);
+        },
+      },
+      safe: {
+        w: 1, h: 1, solid: true,
+        draw(ctx, ox, oy, prop) {
+          const empty = typeof prop.empty === 'function' ? prop.empty() : false;
+          box(ctx, ox, oy, -0.38, -0.34, 0.76, 0.68, 48, '#343941', 7);
+          const c = p(ox, oy, 0, 0.25);
+          ctx.fillStyle = '#252a31';
+          ctx.fillRect(c.x - 17, c.y - 46, 34, 31);
+          ctx.strokeStyle = PAL.brass;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(c.x - 17, c.y - 46, 34, 31);
+          ctx.beginPath();
+          ctx.arc(c.x + 7, c.y - 31, 6, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.fillStyle = PAL.brassLight;
+          ctx.fillRect(c.x - 11, c.y - 33, 9, 3);
+          ctx.font = 'bold 7px Georgia';
+          ctx.textAlign = 'center';
+          ctx.fillText(empty ? 'EMPTY' : 'CLIENT', c.x, c.y - 51);
+          if (!empty) {
+            for (const [dx, dy] of [[-9, -11], [0, -9], [9, -12], [-3, -15], [6, -17]]) {
+              ball(ctx, c.x + dx, c.y + dy, 3, PAL.brassLight);
+            }
+          }
         },
       },
       sofa: {
@@ -2832,6 +3201,7 @@
     // OSRS-style yellow hover text, and the minimap (parchment floor plan).
 
     const { state, maxEthics } = require("js/state.js");
+    const { formatBillableTime } = require("js/data/work.js");
 
     const $ = (id) => document.getElementById(id);
 
@@ -2848,6 +3218,8 @@
       const streakEl = $('stat-streak');
       streakEl.querySelector('b').textContent = `x${state.streak}`;
       streakEl.classList.toggle('hot', state.streak >= 2);
+
+      $('stat-billable').querySelector('b').textContent = formatBillableTime(state.billableStudyMs);
     }
 
     function setZoneName(name) {
@@ -2911,6 +3283,50 @@
       ctx.strokeRect(ox, oy, s * zone.w, s * zone.h);
     }
     Object.assign(exports, { updateHUD, setZoneName, toast, hoverLabel, drawMinimap });
+  },
+  "js/data/work.js": (exports, require) => {
+    // Shared economy values for the office's repeatable work and NPC interactions.
+    // Keeping them in a small data module makes the launch promises testable.
+
+    const DOC_REVIEW_CYCLE_MS = 60_000;
+    const DOC_REVIEW_REWARD = 5;
+    const COFFEE_ETHICS_RESTORE = 2;
+    const APARTMENT_FOOD_COST = 5;
+    const RAMEN_ETHICS_RESTORE = 5;
+    const COOKED_MEAL_ETHICS_RESTORE = 30;
+    const LINDA_TIP_COST = 5;
+    const RILEY_HINT_COST = 100;
+    const WHISKEY_ETHICS_DAMAGE = 2;
+    const WHISKEY_SLOW_MS = 40_000;
+    const MONEYBAGS_SAFE_GOLD = 6_000;
+    const MONEYBAGS_ETHICS_DAMAGE = 99;
+    const MONEYBAGS_GRACE_PURCHASES = 2;
+    const LAWYER_ASSISTANCE_PHONE = '866-828-0022';
+    const LAWYER_ASSISTANCE_URL = 'https://nvbar.org/for-lawyers/resources/wellbeing/lcl/';
+
+    function rileyHintEligible(upgrades) {
+      return upgrades.includes('paralegal') && upgrades.includes('subscription');
+    }
+
+    // Beta rebalance: ethics violations hurt. A fresh 100-Ethics attorney is
+    // disbarred by THREE consecutive wrong answers (30 + 45 + 45), not four.
+    function wrongAnswerDamage(wrongStreak, rileyHired = false) {
+      const damage = wrongStreak >= 4 ? 60 : wrongStreak >= 2 ? 45 : 30;
+      return rileyHired ? Math.ceil(damage / 2) : damage;
+    }
+
+    function moneybagsAuditTriggered(purchasesAfterTheft) {
+      return purchasesAfterTheft > MONEYBAGS_GRACE_PURCHASES;
+    }
+
+    function formatBillableTime(milliseconds = 0) {
+      const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = totalSeconds % 60;
+      return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+    Object.assign(exports, { DOC_REVIEW_CYCLE_MS, DOC_REVIEW_REWARD, COFFEE_ETHICS_RESTORE, APARTMENT_FOOD_COST, RAMEN_ETHICS_RESTORE, COOKED_MEAL_ETHICS_RESTORE, LINDA_TIP_COST, RILEY_HINT_COST, WHISKEY_ETHICS_DAMAGE, WHISKEY_SLOW_MS, MONEYBAGS_SAFE_GOLD, MONEYBAGS_ETHICS_DAMAGE, MONEYBAGS_GRACE_PURCHASES, LAWYER_ASSISTANCE_PHONE, LAWYER_ASSISTANCE_URL, rileyHintEligible, wrongAnswerDamage, moneybagsAuditTriggered, formatBillableTime });
   },
   "js/ui/dialogue.js": (exports, require) => {
     // Dialogue box: speaker + text + choice buttons. The same component drives
@@ -6839,9 +7255,9 @@
       { id: 'homedesk', name: 'Clock', cost: 260,
         desc: 'Adds a wall clock. Keeping a healthy sleep schedule makes bed rest restore +10 more Ethics.' },
       { id: 'kitchen', name: 'Kitchen Upgrade', cost: 400,
-        desc: '+10 max Ethics and faster rest. Cooking food in your kitchen fuels ethical decision-making ability.' },
+        desc: '+10 max Ethics and faster rest. Cook a meal for 5 gold to restore 30 Ethics.' },
       { id: 'cityview', name: 'City View Apartment', cost: 1200,
-        desc: '+25% gold from correct answers. Adds a skyline window, television, and a couch where you can sit and watch.' },
+        desc: '+25% gold from correct answers. Adds a skyline window and a couch where you can sit and enjoy the view.' },
     ];
 
     function findUpgrade(id) {
@@ -8151,29 +8567,86 @@
     ];
     Object.assign(exports, { RULE_LIBRARY });
   },
-  "js/data/work.js": (exports, require) => {
-    // Shared economy values for the office's repeatable work and NPC interactions.
-    // Keeping them in a small data module makes the launch promises testable.
+  "js/data/feedback.js": (exports, require) => {
+    // Email HR — LawScape's bug-report and feedback channel, played in character.
+    //
+    // Hardsell & Firestone's Human Resources department has been "temporarily
+    // unstaffed" since 1987, so every message the player sends "to HR" is really a
+    // hand-off to the humans who can actually fix things: the open-source
+    // developers. This module transmits nothing anywhere. It only formats the
+    // player's text into a report and builds a prefilled GitHub-issue URL that the
+    // PLAYER may choose to open (and can edit before submitting), preserving the
+    // game's no-backend, no-tracking promise.
 
-    const DOC_REVIEW_CYCLE_MS = 60_000;
-    const DOC_REVIEW_REWARD = 5;
-    const COFFEE_ETHICS_RESTORE = 2;
-    const LINDA_TIP_COST = 5;
-    const RILEY_HINT_COST = 100;
-    const WHISKEY_ETHICS_DAMAGE = 2;
-    const WHISKEY_SLOW_MS = 40_000;
-    const LAWYER_ASSISTANCE_PHONE = '866-828-0022';
-    const LAWYER_ASSISTANCE_URL = 'https://nvbar.org/for-lawyers/resources/wellbeing/lcl/';
+    const GAME_VERSION = '0.1.0-beta';
+    const PROJECT_REPO_URL = 'https://github.com/joelakaufmann-lgtm/lawscape';
+    const PROJECT_ISSUES_URL = `${PROJECT_REPO_URL}/issues`;
 
-    function rileyHintEligible(upgrades) {
-      return upgrades.includes('paralegal') && upgrades.includes('subscription');
+    const HR_CATEGORIES = [
+      {
+        id: 'bug',
+        label: '🐛 Bug Report — something in the game is broken',
+        titleTag: '[Bug]',
+        reply: 'Thank you for contacting Human Resources. HR handles people problems, '
+          + 'and after careful review, HR has determined that the game engine is not a person. '
+          + 'Your report has therefore been forwarded — unread, per longstanding firm tradition — '
+          + 'to the developers, who unlike HR are known to answer their inbox.',
+      },
+      {
+        id: 'conditions',
+        label: '📎 Complaint — working conditions at Hardsell & Firestone',
+        titleTag: '[HR Complaint]',
+        reply: 'Human Resources acknowledges your complaint regarding working conditions at '
+          + 'Hardsell & Firestone. HR notes that the firm already provides: one (1) porthole window '
+          + '(2,000 gold), motivational artwork consisting of one (1) dot, and a bar cart that is '
+          + 'somehow a wellness initiative. Your complaint has been added to the pile. The pile is '
+          + 'load-bearing. Management thanks you for your candor and reminds you that candor is billable.',
+      },
+      {
+        id: 'idea',
+        label: '💡 Suggestion to Management',
+        titleTag: '[Suggestion]',
+        reply: 'Management thanks you for your suggestion and confirms it has been placed in the '
+          + 'Suggestion Box. Jim Hardsell maintains that the Suggestion Box is not a shredder, and HR '
+          + 'has found no admissible evidence to the contrary. Suggestions that should actually happen '
+          + 'may be escalated to the developers below.',
+      },
+    ];
+
+    function findHrCategory(id) {
+      return HR_CATEGORIES.find((category) => category.id === id) || HR_CATEGORIES[0];
     }
 
-    function wrongAnswerDamage(wrongStreak, rileyHired = false) {
-      const damage = wrongStreak >= 4 ? 40 : wrongStreak >= 2 ? 30 : 20;
-      return rileyHired ? Math.ceil(damage / 2) : damage;
+    // Plain-markdown report used for both the GitHub issue body and the
+    // copy-to-clipboard fallback. `context` is assembled by the caller from game
+    // state the player can already see on screen; nothing in it identifies anyone.
+    function hrReportText(category, subject, message, context) {
+      return [
+        `**${category.label}** — filed from the LawScape HR terminal.`,
+        '',
+        `**Subject:** ${subject}`,
+        '',
+        message,
+        '',
+        '---',
+        '',
+        '_Context the HR terminal volunteered (edit or delete freely — none of it identifies you):_',
+        '',
+        `- Game version: ${context.version} · Zone: ${context.zone} · Scenarios answered: `
+          + `${context.casesDone} · Ethics: ${context.ethics}/${context.ethicsMax} · Gold: `
+          + `${context.gold} · Upgrades: ${context.upgrades}`,
+        `- Browser: ${context.userAgent}`,
+        '',
+        '_Complaints about working conditions at the fictional firm are considered feature requests._',
+      ].join('\n');
     }
-    Object.assign(exports, { DOC_REVIEW_CYCLE_MS, DOC_REVIEW_REWARD, COFFEE_ETHICS_RESTORE, LINDA_TIP_COST, RILEY_HINT_COST, WHISKEY_ETHICS_DAMAGE, WHISKEY_SLOW_MS, LAWYER_ASSISTANCE_PHONE, LAWYER_ASSISTANCE_URL, rileyHintEligible, wrongAnswerDamage });
+
+    function hrIssueUrl(category, subject, message, context) {
+      const title = `${category.titleTag} ${subject}`.trim();
+      const body = hrReportText(category, subject, message, context);
+      return `${PROJECT_ISSUES_URL}/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
+    }
+    Object.assign(exports, { GAME_VERSION, PROJECT_REPO_URL, PROJECT_ISSUES_URL, HR_CATEGORIES, findHrCategory, hrReportText, hrIssueUrl });
   }
   };
   const cache = Object.create(null);

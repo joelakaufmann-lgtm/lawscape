@@ -2,6 +2,7 @@
 // OSRS-style yellow hover text, and the minimap (parchment floor plan).
 
 import { state, maxEthics } from '../state.js';
+import { formatBillableTime } from '../data/work.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -18,6 +19,8 @@ export function updateHUD() {
   const streakEl = $('stat-streak');
   streakEl.querySelector('b').textContent = `x${state.streak}`;
   streakEl.classList.toggle('hot', state.streak >= 2);
+
+  $('stat-billable').querySelector('b').textContent = formatBillableTime(state.billableStudyMs);
 }
 
 export function setZoneName(name) {

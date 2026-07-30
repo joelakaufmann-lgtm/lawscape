@@ -29,9 +29,9 @@ export const APARTMENT_UPGRADES = [
   { id: 'homedesk', name: 'Clock', cost: 260,
     desc: 'Adds a wall clock. Keeping a healthy sleep schedule makes bed rest restore +10 more Ethics.' },
   { id: 'kitchen', name: 'Kitchen Upgrade', cost: 400,
-    desc: '+10 max Ethics and faster rest. Cooking food in your kitchen fuels ethical decision-making ability.' },
+    desc: '+10 max Ethics and faster rest. Cook a meal for 5 gold to restore 30 Ethics.' },
   { id: 'cityview', name: 'City View Apartment', cost: 1200,
-    desc: '+25% gold from correct answers. Adds a skyline window, television, and a couch where you can sit and watch.' },
+    desc: '+25% gold from correct answers. Adds a skyline window and a couch where you can sit and enjoy the view.' },
 ];
 
 export function findUpgrade(id) {

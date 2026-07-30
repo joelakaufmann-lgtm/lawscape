@@ -12,6 +12,13 @@ and improve your practice without losing your license.
 The game is plain HTML, CSS, and JavaScript. It has no account, backend,
 tracking, external assets, or runtime dependencies.
 
+The thesis is simple: **legal learning should be fun** — and it should be fun
+to learn how lawyers in other countries answer the same ethical questions.
+The beta ships Arizona- and Nevada-cited scenarios, a California reference
+shelf, and a 28-question UK SQE-style pack — the first passport stamp. A full
+jurisdiction selector (California, Nevada, Arizona) and a **Global Law Firm**
+mode with questions from around the world are on the [roadmap](ROADMAP.md).
+
 ## Play now
 
 Play LawScape  (https://joelakaufmann-lgtm.github.io/lawscape/)
@@ -49,7 +56,7 @@ Your progress is stored only in that browser.
 - Office characters Liz Loza, Riley Readsalot, Jim Hardsell, and Linda
   Firestone, each with a distinct role or interaction.
 - Gold, Ethics health, answer streaks, rest, upgrades, and persistent saves.
-- Wrong-answer damage rises from 20 to 30 and then 40 during a consecutive
+- Wrong-answer damage rises from 30 to 45 and then 60 during a consecutive
   mistake streak; hiring Riley Readsalot for 2,000 gold halves that damage.
 - Purchasable coffee restores two Ethics points per drink, and Linda sells
   five-gold ethics tips after steering new players toward hiring Riley.
@@ -58,8 +65,9 @@ Your progress is stored only in that browser.
 - Office upgrades add Liz’s chair, houseplants, a tiny porthole window, and
   modern art; Liz’s mood and dialogue improve as working conditions do.
 - The City View Apartment upgrade adds a wall-mounted skyline window and a
-  couch positioned in front of an interactive television. The kitchen adds a
-  stove, fridge, and ten max Ethics; the Clock adds ten extra Ethics to rest.
+  couch where the player can enjoy the view. Before buying the kitchen, ramen
+  costs five gold and restores five Ethics; afterward, a cooked meal costs five
+  gold and restores 30. The Clock adds ten extra Ethics to rest.
 - Jim’s bar cart teaches an impairment lesson: a drink costs two Ethics and
   slows movement for 40 seconds. A second attempt directs Nevada attorneys to
   the State Bar’s confidential
@@ -68,10 +76,19 @@ Your progress is stored only in that browser.
 - A professional record, NPC conversations, travel, minimap, and responsive
   desktop/mobile controls.
 - Disbarment at zero Ethics, which resets the saved game.
+- An in-character **✍ Email HR** desk in BarMail for bug reports and
+  complaints about the working conditions of the virtual firm. HR never
+  answers; your message becomes a prefilled GitHub issue you can review and
+  file with the developers (nothing is sent automatically).
 
 The courtroom is open for exploration but intentionally has no people or
 hearings yet. Interactive court simulation remains a future feature described
 in [ROADMAP.md](ROADMAP.md).
+
+LawScape is a **beta**, and the answer key intentionally ships in the open:
+the scenario data under `js/data/` is human-readable, and the game explains
+the governing rule after every answer. A future release adds a hidden
+answer key and scored mode — see [ROADMAP.md](ROADMAP.md).
 
 ## Run the developer preview
 

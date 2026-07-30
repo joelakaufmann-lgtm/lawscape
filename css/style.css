@@ -79,6 +79,10 @@ button:focus-visible, input:focus-visible, summary:focus-visible, #world:focus-v
 #ethics-fill.danger { background: linear-gradient(180deg, #c14d3d, #8f2f23); }
 #ethics-num { font-size: 12px; color: #55504a; }
 #stat-streak.hot b { color: #b3541e; }
+#stat-billable b {
+  color: var(--navy);
+  font-variant-numeric: tabular-nums;
+}
 #hud-zone {
   background: var(--navy); color: var(--parchment);
   border: 2px solid var(--brass); border-radius: 6px;
@@ -360,6 +364,44 @@ button:focus-visible, input:focus-visible, summary:focus-visible, #world:focus-v
 #email-delta .loss { color: #9c2b1d; font-weight: bold; }
 #email-delta .muted { color: #888; font-size: 12px; }
 
+/* ---------- Email HR (bug reports & working-conditions complaints) ---------- */
+#email-hr-open {
+  padding: 3px 8px; font: bold 10px/1.2 Verdana, sans-serif;
+  background: var(--burgundy); border-color: var(--brass); white-space: nowrap;
+}
+.hr-form label { display: block; font-size: 13px; color: #55504a; margin-bottom: 10px; }
+.hr-form select, .hr-form input, .hr-form textarea {
+  display: block; width: 100%; margin-top: 4px;
+  font-family: inherit; font-size: 14px; padding: 7px 10px;
+  border: 2px solid var(--brass); border-radius: 4px;
+  background: #fff; color: var(--ink);
+}
+.hr-form textarea {
+  resize: vertical; min-height: 110px;
+  font-family: Verdana, Geneva, sans-serif; font-size: 13px; line-height: 1.5;
+}
+.hr-fine-print { font-size: 11px; color: #77726a; line-height: 1.45; margin: 2px 0 12px; }
+.hr-reply {
+  background: #fffaf0; border: 1px solid #c7b47d; border-left: 4px solid var(--burgundy);
+  border-radius: 6px; padding: 12px 14px; margin-bottom: 12px;
+}
+.hr-reply h4 {
+  font-size: 13px; color: var(--burgundy); margin-bottom: 8px;
+  text-transform: uppercase; letter-spacing: 1px;
+}
+.hr-reply p { font-size: 13px; line-height: 1.55; color: #333; margin-bottom: 8px; }
+.hr-reply .hr-ticket { font-size: 11px; color: #77726a; margin-bottom: 0; }
+.hr-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.hr-actions button { font-size: 13px; }
+.hr-copy-fallback {
+  display: block; width: 100%; margin-top: 10px; min-height: 130px;
+  font: 11px/1.5 Verdana, Geneva, sans-serif; padding: 8px;
+  border: 2px solid var(--brass); border-radius: 4px; background: #fff;
+}
+.thesis { font-size: 12px; color: #55504a; margin-top: 12px; line-height: 1.45; }
+.hr-note { font-size: 11px; color: #77726a; margin-top: 8px; line-height: 1.4; }
+.hr-note a { color: var(--navy); }
+
 /* ---------- disbarment / game over ---------- */
 #gameover {
   position: absolute; inset: 0; z-index: 40;
@@ -528,6 +570,7 @@ button:focus-visible, input:focus-visible, summary:focus-visible, #world:focus-v
   #hud { padding: 7px; grid-template-columns: 1fr; }
   #hud-stats { width: 100%; justify-content: space-between; gap: 5px; padding: 6px 8px; }
   .stat { font-size: 13px; }
+  #stat-billable { font-size: 12px; }
   #ethics-bar { width: clamp(58px, 20vw, 90px); }
   #ethics-num { display: none; }
   #hud-zone { grid-column: 1; grid-row: 2; padding: 4px 9px; }

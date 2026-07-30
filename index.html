@@ -28,6 +28,7 @@
           <span id="ethics-num">100/100</span>
         </span>
         <span class="stat" id="stat-streak" title="Correct-answer streak">🔥 <b>x0</b></span>
+        <span class="stat" id="stat-billable" title="Billable study time — runs only while BarMail is open in a visible tab">⏱ <b>0:00:00</b></span>
       </div>
       <div id="hud-zone">Your Law Office</div>
       <div id="hud-buttons" aria-label="Quick actions">
@@ -89,6 +90,7 @@
               <option value="juris">State of Juris</option>
             </select>
           </label>
+          <button id="email-hr-open" type="button" title="Report a bug or complain about the working conditions of this virtual law firm">✍ Email HR</button>
           <span id="email-difficulty"></span>
           <span id="email-source" class="hidden"></span>
           <button id="email-hint" class="hidden" type="button">Ask Riley for Hint · 100 gold</button>
@@ -146,9 +148,14 @@
           <p><b>Keyboard:</b> WASD or arrow keys move. B opens BarMail, R opens your record, T opens travel, and Escape closes a window.</p>
         </details>
         <button id="btn-reset" class="hidden small danger-link">Reset saved game</button>
+        <p class="thesis">Our thesis: legal learning should be <i>fun</i> — and it should be
+        fun to learn how lawyers around the world answer the same ethical questions. The UK
+        SQE pack is the first passport stamp; a jurisdiction selector (California, Nevada,
+        Arizona) and a Global Law Firm mode are on the roadmap.</p>
         <p class="disclaimer">LawScape is a fictional educational game. It is not legal advice
         and does not create an attorney-client relationship. US and England-and-Wales rules
         are simplified for gameplay — always read the operative text.</p>
+        <p class="hr-note">Beta build — spotted a bug? <a href="https://github.com/joelakaufmann-lgtm/lawscape/issues" target="_blank" rel="noopener">Email HR</a>, which forwards everything, unread, to the developers on GitHub.</p>
       </div>
     </div>
 

@@ -30,6 +30,8 @@ test('the main office connects the requested workspaces and filing cabinet', () 
   );
   assert.ok(filingStation);
   assert.ok(filingStation.x <= 2, 'document review should be in the left-hand corner');
+  const upgradeCabinet = office.props.find((prop) => prop.interact?.action === 'shop_office');
+  assert.equal(upgradeCabinet.x, filingStation.x + 2);
   assert.ok(office.props.some(
     (prop) => prop.type === 'bookshelf' && prop.interact?.action === 'rules',
   ));
@@ -38,6 +40,10 @@ test('the main office connects the requested workspaces and filing cabinet', () 
   for (const required of ['officechair', 'plant', 'porthole', 'dotpainting']) {
     assert.ok(office.props.some((prop) => prop.type === required), `missing office upgrade prop ${required}`);
   }
+  const liz = office.npcs.find((npc) => npc.id === 'secretary');
+  const porthole = office.props.find((prop) => prop.type === 'porthole');
+  assert.equal(porthole.x, 0);
+  assert.ok(Math.abs(porthole.y - liz.y) <= 1, 'the porthole should be beside Liz');
   assert.equal(office.props.some((prop) => prop.type === 'sofa'), false);
 });
 
@@ -48,6 +54,11 @@ test('partner offices and conference room contain their defining fixtures', () =
   assert.ok(ZONES.corner_office.props.some(
     (prop) => prop.type === 'barcart' && prop.interact?.action === 'whiskey',
   ));
+  const safe = ZONES.corner_office.props.find(
+    (prop) => prop.type === 'safe' && prop.interact?.action === 'moneybags_safe',
+  );
+  assert.ok(safe);
+  assert.ok(safe.x <= 2 && safe.y >= 4, 'the safe should sit left and below the windows');
   const jimWindows = ZONES.corner_office.props.filter((prop) => prop.type === 'wallwindow');
   assert.ok(jimWindows.length >= 3);
   assert.ok(jimWindows.every((prop) => prop.y === 0));
@@ -64,26 +75,33 @@ test('partner offices and conference room contain their defining fixtures', () =
   assert.ok(ZONES.conference_room.props.some((prop) => prop.type === 'conftable'));
 });
 
-test('the City View Apartment upgrade adds its wall window, television, and sofa', () => {
+test('the City View Apartment upgrade adds its wall window and sofa without a television', () => {
   const cityViewProps = ZONES.apartment.props.filter(
-    (prop) => ['wallwindow', 'tv', 'sofa'].includes(prop.type),
+    (prop) => ['wallwindow', 'sofa'].includes(prop.type),
   );
-  assert.deepEqual(cityViewProps.map((prop) => prop.type), ['wallwindow', 'tv', 'sofa']);
+  assert.deepEqual(cityViewProps.map((prop) => prop.type), ['wallwindow', 'sofa']);
   assert.equal(cityViewProps.find((prop) => prop.type === 'wallwindow').y, 0);
   assert.ok(cityViewProps.every((prop) => typeof prop.visible === 'function'));
-  const tv = cityViewProps.find((prop) => prop.type === 'tv');
   const sofa = cityViewProps.find((prop) => prop.type === 'sofa');
-  assert.ok(sofa.y > tv.y, 'the couch should sit in front of the TV');
   assert.equal(sofa.interact?.action, 'watch_tv');
+  assert.match(sofa.interact?.label, /City View/);
+  assert.equal(ZONES.apartment.props.some((prop) => prop.type === 'tv'), false);
 });
 
-test('apartment upgrades add a stove, fridge, and wall-mounted clock', () => {
+test('apartment food, wardrobe, and clock fixtures match their upgraded layout', () => {
   const apartment = ZONES.apartment;
-  assert.ok(apartment.props.some((prop) => prop.type === 'stove'));
+  assert.ok(apartment.props.some(
+    (prop) => prop.type === 'kitchenette' && prop.interact?.action === 'eat_ramen',
+  ));
+  assert.ok(apartment.props.some(
+    (prop) => prop.type === 'stove' && prop.interact?.action === 'cook_meal',
+  ));
   assert.ok(apartment.props.some((prop) => prop.type === 'fridge'));
+  assert.ok(apartment.props.some((prop) => prop.type === 'wardrobe' && prop.x <= 2));
   const clock = apartment.props.find((prop) => prop.type === 'wallclock');
   assert.ok(clock);
   assert.equal(clock.y, 0);
+  assert.ok(clock.x <= 6, 'the clock should sit far enough inward to render fully');
 });
 
 test('the courtroom is furnished and intentionally empty', () => {

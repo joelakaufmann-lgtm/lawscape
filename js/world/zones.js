@@ -4,7 +4,7 @@
 //
 // Tile chars: 'w' wood  'r' rug  'x' void (never walkable)
 
-import { hasUpgrade } from '../state.js';
+import { hasUpgrade, state } from '../state.js';
 
 const inRect = (x, y, x0, y0, x1, y1) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
 
@@ -30,7 +30,7 @@ export const ZONES = {
       { type: 'bookshelf', x: 10, y: 1, full: () => hasUpgrade('subscription'),
         interact: { label: 'Ethics Treatises — Rule Library', action: 'rules' } },
       { type: 'clientchair', x: 5, y: 4 },
-      { type: 'cabinet', x: 12, y: 3,
+      { type: 'cabinet', x: 3, y: 3,
         interact: { label: 'Office Upgrades Catalog', action: 'shop_office' } },
       { type: 'filingstation', x: 1, y: 3,
         interact: { label: 'Filing Cabinet — Review Documents', action: 'doc_review' } },
@@ -39,7 +39,7 @@ export const ZONES = {
       { type: 'officechair', x: 3, y: 8, visible: () => hasUpgrade('liz_chair') },
       { type: 'plant', x: 1, y: 6, visible: () => hasUpgrade('houseplants') },
       { type: 'plant', x: 4, y: 1, visible: () => hasUpgrade('houseplants') },
-      { type: 'porthole', x: 5, y: 0, visible: () => hasUpgrade('office_window') },
+      { type: 'porthole', x: 0, y: 6, visible: () => hasUpgrade('office_window') },
       { type: 'dotpainting', x: 8, y: 0, visible: () => hasUpgrade('artwork') },
     ],
     portals: [
@@ -78,7 +78,9 @@ export const ZONES = {
       { type: 'executivedesk', x: 3, y: 3, nameplate: true },
       { type: 'clientchair', x: 3, y: 5 },
       { type: 'clientchair', x: 6, y: 5 },
-      { type: 'plant', x: 1, y: 5 },
+      { type: 'plant', x: 2, y: 6 },
+      { type: 'safe', x: 1, y: 5, empty: () => state.moneybagsStolen,
+        interact: { label: 'Mr. Hardsell’s Safe — Client Gold', action: 'moneybags_safe' } },
       { type: 'barcart', x: 8, y: 5,
         interact: { label: 'Bar Cart — Decanter and Glass', action: 'whiskey' } },
     ],
@@ -189,20 +191,21 @@ export const ZONES = {
     props: [
       { type: 'bed', x: 1, y: 1, tier: () => (hasUpgrade('mattress') ? 1 : 0),
         interact: { label: 'Bed — Rest (restore Ethics)', action: 'rest' } },
-      { type: 'kitchenette', x: 5, y: 1, visible: () => !hasUpgrade('kitchen') },
-      { type: 'stove', x: 5, y: 1, visible: () => hasUpgrade('kitchen') },
+      { type: 'kitchenette', x: 5, y: 1, visible: () => !hasUpgrade('kitchen'),
+        interact: { label: 'Ramen Noodles — 5 gold / +5 Ethics', action: 'eat_ramen' } },
+      { type: 'stove', x: 5, y: 1, visible: () => hasUpgrade('kitchen'),
+        interact: { label: 'Kitchen — Cook Meal (5 gold / +30 Ethics)', action: 'cook_meal' } },
       { type: 'fridge', x: 7, y: 1, visible: () => hasUpgrade('kitchen') },
       { type: 'coffeemachine', x: 8, y: 2, owned: () => hasUpgrade('coffee'),
         interact: { label: 'Coffee Machine', action: 'flavor_coffee' } },
-      { type: 'wardrobe', x: 8, y: 4, interact: { label: 'Wardrobe', action: 'wardrobe' } },
+      { type: 'wardrobe', x: 1, y: 5, interact: { label: 'Wardrobe', action: 'wardrobe' } },
       { type: 'cabinet', x: 1, y: 4,
         interact: { label: 'Furniture Catalog', action: 'shop_apartment' } },
-      { type: 'wallclock', x: 8, y: 0, visible: () => hasUpgrade('homedesk') },
+      { type: 'wallclock', x: 6, y: 0, visible: () => hasUpgrade('homedesk') },
       { type: 'wallwindow', x: 3, y: 0, visible: () => hasUpgrade('cityview') },
-      { type: 'tv', x: 5, y: 3, visible: () => hasUpgrade('cityview') },
       { type: 'sofa', x: 4, y: 5, visible: () => hasUpgrade('cityview'),
-        interact: { label: 'Couch — Sit and Watch TV', action: 'watch_tv' } },
-      { type: 'plant', x: 1, y: 6 },
+        interact: { label: 'Couch — Sit and Enjoy the City View', action: 'watch_tv' } },
+      { type: 'plant', x: 2, y: 6 },
     ],
     portals: [
       { x: 4, y: 8, label: 'Leave the Apartment', travel: true },

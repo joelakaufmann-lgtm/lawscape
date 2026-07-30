@@ -8,6 +8,7 @@
 const SAVE_KEY = 'lawscape_save_v2';
 
 export const BASE_MAX_ETHICS = 100;
+export const MONEYBAGS_MAX_ETHICS = 50;
 
 export function freshState() {
   return {
@@ -25,8 +26,12 @@ export function freshState() {
     casesDone: 0,          // total scenarios answered
     correctDone: 0,        // total answered correctly
     documentsReviewed: 0,  // completed one-minute document-review cycles
+    billableStudyMs: 0,    // visible time spent reading/answering BarMail
     tipsPurchased: 0,      // ethics tips purchased from Linda Firestone
     hintsPurchased: 0,     // 100-gold relevant-rule research from Riley
+    hrEmailsSent: 0,       // emails to HR (bug reports / working-conditions complaints)
+    moneybagsStolen: false,    // client gold taken from Jim Hardsell's safe
+    moneybagsPurchases: 0,     // upgrade purchases made after taking the gold
     seen: [],              // scenario ids already served this cycle
     practicePack: 'mixed', // 'mixed' | 'sqe' | 'mpre' | 'juris'
     upgrades: [],
@@ -51,6 +56,7 @@ export function hasUpgrade(id) {
 }
 
 export function maxEthics() {
+  if (state.moneybagsStolen) return MONEYBAGS_MAX_ETHICS;
   return BASE_MAX_ETHICS
     + (hasUpgrade('mattress') ? 20 : 0)
     + (hasUpgrade('kitchen') ? 10 : 0)
@@ -83,6 +89,7 @@ export function load() {
     if (!raw) return false;
     const data = JSON.parse(raw);
     replaceState(Object.assign(freshState(), data));
+    state.ethics = Math.min(state.ethics, maxEthics());
     return true;
   } catch { return false; }
 }
