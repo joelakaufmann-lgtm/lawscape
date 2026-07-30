@@ -31,12 +31,13 @@ Your progress is stored only in that browser.
 
 ## What is playable
 
-- 90 legal-ethics scenarios involving trust accounting, conflicts, candor,
+- 118 legal-ethics scenarios involving trust accounting, conflicts, candor,
   confidentiality, the no-contact rule, solicitation, fee splitting,
   spoliation, and reporting misconduct.
-- Three progressive difficulty tiers, including 69 original MPRE-style
-  workplace-email scenarios with source notes and official NCBE preparation
-  links.
+- Three progressive difficulty tiers, including 69 original MPRE-style and
+  28 original UK SQE-style workplace-email scenarios.
+- A BarMail practice-pack selector for a mixed inbox, UK SQE Ethics, US MPRE,
+  or the fictional State of Juris core questions.
 - Character creation with appearance options.
 - Six explorable zones: the main office, Jim Hardsell’s corner office, Linda
   Firestone’s office, a conference room, an apartment, and a furnished but
@@ -99,6 +100,7 @@ module automatically. To refresh either source independently:
 ```sh
 npm run rules:build
 npm run mpre:build
+npm run sqe:build
 ```
 
 ## Publish on GitHub Pages
@@ -135,7 +137,7 @@ Packaged ethics-agent archives are intentionally excluded from the public
 repository. The generated player-readable rule snapshot and supplied
 `California References/` bundle are committed for the treatise shelf; gameplay
 scenarios live in `js/data/ethics.js`, `js/data/mpre.js`, and generated
-`js/data/mpre-additional.js`.
+`js/data/mpre-additional.js` and `js/data/sqe.js`.
 
 The MPRE-style scenarios are original LawScape adaptations for educational
 practice. They are not official NCBE questions and do not reproduce secure
@@ -143,6 +145,13 @@ exam content. See [MPRE_Associate_Email_Scenarios.md](MPRE_Associate_Email_Scena
 [the additional 20-question set](MPRE_Associate_Email_Scenarios_Additional_20.md),
 and [the additional 41-question set](MPRE_Associate_Email_Scenarios_Additional_41.md)
 for local scenario notes and official reference links.
+
+The [UK SQE Ethics Email Pack](SQE_Ethics_Email_Scenarios_UK.md) contains
+28 original England-and-Wales scenarios with an explanatory answer key. It
+uses public topic and format cues from the supplied Quizlet export, the
+[SQE1 Prep ethics revision guide](https://sqe1prep.co.uk/blog/sqe1-ethics-professional-conduct-revision-guide),
+and the [SRA/Kaplan SQE1 sample-question page](https://sqe.sra.org.uk/assessments/sqe1-assessments/sqe1-sample-questions).
+It is not an official SQE question set.
 
 ## Educational disclaimer
 

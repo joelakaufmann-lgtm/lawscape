@@ -369,14 +369,26 @@ function currentDifficulty() {
   return 3;
 }
 
+const PRACTICE_PACKS = new Set(['mixed', 'sqe', 'mpre', 'juris']);
+
+function scenarioMatchesPack(scenario, pack) {
+  if (pack === 'sqe') return scenario.sourceType === 'sqe-style';
+  if (pack === 'mpre') return scenario.sourceType === 'mpre-style';
+  if (pack === 'juris') return scenario.sourceType === 'lawscape';
+  return true;
+}
+
 function pickScenario() {
   const difficulty = currentDifficulty();
-  let pool = SCENARIOS.filter(
-    (scenario) => scenario.difficulty === difficulty && !state.seen.includes(scenario.id),
-  );
+  const selectedPack = PRACTICE_PACKS.has(state.practicePack) ? state.practicePack : 'mixed';
+  const packPool = SCENARIOS.filter((scenario) => scenarioMatchesPack(scenario, selectedPack));
+  const preferredDifficulty = packPool.filter((scenario) => scenario.difficulty === difficulty);
+  const eligible = preferredDifficulty.length ? preferredDifficulty : packPool;
+  let pool = eligible.filter((scenario) => !state.seen.includes(scenario.id));
   if (!pool.length) {
-    state.seen = [];
-    pool = SCENARIOS.filter((scenario) => scenario.difficulty === difficulty);
+    const eligibleIds = new Set(eligible.map((scenario) => scenario.id));
+    state.seen = state.seen.filter((id) => !eligibleIds.has(id));
+    pool = eligible;
   }
   return pool[Math.floor(Math.random() * pool.length)];
 }
@@ -390,16 +402,22 @@ function openEmail() {
   $('email-subject').textContent = s.subject;
   $('email-from').textContent = `From: ${s.from} — ${s.role}`;
   $('email-text').textContent = s.body;
-  const levelNames = { 1: 'FOUNDATION', 2: 'PRACTICE', 3: 'MPRE+' };
+  $('email-pack').value = PRACTICE_PACKS.has(state.practicePack) ? state.practicePack : 'mixed';
+  const advancedLabel = s.sourceType === 'sqe-style'
+    ? 'SQE+'
+    : s.sourceType === 'mpre-style' ? 'MPRE+' : 'EXPERT';
+  const levelNames = { 1: 'FOUNDATION', 2: 'PRACTICE', 3: advancedLabel };
   $('email-difficulty').textContent = `LEVEL ${s.difficulty} · ${levelNames[s.difficulty]}`;
 
   const sourceEl = $('email-source');
-  if (s.sourceType === 'mpre-style') {
-    sourceEl.textContent = 'MPRE-STYLE';
+  if (s.sourceType === 'mpre-style' || s.sourceType === 'sqe-style') {
+    sourceEl.textContent = s.sourceType === 'sqe-style' ? 'UK SQE-STYLE' : 'MPRE-STYLE';
     sourceEl.title = s.sourceNote;
     sourceEl.classList.remove('hidden');
+    sourceEl.classList.toggle('sqe-source', s.sourceType === 'sqe-style');
   } else {
     sourceEl.classList.add('hidden');
+    sourceEl.classList.remove('sqe-source');
   }
 
   const ruleEl = $('email-rule');
@@ -479,8 +497,12 @@ function answerEmail(choice) {
     }
     verdictEl.textContent = '✔ Sound professional judgment.';
     verdictEl.className = 'good';
-    explainEl.textContent = `${s.rule}. That is the defensible course — engagement decisions, `
-      + 'trust money, and candor calls like this one are exactly where licenses are won and lost.';
+    const successContext = s.sourceType === 'sqe-style'
+      ? 'That is the defensible course under the SRA framework — careful judgment on client, '
+        + 'court, money, and compliance duties is how practising certificates stay safe.'
+      : 'That is the defensible course — engagement decisions, trust money, and candor calls '
+        + 'like this one are exactly where licenses are won and lost.';
+    explainEl.textContent = `${s.rule}. ${successContext}`;
     deltaEl.innerHTML = `<span class="gain">+${earned} gold</span>`
       + (healed > 0 ? ` &nbsp; <span class="gain">+${healed} Ethics (streak x${state.streak}!)</span>`
                     : ` &nbsp; <span class="muted">streak x${state.streak} — one more for an Ethics heal</span>`);
@@ -499,7 +521,9 @@ function answerEmail(choice) {
       + `<span class="muted">wrong-answer streak x${state.wrongStreak}${rileyNote}</span>`;
   }
 
-  if (s.sourceType === 'mpre-style') appendScenarioSource(explainEl, s);
+  if (s.sourceType === 'mpre-style' || s.sourceType === 'sqe-style') {
+    appendScenarioSource(explainEl, s);
+  }
 
   if (!state.seen.includes(s.id)) state.seen.push(s.id);
   updateHUD();
@@ -515,21 +539,33 @@ function answerEmail(choice) {
 }
 
 function appendScenarioSource(container, scenario) {
+  const isSqe = scenario.sourceType === 'sqe-style';
   const source = document.createElement('div');
   source.className = 'scenario-source';
   source.append('Source note: ');
   const local = document.createElement('a');
-  local.href = scenario.localSourceFile || 'MPRE_Associate_Email_Scenarios.md';
+  local.href = scenario.localSourceFile
+    || (isSqe ? 'SQE_Ethics_Email_Scenarios_UK.md' : 'MPRE_Associate_Email_Scenarios.md');
   local.target = '_blank';
   local.rel = 'noopener';
-  local.textContent = scenario.localSourceFile || 'MPRE Associate Email Scenarios';
+  local.textContent = scenario.localSourceFile
+    || (isSqe ? 'UK SQE Ethics Email Pack' : 'MPRE Associate Email Scenarios');
   source.append(local, ' · ');
   const official = document.createElement('a');
   official.href = scenario.sourceUrl;
   official.target = '_blank';
   official.rel = 'noopener';
-  official.textContent = 'NCBE preparation page';
-  source.append(official, document.createElement('br'), scenario.sourceNote);
+  official.textContent = isSqe ? 'SRA SQE1 sample questions' : 'NCBE preparation page';
+  source.append(official);
+  if (scenario.studyGuideUrl) {
+    const guide = document.createElement('a');
+    guide.href = scenario.studyGuideUrl;
+    guide.target = '_blank';
+    guide.rel = 'noopener';
+    guide.textContent = 'SQE1 ethics revision guide';
+    source.append(' · ', guide);
+  }
+  source.append(document.createElement('br'), scenario.sourceNote);
   container.appendChild(source);
 }
 
@@ -538,6 +574,11 @@ function closeEmail() {
   currentScenario = null;
 }
 $('email-close').addEventListener('click', closeEmail);
+$('email-pack').addEventListener('change', (event) => {
+  state.practicePack = PRACTICE_PACKS.has(event.target.value) ? event.target.value : 'mixed';
+  save();
+  openEmail();
+});
 
 // ---------------------------------------------------------------------------
 // Disbarment
@@ -928,8 +969,9 @@ function openHelp() {
     <div class="help-lede">Your first goal: answer a <b>BarMail</b> dilemma or complete a one-minute document-review cycle to earn gold.</div>
     <div class="row-item"><div class="grow"><h4>💻 BarMail</h4>
       <p>Click your office computer or use the BarMail quick action. Partners and clients send
-      requests — many of them unethical. Questions advance from Foundation to Practice to MPRE+
-      as your record grows.</p></div></div>
+      requests — many of them unethical. Choose Mixed Inbox, UK SQE Ethics, US MPRE, or
+      State of Juris in the toolbar. Questions advance from Foundation to Practice to the
+      advanced tier as your record grows.</p></div></div>
     <div class="row-item"><div class="grow"><h4>🗄 Document Review</h4>
       <p>Use the filing cabinet in the main office. Your attorney sits and reviews files;
       every uninterrupted one-minute cycle earns 5 gold.</p></div></div>

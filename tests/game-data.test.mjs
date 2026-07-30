@@ -21,7 +21,7 @@ import { state, reset, damageEthics, healEthics, maxEthics } from '../js/state.j
 
 test('ethics scenario identifiers are unique and every scenario is playable', () => {
   assert.equal(new Set(SCENARIOS.map((scenario) => scenario.id)).size, SCENARIOS.length);
-  assert.equal(SCENARIOS.length, 90);
+  assert.equal(SCENARIOS.length, 118);
 
   for (const scenario of SCENARIOS) {
     assert.ok(scenario.subject);
@@ -43,15 +43,22 @@ test('ethics scenario identifiers are unique and every scenario is playable', ()
       assert.ok(scenario.sourceNote.includes('not an official NCBE question'));
       assert.match(scenario.sourceUrl, /^https:\/\/www\.ncbex\.org\//);
     }
+    if (scenario.sourceType === 'sqe-style') {
+      assert.ok(scenario.sourceNote.includes('not an official SRA or Kaplan SQE question'));
+      assert.match(scenario.sourceUrl, /^https:\/\/sqe\.sra\.org\.uk\//);
+      assert.match(scenario.studyGuideUrl, /^https:\/\/sqe1prep\.co\.uk\//);
+      assert.equal(scenario.localSourceFile, 'SQE_Ethics_Email_Scenarios_UK.md');
+    }
   }
 });
 
-test('difficulty tiers and MPRE-style practice are available', () => {
+test('difficulty tiers and both exam-style practice packs are available', () => {
   assert.deepEqual(
     [1, 2, 3].map((difficulty) => SCENARIOS.filter((scenario) => scenario.difficulty === difficulty).length),
-    [7, 23, 60],
+    [11, 33, 74],
   );
   assert.equal(SCENARIOS.filter((scenario) => scenario.sourceType === 'mpre-style').length, 69);
+  assert.equal(SCENARIOS.filter((scenario) => scenario.sourceType === 'sqe-style').length, 28);
   assert.equal(
     SCENARIOS.filter((scenario) => scenario.localSourceFile === 'MPRE_Associate_Email_Scenarios_Additional_20.md').length,
     20,
@@ -59,6 +66,12 @@ test('difficulty tiers and MPRE-style practice are available', () => {
   assert.equal(
     SCENARIOS.filter((scenario) => scenario.localSourceFile === 'MPRE_Associate_Email_Scenarios_Additional_41.md').length,
     41,
+  );
+  assert.deepEqual(
+    [1, 2, 3].map((difficulty) => SCENARIOS.filter(
+      (scenario) => scenario.sourceType === 'sqe-style' && scenario.difficulty === difficulty,
+    ).length),
+    [4, 10, 14],
   );
 });
 
@@ -145,6 +158,7 @@ test('reset keeps a stable state reference and restores a new attorney', () => {
   assert.equal(state.hintsPurchased, 0);
   assert.equal(state.wrongStreak, 0);
   assert.equal(state.whiskeyDrinks, 0);
+  assert.equal(state.practicePack, 'mixed');
 });
 
 test('ethics health remains within its allowed range', () => {

@@ -301,6 +301,15 @@ button:focus-visible, input:focus-visible, summary:focus-visible, #world:focus-v
   background: #c2beb4; border-bottom: 2px solid #a8a498;
   padding: 6px 14px; font-size: 12px; color: #444;
 }
+#email-pack-label {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 10px; font-weight: bold; text-transform: uppercase;
+}
+#email-pack {
+  min-height: 24px; max-width: 130px; border: 1px solid #8e897e;
+  border-radius: 4px; background: #f8f6f0; color: #222;
+  padding: 2px 5px; font: 11px Verdana, Geneva, sans-serif;
+}
 #email-rule {
   margin-left: auto; background: var(--parchment); border: 1px solid var(--brass);
   border-radius: 4px; padding: 2px 8px; font-size: 11px; color: var(--navy); font-weight: bold;
@@ -316,6 +325,9 @@ button:focus-visible, input:focus-visible, summary:focus-visible, #world:focus-v
 }
 #email-difficulty { background: var(--navy); color: var(--parchment); }
 #email-source { background: #fff4ce; border: 1px solid var(--brass); color: var(--burgundy); }
+#email-source.sqe-source {
+  background: #e7f0ff; border-color: #315b96; color: #173d70;
+}
 #email-body { background: #fff; overflow-y: auto; padding: 16px 20px; flex: 1; }
 #email-subject { font-size: 18px; font-weight: bold; color: #222; margin-bottom: 4px; }
 #email-from { font-size: 12px; color: #666; border-bottom: 1px solid #ddd; padding-bottom: 8px; margin-bottom: 12px; }
@@ -541,7 +553,12 @@ button:focus-visible, input:focus-visible, summary:focus-visible, #world:focus-v
   #email-window { width: 100%; max-height: none; border-radius: 0; border-width: 0; }
   #email-titlebar { padding: 8px; }
   .email-dot { display: none; }
-  #email-toolbar { gap: 9px; overflow-x: auto; white-space: nowrap; padding: 6px 9px; }
+  #email-toolbar {
+    gap: 7px 9px; flex-wrap: wrap; overflow-x: visible; white-space: normal;
+    padding: 6px 9px;
+  }
+  #email-pack-label { margin-left: auto; }
+  #email-pack { min-height: 30px; }
   #email-rule { margin-left: 0; }
   #email-body { padding: 12px; }
   #email-subject { font-size: 16px; }

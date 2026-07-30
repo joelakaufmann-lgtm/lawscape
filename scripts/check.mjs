@@ -16,7 +16,7 @@ const failures = [];
 const requiredIds = [
   'world', 'title-screen', 'btn-new', 'creator', 'btn-start', 'hud',
   'btn-mail', 'btn-record', 'btn-travel', 'btn-help', 'email', 'panel',
-  'dialogue', 'gameover', 'work-status', 'email-hint',
+  'dialogue', 'gameover', 'work-status', 'email-hint', 'email-pack',
 ];
 
 for (const id of requiredIds) {

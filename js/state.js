@@ -28,6 +28,7 @@ export function freshState() {
     tipsPurchased: 0,      // ethics tips purchased from Linda Firestone
     hintsPurchased: 0,     // 100-gold relevant-rule research from Riley
     seen: [],              // scenario ids already served this cycle
+    practicePack: 'mixed', // 'mixed' | 'sqe' | 'mpre' | 'juris'
     upgrades: [],
     zone: 'office',
     pos: { x: 6, y: 10 },

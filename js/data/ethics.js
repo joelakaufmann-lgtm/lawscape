@@ -16,6 +16,7 @@
 
 import { MPRE_SCENARIOS } from './mpre.js';
 import { ADDITIONAL_MPRE_SCENARIOS } from './mpre-additional.js';
+import { SQE_SCENARIOS } from './sqe.js';
 
 export const STREAK_HEAL = 10;
 
@@ -459,4 +460,5 @@ export const SCENARIOS = [
   })),
   ...MPRE_SCENARIOS,
   ...ADDITIONAL_MPRE_SCENARIOS,
+  ...SQE_SCENARIOS,
 ];
