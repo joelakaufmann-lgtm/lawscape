@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>LawScape — 30-second demo master</title>
+<style>html,body{margin:0;background:#0b1220;overflow:hidden}#film{width:100vw;height:100vh;object-fit:contain}.world{position:absolute;left:-9999px;top:0}</style>
+<canvas id="film" width="1920" height="1080"></canvas>
+<script type="module">
+import { WorldRenderer } from '../../js/engine/renderer.js';
+import { Actor } from '../../js/entities/actor.js';
+import { ZONES } from '../../js/world/zones.js';
+import { state } from '../../js/state.js';
+import { gridToScreen } from '../../js/engine/iso.js';
+import { appearanceLook } from '../../js/data/appearance.js';
+
+const W = 1920, H = 1080, FPS = 30, DUR = 30;
+const canvas = document.querySelector('#film'); let ctx = canvas.getContext('2d', { alpha: false }); const mainCtx = ctx;
+state.upgrades = ['monitor', 'subscription', 'liz_chair', 'houseplants', 'paralegal', 'work_phone', 'artwork', 'mattress', 'coffee', 'wardrobe_rack', 'homedesk', 'kitchen', 'cityview'];
+ZONES.sidebar.props.find((p) => p.type === 'scoreboard').entries = [
+  { name: 'Morgan Q.C.', billableMs: 212 * 60000 }, { name: 'Priya Advocate', billableMs: 187 * 60000 }, { name: 'Sam Solicitor', billableMs: 154 * 60000 }];
+
+// ---------------------------------------------------------------- assets
+const pics = {};
+for (const name of ['title', 'creator', 'hud', 'inbox', 'inbox-sqe', 'inbox-mpre', 'scenario', 'scenario-hover', 'scenario-sqe', 'verdict', 'desk-journal', 'desk-files', 'desk-firm', 'desk-wardrobe', 'highscores', 'derek', 'bart', 'judge', 'travel', 'record']) {
+  const im = new Image(); im.src = `captures/${name}.png`; await im.decode(); pics[name] = im;
+}
+
+// ---------------------------------------------------------------- palette
+const C = { bg: '#0b1220', bg2: '#101a2e', gold: '#d9b76a', goldDim: '#9c8248', cream: '#f4ead8', ink: '#0a0f1a', muted: '#9aa3b2', green: '#7ccf8a', red: '#e96a62', navy: '#1f3a5f', brass: '#b8912f' };
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const ease = (x) => 1 - Math.pow(1 - clamp(x), 3);
+const easeIn = (x) => Math.pow(clamp(x), 3);
+const easeInOut = (x) => { x = clamp(x); return x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+const bounce = (x) => { x = clamp(x); const n = 7.5625, d = 2.75; if (x < 1 / d) return n * x * x; if (x < 2 / d) return n * (x -= 1.5 / d) * x + .75; if (x < 2.5 / d) return n * (x -= 2.25 / d) * x + .9375; return n * (x -= 2.625 / d) * x + .984375; };
+function rect(x, y, w, h, color) { ctx.fillStyle = color; ctx.fillRect(x, y, w, h); }
+function grad(x0, y0, x1, y1, stops) { const g = ctx.createLinearGradient(x0, y0, x1, y1); for (const [s, c] of stops) g.addColorStop(s, c); return g; }
+function txt(s, x, y, size = 32, color = C.cream, { font = 'Georgia', weight = 400, align = 'left', style = '' } = {}) {
+  ctx.font = `${style} ${weight} ${size}px ${font}`; ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = 'alphabetic'; ctx.fillText(s, x, y);
+}
+
+// ---------------------------------------------------------------- bitmap pixel font (original 5x7 glyphs)
+const GLYPHS = {
+  A: ['01110', '10001', '10001', '11111', '10001', '10001', '10001'], B: ['11110', '10001', '10001', '11110', '10001', '10001', '11110'],
+  C: ['01110', '10001', '10000', '10000', '10000', '10001', '01110'], D: ['11110', '10001', '10001', '10001', '10001', '10001', '11110'],
+  E: ['11111', '10000', '10000', '11110', '10000', '10000', '11111'], F: ['11111', '10000', '10000', '11110', '10000', '10000', '10000'],
+  G: ['01110', '10001', '10000', '10111', '10001', '10001', '01111'], H: ['10001', '10001', '10001', '11111', '10001', '10001', '10001'],
+  I: ['11111', '00100', '00100', '00100', '00100', '00100', '11111'], J: ['00111', '00010', '00010', '00010', '00010', '10010', '01100'],
+  K: ['10001', '10010', '10100', '11000', '10100', '10010', '10001'], L: ['10000', '10000', '10000', '10000', '10000', '10000', '11111'],
+  M: ['10001', '11011', '10101', '10101', '10001', '10001', '10001'], N: ['10001', '11001', '10101', '10011', '10001', '10001', '10001'],
+  O: ['01110', '10001', '10001', '10001', '10001', '10001', '01110'], P: ['11110', '10001', '10001', '11110', '10000', '10000', '10000'],
+  Q: ['01110', '10001', '10001', '10001', '10101', '10010', '01101'], R: ['11110', '10001', '10001', '11110', '10100', '10010', '10001'],
+  S: ['01111', '10000', '10000', '01110', '00001', '00001', '11110'], T: ['11111', '00100', '00100', '00100', '00100', '00100', '00100'],
+  U: ['10001', '10001', '10001', '10001', '10001', '10001', '01110'], V: ['10001', '10001', '10001', '10001', '10001', '01010', '00100'],
+  W: ['10001', '10001', '10001', '10101', '10101', '10101', '01010'], X: ['10001', '10001', '01010', '00100', '01010', '10001', '10001'],
+  Y: ['10001', '10001', '01010', '00100', '00100', '00100', '00100'], Z: ['11111', '00001', '00010', '00100', '01000', '10000', '11111'],
+  0: ['01110', '10001', '10011', '10101', '11001', '10001', '01110'], 1: ['00100', '01100', '00100', '00100', '00100', '00100', '01110'],
+  2: ['01110', '10001', '00001', '00010', '00100', '01000', '11111'], 3: ['11110', '00001', '00001', '01110', '00001', '00001', '11110'],
+  4: ['00010', '00110', '01010', '10010', '11111', '00010', '00010'], 5: ['11111', '10000', '11110', '00001', '00001', '10001', '01110'],
+  6: ['00110', '01000', '10000', '11110', '10001', '10001', '01110'], 7: ['11111', '00001', '00010', '00100', '01000', '01000', '01000'],
+  8: ['01110', '10001', '10001', '01110', '10001', '10001', '01110'], 9: ['01110', '10001', '10001', '01111', '00001', '00010', '01100'],
+  ' ': ['00000', '00000', '00000', '00000', '00000', '00000', '00000'], '.': ['00000', '00000', '00000', '00000', '00000', '01100', '01100'],
+  ',': ['00000', '00000', '00000', '00000', '01100', '00100', '01000'], '-': ['00000', '00000', '00000', '11111', '00000', '00000', '00000'],
+  '/': ['00001', '00010', '00010', '00100', '01000', '01000', '10000'], '&': ['01100', '10010', '10100', '01000', '10101', '10010', '01101'],
+  "'": ['00100', '00100', '01000', '00000', '00000', '00000', '00000'], '!': ['00100', '00100', '00100', '00100', '00100', '00000', '00100'],
+  ':': ['00000', '01100', '01100', '00000', '01100', '01100', '00000'], '+': ['00000', '00100', '00100', '11111', '00100', '00100', '00000'],
+  '·': ['00000', '00000', '00000', '01100', '01100', '00000', '00000'], '§': ['01110', '10000', '01110', '10001', '01110', '00001', '01110'],
+  '(': ['00010', '00100', '01000', '01000', '01000', '00100', '00010'], ')': ['01000', '00100', '00010', '00010', '00010', '00100', '01000'],
+  '>': ['10000', '01000', '00100', '00010', '00100', '01000', '10000'], '?': ['01110', '10001', '00001', '00110', '00100', '00000', '00100'],
+  '%': ['11001', '11010', '00010', '00100', '01000', '01011', '10011'], '$': ['00100', '01111', '10100', '01110', '00101', '11110', '00100'],
+};
+function pixWidth(s, cell) { return s.length * 6 * cell - cell; }
+// Draw upper-case bitmap text. cell = size of one pixel. Text is snapped to whole cells for crisp edges.
+function pix(s, x, y, cell = 8, color = C.cream, { align = 'left', shadow = C.ink, glow = null } = {}) {
+  s = String(s).toUpperCase();
+  const w = pixWidth(s, cell);
+  let ox = Math.round(align === 'center' ? x - w / 2 : align === 'right' ? x - w : x), oy = Math.round(y);
+  const draw = (dx, dy, col) => {
+    ctx.fillStyle = col;
+    let cx = ox + dx;
+    for (const ch of s) {
+      const g = GLYPHS[ch] || GLYPHS['?'];
+      for (let r = 0; r < 7; r++) for (let c = 0; c < 5; c++) if (g[r][c] === '1') ctx.fillRect(cx + c * cell, oy + dy + r * cell, cell, cell);
+      cx += 6 * cell;
+    }
+  };
+  if (glow) { ctx.save(); ctx.shadowColor = glow; ctx.shadowBlur = cell * 3; draw(0, 0, color); ctx.restore(); }
+  if (shadow) draw(cell, cell, shadow);
+  draw(0, 0, color);
+  return w;
+}
+
+// ---------------------------------------------------------------- live world views (real renderer, zoomed)
+function makeWorld(zoom) {
+  const c = document.createElement('canvas'); c.className = 'world';
+  c.style.width = `${W / zoom}px`; c.style.height = `${H / zoom}px`; document.body.appendChild(c);
+  const r = new WorldRenderer(c); c.width = W; c.height = H; r.dpr = zoom;
+  return { canvas: c, renderer: r, zoom };
+}
+const worldA = makeWorld(2.2), worldB = makeWorld(2.0), worldS = makeWorld(1.8), worldT = makeWorld(2.1);
+const playerLook = appearanceLook({ skin: 3, hair: 6, hairStyle: 7, eye: 2, glasses: true, suitColor: '#1f3a5f', tieColor: '#b8912f', shirtColor: '#f3eee1' });
+function npcsOf(zone) { return (zone.npcs || []).map((def) => ({ def, actor: new Actor(def.x, def.y, def.look, { npc: def }) })); }
+const npcCache = {};
+function zoneNpcs(id) { return npcCache[id] ??= npcsOf(ZONES[id]); }
+// Deterministic walk: re-simulate from the scene start every frame so renders never depend on call order.
+function walker(start, path, speed, elapsed) {
+  const a = new Actor(start.x, start.y, playerLook, { speed });
+  a.setPath(path.map((p) => ({ ...p })));
+  const steps = Math.floor(elapsed * FPS);
+  for (let i = 0; i < steps; i++) a.update(1 / FPS);
+  return a;
+}
+// Renders a zone into a world view and returns a function mapping grid coords to film coords.
+function renderWorld(view, zoneId, player, t, ox = 0) {
+  const zone = ZONES[zoneId];
+  view.renderer.render(zone, player, zoneNpcs(zoneId), null, t);
+  const cam = view.renderer.cam, z = view.zoom;
+  return (gx, gy, dy = 0) => { const s = gridToScreen(gx, gy); return { x: (s.x + cam.x) * z + ox, y: (s.y + cam.y + dy) * z }; };
+}
+function drawWorld(view, x = 0, y = 0, w = W, h = H) { ctx.drawImage(view.canvas, x, y, w, h); }
+
+// ---------------------------------------------------------------- shared decor
+function backdrop(t, variant = 0) {
+  rect(0, 0, W, H, variant ? C.bg2 : C.bg);
+  ctx.save(); ctx.translate(960, 640); ctx.scale(1, .5); ctx.rotate(Math.PI / 4);
+  ctx.strokeStyle = 'rgba(130,150,180,.06)'; ctx.lineWidth = 2;
+  const off = (t * 18) % 96;
+  for (let i = -24; i <= 24; i++) { ctx.beginPath(); ctx.moveTo(i * 96 + off, -2400); ctx.lineTo(i * 96 + off, 2400); ctx.stroke(); ctx.beginPath(); ctx.moveTo(-2400, i * 96 - off); ctx.lineTo(2400, i * 96 - off); ctx.stroke(); }
+  ctx.restore();
+}
+function vignette(strength = .55) { const g = ctx.createRadialGradient(960, 540, 300, 960, 540, 1250); g.addColorStop(0, 'rgba(5,8,14,0)'); g.addColorStop(1, `rgba(5,8,14,${strength})`); rect(0, 0, W, H, g); }
+function scanlines(alpha = .05) { ctx.save(); ctx.globalAlpha = alpha; ctx.fillStyle = '#000'; for (let y = 0; y < H; y += 4) ctx.fillRect(0, y, W, 2); ctx.restore(); }
+function sparkles(t, alpha = 1, n = 40) {
+  ctx.save(); ctx.globalAlpha = alpha;
+  for (let i = 0; i < n; i++) {
+    const x = (i * 431.7 + Math.sin(t * .4 + i) * 30 + W * 4) % W, y = (i * 137.3 - t * (10 + i % 9) * 3 + H * 40) % H;
+    const a = .12 + .3 * (.5 + .5 * Math.sin(i * 5.3 + t * 2)); const s = 2 + i % 3;
+    ctx.fillStyle = `rgba(217,183,106,${a})`; ctx.fillRect(Math.round(x), Math.round(y), s, s);
+  }
+  ctx.restore();
+}
+// Bottom-left location chip in pixel type, with a small brass accent.
+function chip(label, sub = null, a = 1) {
+  ctx.save(); ctx.globalAlpha = a;
+  const cell = 5, w = Math.max(pixWidth(label, cell), sub ? pixWidth(sub, 4) : 0) + 56;
+  rect(72, 940, w, sub ? 84 : 62, 'rgba(8,12,22,.92)'); rect(72, 940, 6, sub ? 84 : 62, C.gold);
+  pix(label, 104, 958, cell, C.cream);
+  if (sub) pix(sub, 104, 1002, 4, C.gold, { shadow: null });
+  ctx.restore();
+}
+// Top-right build tag and bottom progress line.
+function frameTag(t) {
+  pix('LAWSCAPE · BETA 0.5', 1848, 40, 4, C.muted, { align: 'right', shadow: null });
+  rect(0, H - 6, W, 6, 'rgba(255,255,255,.06)'); rect(0, H - 6, W * clamp(t / DUR), 6, C.gold);
+}
+// Callout pin: a pixel diamond marker with a parchment label.
+function callout(p, label, a, side = 1) {
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  const lift = (1 - a) * 14;
+  ctx.fillStyle = C.gold; ctx.beginPath(); ctx.moveTo(p.x, p.y - 4 + lift); ctx.lineTo(p.x + 9, p.y + 5 + lift); ctx.lineTo(p.x, p.y + 14 + lift); ctx.lineTo(p.x - 9, p.y + 5 + lift); ctx.closePath(); ctx.fill();
+  ctx.font = '700 24px Georgia'; const w = ctx.measureText(label).width + 36;
+  const bx = side > 0 ? p.x + 22 : p.x - 22 - w, by = p.y - 26 + lift;
+  rect(bx, by, w, 46, '#f3e9d2'); rect(bx, by, w, 3, C.brass); rect(bx, by + 43, w, 3, '#8a6d2f');
+  rect(side > 0 ? bx : bx + w - 4, by, 4, 46, C.brass);
+  txt(label, bx + 18, by + 31, 24, '#2b2b33', { weight: 700 });
+  ctx.restore();
+}
+function imageFit(im, x, y, w, h, { cover = false, anchorTop = false } = {}) {
+  const scale = (cover ? Math.max : Math.min)(w / im.width, h / im.height), iw = im.width * scale, ih = im.height * scale;
+  ctx.drawImage(im, x + (w - iw) / 2, anchorTop ? y : y + (h - ih) / 2, iw, ih); return { x: x + (w - iw) / 2, y: anchorTop ? y : y + (h - ih) / 2, w: iw, h: ih, scale };
+}
+// Draws a capture as a floating "window" with a drop shadow, scaled to fit the box; sw/sh crop source (px in capture space).
+function windowShot(im, box, { crop = null, shadow = 60, a = 1, anchorTop = false } = {}) {
+  ctx.save(); ctx.globalAlpha = a;
+  const sx = crop?.x || 0, sy = crop?.y || 0, sw = crop?.w || im.width, sh = crop?.h || im.height;
+  const scale = Math.min(box.w / sw, box.h / sh), dw = sw * scale, dh = sh * scale, dx = box.x + (box.w - dw) / 2, dy = anchorTop ? box.y : box.y + (box.h - dh) / 2;
+  ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = shadow; ctx.shadowOffsetY = shadow / 3;
+  rect(dx, dy, dw, dh, '#0a0f1a'); ctx.shadowColor = 'transparent';
+  ctx.drawImage(im, sx, sy, sw, sh, dx, dy, dw, dh);
+  ctx.strokeStyle = 'rgba(217,183,106,.35)'; ctx.lineWidth = 2; ctx.strokeRect(dx - 1, dy - 1, dw + 2, dh + 2);
+  ctx.restore(); return { x: dx, y: dy, w: dw, h: dh, scale };
+}
+// Retro pointer.
+function cursor(x, y, click = 0) {
+  ctx.save(); ctx.translate(x, y); ctx.fillStyle = '#fff8e9'; ctx.strokeStyle = '#0a1019'; ctx.lineWidth = 3; ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, 34); ctx.lineTo(9, 26); ctx.lineTo(15, 41); ctx.lineTo(22, 38); ctx.lineTo(16, 24); ctx.lineTo(27, 24); ctx.closePath(); ctx.fill(); ctx.stroke();
+  if (click > 0) { ctx.strokeStyle = C.gold; ctx.lineWidth = 4; ctx.globalAlpha = 1 - click; ctx.beginPath(); ctx.arc(2, 2, 12 + click * 60, 0, Math.PI * 2); ctx.stroke(); }
+  ctx.restore();
+}
+// Headline block used by feature scenes: pixel kicker, big pixel title, Georgia sub-lines.
+function headline(x, y, kicker, title, lines, a, { titleCell = 11, width = 760 } = {}) {
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a; ctx.translate(0, (1 - a) * 30);
+  rect(x, y - 44, 72, 6, C.gold);
+  pix(kicker, x, y - 20, 4, C.gold, { shadow: null });
+  let yy = y + 30;
+  for (const line of title.split('\n')) { pix(line, x, yy, titleCell, C.cream); yy += titleCell * 7 + titleCell * 2.2; }
+  yy += 18;
+  for (const line of lines) { ctx.font = '400 30px Georgia'; ctx.fillStyle = '#c9cfda'; ctx.textAlign = 'left'; wrap(line, x, yy, width, 40); yy += 40 * Math.ceil(ctx.measureText(line).width / width) + 8; }
+  ctx.restore();
+}
+function wrap(s, x, y, maxW, lh) { const words = s.split(' '); let line = ''; for (const w of words) { const test = line ? line + ' ' + w : w; if (ctx.measureText(test).width > maxW && line) { ctx.fillText(line, x, y); y += lh; line = w; } else line = test; } ctx.fillText(line, x, y); }
+function bullets(x, y, items, a, lh = 46) { if (a <= 0) return; ctx.save(); ctx.globalAlpha = a; items.forEach((s, i) => { const k = ease((a * items.length - i)); if (k <= 0) return; ctx.globalAlpha = a * k; pix('>', x, y + i * lh - 14, 4, C.gold, { shadow: null }); txt(s, x + 36, y + i * lh, 28, '#e3e7ee'); }); ctx.restore(); }
+
+// ---------------------------------------------------------------- scenes
+const S = { title: 0, creator: 3.0, office: 5.8, mail: 9.0, journal: 13.0, court: 15.6, sidebar: 18.0, apartment: 20.4, partners: 22.4, world: 24.0, end: 27.3 };
+
+function sceneTitle(t) {
+  const u = t - S.title;
+  const p = walker({ x: 6, y: 10 }, [{ x: 6, y: 7 }, { x: 6, y: 4 }], 1.1, u);
+  renderWorld(worldA, 'office', p, t); drawWorld(worldA);
+  rect(0, 0, W, H, `rgba(7,11,20,${.62 + .1 * Math.sin(u)})`); vignette(.5); sparkles(t, .9);
+  // Seal drops, title slams in, then the tagline.
+  const drop = bounce(clamp(u / .9)); const ty = -140 + drop * 140;
+  ctx.save(); ctx.translate(0, ty);
+  pix('§', 960, 236, 10, C.gold, { align: 'center', glow: 'rgba(217,183,106,.8)' });
+  pix('LAWSCAPE', 960, 340, 22, C.cream, { align: 'center', glow: 'rgba(217,183,106,.35)' });
+  ctx.restore();
+  const a2 = ease((u - .9) / .5); ctx.save(); ctx.globalAlpha = a2;
+  rect(760, 545, 400, 4, C.gold);
+  txt('A new way to learn legal ethics.', 960, 620, 46, '#e7e2d4', { align: 'center', style: 'italic' });
+  txt('Build your practice. Explore the firm. Keep your license.', 960, 672, 28, C.muted, { align: 'center' });
+  ctx.restore();
+  if (u > 1.6 && Math.floor((u - 1.6) * 2.4) % 2 === 0) pix('PRESS START', 960, 800, 6, C.gold, { align: 'center' });
+  chip('A LEGALQUANTS EXPERIMENT', 'FREE BROWSER RPG · NO INSTALL', a2);
+  if (u < .35) rect(0, 0, W, H, `rgba(0,0,0,${1 - u / .35})`);
+}
+
+function sceneCreator(t) {
+  const u = t - S.creator; backdrop(t, 1); sparkles(t, .5, 24);
+  // Real creator UI on the right.
+  const slide = ease(u / .55);
+  windowShot(pics.creator, { x: 980 + (1 - slide) * 160, y: 70, w: 880, h: 950 }, { a: slide });
+  headline(96, 250, 'STEP 01', 'CREATE YOUR\nATTORNEY', [], ease((u - .1) / .5));
+  bullets(100, 500, ['16 hairstyles, 18 hair colors, 7 facial-hair choices', 'Suits, shirts, ties, glasses and three builds', 'Preview standing, walking or seated', 'Every choice is free. None changes a grade.'], ease((u - .5) / 1.2));
+  // A roster of original in-engine attorneys walking in place.
+  const roster = ease((u - .9) / .5);
+  if (roster > 0) {
+    ctx.save(); ctx.globalAlpha = roster;
+    rect(96, 700, 820, 200, 'rgba(8,12,22,.85)'); rect(96, 700, 820, 4, C.gold);
+    pix('THE ROSTER', 120, 720, 4, C.gold, { shadow: null });
+    const looks = [
+      { skin: 0, hair: 2, hairStyle: 1, eye: 1, suitColor: '#6e2436', tieColor: '#1f3a5f', outfit: 'skirt' },
+      { skin: 5, hair: 0, hairStyle: 11, eye: 0, suitColor: '#2b2b33', tieColor: '#b8912f', facialHair: 4 },
+      { skin: 2, hair: 8, hairStyle: 9, eye: 2, suitColor: '#3f5d4b', tieColor: '#6e2436', glasses: true },
+      { skin: 6, hair: 12, hairStyle: 6, eye: 0, suitColor: '#1f3a5f', tieColor: '#5c8a86', facialHair: 1, silhouette: 'relaxed' },
+      { skin: 1, hair: 3, hairStyle: 3, eye: 4, suitColor: '#7a5a3a', tieColor: '#7a3b5e', outfit: 'skirt', silhouette: 'slim' },
+      { skin: 4, hair: 9, hairStyle: 14, eye: 5, suitColor: '#2b2b33', tieColor: '#c8d8e6', glasses: true, faceShape: 1 },
+    ];
+    looks.forEach((lk, i) => {
+      const a = new Actor(0, 0, appearanceLook(lk)); a.path = [{ x: 1, y: 0 }]; a.facing = i % 2 ? -1 : 1;
+      ctx.save(); ctx.translate(180 + i * 128, 888); ctx.scale(1.9, 1.9); a.draw(ctx, 0, 0, t + i * .7, false); ctx.restore();
+    });
+    ctx.restore();
+  }
+  chip('CHARACTER CREATOR', 'ORIGINAL CANVAS ATTORNEYS', ease((u - .3) / .4));
+}
+
+function worldScene(t, u, { view, zone, start, path, speed, chipLabel, chipSub, pins, headlineText = null, kicker = 'LOCATION', lines = [], ox = 200 }) {
+  const p = walker(start, path, speed, u);
+  const OX = ox; rect(0, 0, W, H, C.bg);
+  const map = renderWorld(view, zone, p, t, OX); drawWorld(view, OX, 0);
+  rect(0, 0, W, H, grad(0, 0, 0, H, [[0, 'rgba(5,8,14,.35)'], [.3, 'rgba(5,8,14,0)'], [.8, 'rgba(5,8,14,0)'], [1, 'rgba(5,8,14,.5)']]));
+  rect(0, 0, 820, H, grad(0, 0, 820, 0, [[0, 'rgba(8,12,22,.9)'], [.55, 'rgba(8,12,22,.55)'], [1, 'rgba(8,12,22,0)']]));
+  vignette(.45); scanlines(.04);
+  if (headlineText) { const a = ease((u - .15) / .5); ctx.save(); ctx.globalAlpha = a; rect(72, 90, 12, 90, C.gold); pix(kicker, 108, 96, 4, C.gold, { shadow: null }); pix(headlineText, 108, 122, 9, C.cream); ctx.restore(); lines.forEach((line, i) => { const b = ease((u - .6 - i * .25) / .4); if (b > 0) { ctx.save(); ctx.globalAlpha = b; txt(line, 108, 228 + i * 36, 27, '#e3e7ee'); ctx.restore(); } }); }
+  pins.forEach((pin, i) => { const a = ease((u - pin.at) / .35); callout(map(pin.gx, pin.gy, pin.dy ?? -70), pin.label, a, pin.side ?? 1); });
+  chip(chipLabel, chipSub, ease(u / .35));
+}
+function sceneOffice(t) {
+  worldScene(t, t - S.office, { view: worldA, zone: 'office', start: { x: 6, y: 10 }, path: [{ x: 6, y: 6 }, { x: 4, y: 4 }, { x: 3, y: 4 }], speed: 2.4,
+    chipLabel: 'HARDSELL & FIRESTONE', chipSub: 'ROOM 1 OF 7 · THE MAIN OFFICE', headlineText: 'EXPLORE THE FIRM', kicker: 'ISOMETRIC WORLD',
+    lines: ['Click to walk. Talk to the partners. Open the file.'],
+    pins: [{ gx: 6, gy: 1, dy: -95, label: 'BarMail terminal', at: .9 }, { gx: 1, gy: 3, dy: -30, label: 'Filing cabinet · evidence review', at: 1.4 }, { gx: 10, gy: 1, dy: -100, label: 'Ethics rule library', at: 1.9 }, { gx: 2, gy: 7, dy: -105, label: 'Liz Loza, Secretary', at: 2.3, side: -1 }] });
+}
+
+function sceneMail(t) {
+  const u = t - S.mail; backdrop(t); sparkles(t, .4, 20);
+  headline(96, 250, 'STEP 02 · BARMAIL', 'READ THE FILE.\nMAKE THE CALL.', [], ease(u / .5), { titleCell: 9 });
+  bullets(100, 520, ['Synthetic partner and client emails', 'Choose a reply. Every option cites the real rule.', 'Right call: gold and a streak. Wrong: Ethics damage.', 'Zero Ethics means disbarment. Game over.'], ease((u - .4) / 1.5));
+  // Pack chips.
+  const pk = ease((u - 1.2) / .5); if (pk > 0) { ctx.save(); ctx.globalAlpha = pk; pix('PRACTICE PACKS', 100, 780, 4, C.gold, { shadow: null }); let cx = 100; ['US MPRE-STYLE', 'ENGLAND & WALES SQE-STYLE', 'STATE OF JURIS'].forEach((s) => { const w = pixWidth(s, 4) + 32; rect(cx, 806, w, 40, 'rgba(217,183,106,.12)'); ctx.strokeStyle = C.gold; ctx.lineWidth = 2; ctx.strokeRect(cx, 806, w, 40); pix(s, cx + 16, 819, 4, C.cream, { shadow: null }); cx += w + 14; }); ctx.restore(); }
+  const box = { x: 900, y: 80, w: 960, h: 900 };
+  let im, crop = null;
+  if (u < 1.3) { im = pics.inbox; crop = { x: 0, y: 0, w: pics.inbox.width, h: 1720 }; }
+  else if (u < 2.9) { im = u < 2.2 ? pics.scenario : pics['scenario-hover']; crop = { x: 0, y: 0, w: im.width, h: 1000 }; }
+  else { im = pics.verdict; crop = { x: 0, y: 0, w: im.width, h: 1010 }; }
+  const slide = u < 1.3 ? ease(u / .5) : 1;
+  const r = windowShot(im, { ...box, x: box.x + (1 - slide) * 140 }, { crop, a: slide, anchorTop: true });
+  // Pointer walks to the correct reply, clicks, and the verdict lands with a coin pop.
+  if (u >= 1.3 && u < 2.9) {
+    const k = easeInOut((u - 1.3) / .8);
+    const target = { x: r.x + 1120 * r.scale, y: r.y + 880 * r.scale };
+    cursor(r.x + r.w - 80 + (target.x - r.x - r.w + 80) * k, r.y + r.h - 40 + (target.y - r.y - r.h + 40) * k, u > 2.55 ? clamp((u - 2.55) / .35) : 0);
+  }
+  if (u >= 2.9) { const k = bounce(clamp((u - 2.95) / .7)); ctx.save(); ctx.translate(0, (1 - k) * -40); ctx.globalAlpha = clamp((u - 2.9) / .2); const py = r.y + r.h + 36; rect(r.x, py, 520, 120, 'rgba(8,12,22,.94)'); rect(r.x, py, 6, 120, C.green); pix('+42 GOLD', r.x + 32, py + 26, 6, C.gold); pix('+10 ETHICS · STREAK X4', r.x + 32, py + 80, 4, C.green, { shadow: null }); ctx.restore(); }
+  chip('BARMAIL - SECURE ATTORNEY INBOX', u < 1.3 ? 'YOUR INBOX' : u < 2.9 ? 'CHOOSE YOUR REPLY' : 'SOUND PROFESSIONAL JUDGMENT', 1);
+}
+
+function sceneJournal(t) {
+  const u = t - S.journal; backdrop(t, 1); sparkles(t, .4, 20);
+  const im = u < 1.4 ? pics['desk-journal'] : pics['desk-files'];
+  const slide = ease(u / .5);
+  windowShot(im, { x: 720 + (1 - slide) * 160, y: 80, w: 1140, h: 920 }, { a: slide });
+  headline(96, 250, 'STEP 03 · THE JOURNAL', 'YOUR FIRST\nFIRM DAY', [], ease(u / .5), { titleCell: 10 });
+  bullets(100, 520, ['6 writing assignments from the partners', '2 synthetic matters, 12 original exhibits', '1 connected capstone', 'Partners reply. Study gold buys the reward tie.'], ease((u - .4) / 1.4), 46);
+  chip('THE ASSOCIATE\'S DESK', u < 1.4 ? 'QUEST JOURNAL · WRITING · EVIDENCE' : 'EVIDENCE ROOM · TWO FILES', 1);
+}
+
+function sceneCourt(t) {
+  worldScene(t, t - S.court, { view: worldB, zone: 'courtroom', start: { x: 6, y: 9 }, path: [{ x: 6, y: 6 }, { x: 5, y: 5 }], speed: 2.2,
+    chipLabel: 'THE COURTROOM', chipSub: 'ROOM 5 OF 7 · DEREK BALAM ON DUTY', headlineText: 'THE COURTROOM', kicker: 'LOCATION',
+    lines: ['Marble floors, a bailiff with a badge, and a judge on standby.'],
+    pins: [{ gx: 10, gy: 5, dy: -105, label: 'Derek Balam, Bailiff', at: .8, side: -1 }, { gx: 6, gy: 1, dy: -150, label: 'Sleeping AI judge · standby', at: 1.3, side: -1 }] });
+}
+function sceneSidebar(t) {
+  worldScene(t, t - S.sidebar, { view: worldS, zone: 'sidebar', start: { x: 7, y: 10 }, path: [{ x: 7, y: 7 }, { x: 5, y: 6 }], speed: 2.2, ox: 40,
+    chipLabel: 'THE SIDEBAR', chipSub: 'ROOM 6 OF 7 · LOCAL LOUNGE', headlineText: 'THE SIDEBAR LOUNGE', kicker: 'LOCATION',
+    lines: ['Take a stool. Order from a robot. Talk shop at the tables.'],
+    pins: [{ gx: 5, gy: 2, dy: -88, label: 'B.A.R.T., robot butler & bartender', at: .7, side: -1 }, { gx: 11, gy: 1, dy: -150, label: 'Hall of fame board', at: 1.2, side: 1 }, { gx: 9, gy: 8, dy: -80, label: 'AI & Agents table', at: 1.7, side: 1 }] });
+}
+function sceneApartment(t) {
+  worldScene(t, t - S.apartment, { view: worldT, zone: 'apartment', start: { x: 4, y: 7 }, path: [{ x: 4, y: 6 }, { x: 7, y: 5 }], speed: 2.2,
+    chipLabel: 'YOUR APARTMENT', chipSub: 'ROOM 7 OF 7 · REST AND UPGRADE', headlineText: 'YOUR APARTMENT', kicker: 'LOCATION',
+    lines: ['Rest to restore Ethics. Spend gold on the city view.'],
+    pins: [{ gx: 1, gy: 1, dy: -70, label: 'Bed · restore Ethics', at: .6 }, { gx: 4, gy: 5, dy: -70, label: 'City view couch', at: 1.1, side: 1 }, { gx: 1, gy: 5, dy: -90, label: 'Wardrobe', at: 1.5, side: -1 }] });
+}
+// Three partner rooms side by side, each live-rendered.
+const worldP = [makeWorld(1.15), makeWorld(1.15), makeWorld(1.15)];
+function scenePartners(t) {
+  const u = t - S.partners; backdrop(t);
+  const rooms = [['corner_office', 'Jim Hardsell’s corner office', { x: 5, y: 6 }], ['linda_office', 'Linda Firestone’s office', { x: 4, y: 6 }], ['conference_room', 'The conference room', { x: 5, y: 7 }]];
+  rooms.forEach(([id, label, spawn], i) => {
+    const p = walker(spawn, [{ x: spawn.x, y: spawn.y - 2 }], 1.6, u);
+    renderWorld(worldP[i], id, p, t);
+    const k = ease((u - i * .18) / .45), x = 50 + i * 615, w = 590, h = 660, y = 200 + (1 - k) * 60;
+    ctx.save(); ctx.globalAlpha = k;
+    ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 40; ctx.shadowOffsetY = 14; rect(x, y, w, h, '#000'); ctx.shadowColor = 'transparent';
+    ctx.drawImage(worldP[i].canvas, (W - w) / 2, (H - h) / 2 + 80, w, h, x, y, w, h);
+    ctx.strokeStyle = C.gold; ctx.lineWidth = 3; ctx.strokeRect(x, y, w, h);
+    rect(x, y + h - 60, w, 60, 'rgba(8,12,22,.9)'); txt(label, x + w / 2, y + h - 22, 26, C.cream, { align: 'center', weight: 700 });
+    ctx.restore();
+  });
+  const a = ease(u / .4); ctx.save(); ctx.globalAlpha = a; rect(72, 90, 12, 60, C.gold); pix('ROOMS 2, 3 AND 4', 108, 96, 4, C.gold, { shadow: null }); pix('MEET THE PARTNERS', 108, 118, 8, C.cream); ctx.restore();
+  chip('SEVEN ROOMS TO EXPLORE', 'OFFICE · PARTNERS · CONFERENCE · COURT · LOUNGE · HOME', a);
+}
+
+function sceneWorld(t) {
+  const u = t - S.world; backdrop(t, 1); sparkles(t, .7, 50);
+  // The firm-jurisdictions page is a real screen from the desk. Crop to the world-curriculum card.
+  const im = pics['desk-firm'];
+  const crop = { x: 470, y: 480, w: 2130, h: 1100 };
+  const slide = ease(u / .55);
+  windowShot(im, { x: 900 + (1 - slide) * 160, y: 130, w: 960, h: 820 }, { crop, a: slide });
+  headline(96, 240, 'THE MISSION', 'LEGAL ETHICS\nFROM AROUND\nTHE WORLD', [], ease(u / .5), { titleCell: 9 });
+  const a = ease((u - .6) / .6);
+  if (a > 0) {
+    ctx.save(); ctx.globalAlpha = a;
+    pix('PLAY TODAY', 100, 580, 4, C.green, { shadow: null });
+    txt('US MPRE-style · England & Wales SQE-style · State of Juris', 100, 645, 27, '#e3e7ee');
+    pix('THE AMBITION', 100, 690, 4, C.gold, { shadow: null });
+    txt('Every jurisdiction where there is a LegalQuant.', 100, 755, 27, '#e3e7ee');
+    txt('27 curriculum targets across 4 regions. Reviewed packs to come.', 100, 791, 24, C.muted);
+    ctx.restore();
+  }
+  // Region ticker in pixel type.
+  const tick = ease((u - 1.1) / .5);
+  if (tick > 0) {
+    ctx.save(); ctx.globalAlpha = tick; ctx.beginPath(); ctx.rect(96, 820, 760, 60); ctx.clip();
+    const s = 'AMERICAS · EUROPE · MIDDLE EAST & AFRICA · ASIA-PACIFIC · UNITED STATES · UNITED KINGDOM · CANADA · IRELAND · FRANCE · GERMANY · SINGAPORE · INDIA · AUSTRALIA · UAE · ';
+    const w = pixWidth(s, 4), off = (u * 110) % w;
+    pix(s + s, 96 - off, 840, 4, C.gold, { shadow: null }); ctx.restore();
+    rect(96, 820, 40, 60, grad(96, 0, 136, 0, [[0, C.bg2], [1, 'rgba(16,26,46,0)']])); rect(816, 820, 40, 60, grad(816, 0, 856, 0, [[0, 'rgba(16,26,46,0)'], [1, C.bg2]]));
+  }
+  chip('A WORLDWIDE CURRICULUM', 'MPRE AND SQE TODAY · MORE JURISDICTIONS PLANNED', 1);
+}
+
+function sceneEnd(t) {
+  const u = t - S.end; backdrop(t); sparkles(t, 1, 60);
+  const glow = ctx.createRadialGradient(960, 440, 20, 960, 440, 820); glow.addColorStop(0, 'rgba(45,62,96,.55)'); glow.addColorStop(1, 'rgba(11,18,32,0)'); rect(0, 0, W, H, glow);
+  const k = bounce(clamp(u / .8));
+  ctx.save(); ctx.translate(0, (1 - k) * -120);
+  pix('§', 960, 200, 9, C.gold, { align: 'center', glow: 'rgba(217,183,106,.8)' });
+  pix('LAWSCAPE', 960, 290, 22, C.cream, { align: 'center', glow: 'rgba(217,183,106,.35)' });
+  ctx.restore();
+  const a = ease((u - .5) / .5); ctx.save(); ctx.globalAlpha = a;
+  txt('A new way to learn legal ethics.', 960, 520, 44, '#e7e2d4', { align: 'center', style: 'italic' });
+  pix('FREE · BROWSER · NO INSTALL', 960, 570, 5, C.muted, { align: 'center', shadow: null });
+  const bw = 520, bx = 960 - bw / 2, by = 640, pulse = .5 + .5 * Math.sin(u * 5);
+  rect(bx, by, bw, 92, `rgba(217,183,106,${.12 + .1 * pulse})`); ctx.strokeStyle = C.gold; ctx.lineWidth = 4; ctx.strokeRect(bx, by, bw, 92);
+  pix('PLAY THE BETA', 960, 671, 7, C.gold, { align: 'center' });
+  txt('joelakaufmann-lgtm.github.io/lawscape', 960, 800, 34, '#cfd5df', { align: 'center' });
+  ctx.restore();
+  const b = ease((u - 1.1) / .5); ctx.save(); ctx.globalAlpha = b;
+  txt('A LegalQuants experiment · Fictional educational game · Not legal advice', 960, 1000, 22, '#7f8794', { align: 'center' });
+  ctx.restore();
+  frameTag(realT);
+  if (realT > DUR - .45) rect(0, 0, W, H, `rgba(0,0,0,${clamp((realT - (DUR - .45)) / .45)})`);
+}
+
+// ---------------------------------------------------------------- transitions
+const SCENES = [[S.title, sceneTitle, 'diamond'], [S.creator, sceneCreator, 'wipe'], [S.office, sceneOffice, 'diamond'], [S.mail, sceneMail, 'wipe'], [S.journal, sceneJournal, 'diamond'], [S.court, sceneCourt, 'wipe'], [S.sidebar, sceneSidebar, 'wipe'], [S.apartment, sceneApartment, 'diamond'], [S.partners, scenePartners, 'wipe'], [S.world, sceneWorld, 'diamond'], [S.end, sceneEnd, null]];
+const TRANS = .4;
+const off = document.createElement('canvas'); off.width = W; off.height = H; const offCtx = off.getContext('2d', { alpha: false });
+function sceneAt(t) { let i = 0; for (let k = 0; k < SCENES.length; k++) if (t >= SCENES[k][0]) i = k; return i; }
+// Scenes after the first run TRANS seconds early so their entrances are already in motion as the wipe reveals them.
+let realT = 0;
+function drawScene(i, t) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; SCENES[i][1](i === 0 ? t : t + TRANS); if (i < SCENES.length - 1) frameTag(realT); }
+function composite(kind, progress) {
+  // `off` holds the incoming scene; the canvas holds the outgoing one.
+  ctx.save();
+  if (kind === 'mosaic') { const b = 60; for (let y = 0; y < H; y += b) for (let x = 0; x < W; x += b) { const h = Math.abs(Math.sin(x * 12.9898 + y * 78.233) * 43758.5453) % 1; if (h < progress * 1.15) ctx.drawImage(off, x, y, b, b, x, y, b, b); } }
+  else if (kind === 'diamond') { const r = ease(progress) * 1500; ctx.beginPath(); ctx.moveTo(960, 540 - r); ctx.lineTo(960 + r * 1.9, 540); ctx.lineTo(960, 540 + r); ctx.lineTo(960 - r * 1.9, 540); ctx.closePath(); ctx.clip(); ctx.drawImage(off, 0, 0); ctx.restore(); ctx.save(); ctx.strokeStyle = C.gold; ctx.lineWidth = 10; ctx.beginPath(); ctx.moveTo(960, 540 - r); ctx.lineTo(960 + r * 1.9, 540); ctx.lineTo(960, 540 + r); ctx.lineTo(960 - r * 1.9, 540); ctx.closePath(); ctx.stroke(); }
+  else { const x = easeInOut(progress) * (W + 200) - 200; ctx.beginPath(); ctx.rect(0, 0, x, H); ctx.clip(); ctx.drawImage(off, 0, 0); ctx.restore(); ctx.save(); rect(x - 16, 0, 16, H, C.gold); }
+  ctx.restore();
+}
+window.renderFrame = (t) => {
+  realT = t;
+  const i = sceneAt(t);
+  const next = SCENES[i + 1];
+  if (next && t >= next[0] - TRANS && SCENES[i][2]) {
+    // Draw the incoming scene at its own start time into `off`, then wipe it over the outgoing scene.
+    drawScene(i, t);
+    ctx = offCtx; drawScene(i + 1, t); ctx = mainCtx;
+    composite(SCENES[i][2], (t - (next[0] - TRANS)) / TRANS);
+  } else drawScene(i, t);
+  return canvas.toDataURL('image/jpeg', .95).split(',')[1];
+};
+window.filmReady = true;
+let start; function play(now) { start ??= now; renderFrame(((now - start) / 1000) % DUR); requestAnimationFrame(play); }
+if (!new URLSearchParams(location.search).has('render')) requestAnimationFrame(play); else renderFrame(0);
+</script></html>

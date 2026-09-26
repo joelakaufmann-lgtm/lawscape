@@ -1,0 +1,114 @@
+{
+  "scenario": {
+    "id": "candor_authority",
+    "subject": "That bad case — just leave it out?"
+  },
+  "seed": {
+    "schemaVersion": 5,
+    "runId": "f4a742b9-599a-429b-aa83-e6b1d59edd96",
+    "runStatus": "active",
+    "apprenticeship": {
+      "version": 1,
+      "office": "juris",
+      "introduced": true,
+      "drafts": {},
+      "attempts": [],
+      "reviews": {},
+      "reviewDrafts": {},
+      "requests": [],
+      "cosmetics": [],
+      "equipped": []
+    },
+    "silhouette": "tailored",
+    "glasses": true,
+    "facialHair": 0,
+    "faceShape": 0,
+    "outfit": "trousers",
+    "tieColor": "#b8912f",
+    "shirtColor": "#f3eee1",
+    "sidebar": {
+      "topic": "commons",
+      "drafts": {}
+    },
+    "sidebarDrinks": 0,
+    "slowUntil": 0,
+    "name": "Alex Barrister",
+    "gender": "nonbinary",
+    "suitColor": "#1f3a5f",
+    "skin": 3,
+    "hair": 6,
+    "hairStyle": 7,
+    "eye": 2,
+    "gold": 1240,
+    "ethics": 88,
+    "streak": 3,
+    "wrongStreak": 0,
+    "casesDone": 9,
+    "correctDone": 8,
+    "documentsReviewed": 4,
+    "billableStudyMs": 2832000,
+    "tipsPurchased": 0,
+    "hintsPurchased": 0,
+    "hrEmailsSent": 0,
+    "moneybagsStolen": false,
+    "moneybagsPurchases": 0,
+    "seen": [],
+    "practicePack": "mixed",
+    "upgrades": [
+      "monitor",
+      "subscription",
+      "liz_chair",
+      "houseplants",
+      "paralegal",
+      "work_phone",
+      "artwork",
+      "mattress",
+      "coffee",
+      "wardrobe_rack",
+      "homedesk",
+      "kitchen",
+      "cityview"
+    ],
+    "zone": "office",
+    "pos": {
+      "x": 6,
+      "y": 8
+    },
+    "lastRestAt": 0,
+    "whiskeyDrinks": 0
+  },
+  "board": [
+    {
+      "runId": "demo-0",
+      "name": "Morgan Q.C.",
+      "billableMs": 12720000,
+      "endedAt": 1750000000000
+    },
+    {
+      "runId": "demo-1",
+      "name": "Priya Advocate",
+      "billableMs": 11220000,
+      "endedAt": 1750000000001
+    },
+    {
+      "runId": "demo-2",
+      "name": "Sam Solicitor",
+      "billableMs": 9240000,
+      "endedAt": 1750000000002
+    },
+    {
+      "runId": "demo-3",
+      "name": "Dana Esq.",
+      "billableMs": 7260000,
+      "endedAt": 1750000000003
+    },
+    {
+      "runId": "demo-4",
+      "name": "Kai Counsel",
+      "billableMs": 5760000,
+      "endedAt": 1750000000004
+    }
+  ],
+  "errors": [],
+  "note": "Current local build; isolated synthetic demo save in a fresh headless browser. No personal save accessed."
+}
