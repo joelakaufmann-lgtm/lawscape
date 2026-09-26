@@ -21,6 +21,10 @@ export function updateHUD() {
   streakEl.classList.toggle('hot', state.streak >= 2);
 
   $('stat-billable').querySelector('b').textContent = formatBillableTime(state.billableStudyMs);
+  const remaining = Math.max(0, Math.ceil((state.slowUntil - Date.now()) / 1000));
+  const movement = $('movement-status');
+  movement.classList.toggle('hidden', !remaining);
+  movement.textContent = remaining ? `Slow walking · ${remaining}s` : '';
 }
 
 export function setZoneName(name) {

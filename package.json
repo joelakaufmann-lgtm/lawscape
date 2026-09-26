@@ -1,6 +1,6 @@
 {
   "name": "lawscape",
-  "version": "0.1.0",
+  "version": "0.5.0",
   "private": true,
   "description": "A browser-based legal ethics RPG.",
   "type": "module",
@@ -8,11 +8,12 @@
     "prebuild": "npm run rules:build && npm run mpre:build && npm run sqe:build",
     "build": "node scripts/build.mjs && node scripts/package-site.mjs",
     "check": "node scripts/check.mjs",
+    "release:check": "node scripts/check-release.mjs",
     "mpre:build": "node scripts/build-mpre-questions.mjs",
     "sqe:build": "node scripts/build-sqe-questions.mjs",
     "rules:build": "node scripts/build-rule-library.mjs",
     "start": "node scripts/serve.mjs",
-    "test": "node --test && npm run check"
+    "test": "node --test tests/*.test.mjs && npm run check"
   },
   "engines": {
     "node": ">=22"

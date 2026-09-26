@@ -8,7 +8,7 @@
 // PLAYER may choose to open (and can edit before submitting), preserving the
 // game's no-backend, no-tracking promise.
 
-export const GAME_VERSION = '0.1.0-beta';
+export const GAME_VERSION = '0.5.0-global-preview';
 export const PROJECT_REPO_URL = 'https://github.com/joelakaufmann-lgtm/lawscape';
 export const PROJECT_ISSUES_URL = `${PROJECT_REPO_URL}/issues`;
 

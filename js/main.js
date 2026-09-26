@@ -14,6 +14,14 @@ import { findPath, adjacentTile } from './engine/pathfind.js';
 import { Actor } from './entities/actor.js';
 import { updateHUD, setZoneName, toast, hoverLabel, drawMinimap } from './ui/hud.js';
 import { showDialogue, hideDialogue, dialogueOpen } from './ui/dialogue.js';
+import { createApprenticeshipUI, escapeHtml } from './ui/apprenticeship.js';
+import { pendingAttempt, taskAttempts, capstoneReady } from './apprenticeship.js';
+import { WRITING_TASKS, CAPSTONE } from './data/apprenticeship.js';
+import { canAccessBarMail, practiceInbox, billableMessageOpen } from './data/mail.js';
+import { BAR_DRINKS, orderBarDrink, movementMultiplier, archiveDisbarredRun, readBillableBoard } from './lounge.js';
+import { appearanceLook, normalizeAppearance } from './data/appearance.js';
+import { mountAppearanceEditor } from './ui/appearance.js';
+import { SIDEBAR_ROOM, SIDEBAR_TOPICS, sidebarTopic, saveSidebarDraft } from './data/sidebar.js';
 import { SCENARIOS, STREAK_HEAL } from './data/ethics.js';
 import { OFFICE_UPGRADES, APARTMENT_UPGRADES, bonuses } from './data/upgrades.js';
 import { RULE_LIBRARY } from './data/rules.js';
@@ -62,9 +70,21 @@ let clickFx = null;       // { x, y, at } — OSRS yellow X on click
 let inGame = false;
 const docReview = { active: false, cycleStartedAt: 0 };
 const PLAYER_BASE_SPEED = 4;
-let whiskeySlowUntil = 0;
 let watchReturnPos = null;
 let billableUnsavedMs = 0;
+
+const desk = createApprenticeshipUI({
+  beforeOpen: () => { closeEmail(); $('panel').classList.add('hidden'); hideDialogue(); stopDocumentReview(false); player?.stop(); },
+  onChange: () => { if (player) player.look = playerLook(); updateHUD(); if (mailMode === 'inbox' && !$('email').classList.contains('hidden')) renderInbox(); },
+  onLegacy: () => { if (inGame) openEmail(); },
+  onWriting: (id) => openEmail('writing', id),
+  onWritingExit: (next,id) => { closeEmail(); desk.open(next,id); },
+  notify: toast,
+});
+
+function playerLook() {
+  return appearanceLook(state, state.apprenticeship.equipped);
+}
 
 function currentZone() { return ZONES[state.zone] || ZONES.office; }
 
@@ -82,6 +102,7 @@ function isWalkable(x, y) {
 }
 
 function buildNpcs() {
+  if (zone.id === 'sidebar') zone.props.find((prop) => prop.type === 'scoreboard').entries = readBillableBoard();
   npcs = (zone.npcs || []).map((def) => ({
     def,
     actor: new Actor(def.x, def.y, def.look, { npc: def }),
@@ -90,6 +111,7 @@ function buildNpcs() {
 
 function enterZone(id, pos = null) {
   if (docReview.active) stopDocumentReview(false);
+  stopWatchingTV();
   state.zone = id;
   zone = currentZone();
   const p = pos || zone.spawn;
@@ -101,6 +123,7 @@ function enterZone(id, pos = null) {
   setZoneName(zone.name);
   updateQuickActions();
   hover = null;
+  hoverLabel(null);
   save();
 }
 
@@ -113,8 +136,8 @@ function targetAt(mx, my) {
 
   // Tall props and actors extrude up-screen from their footprint, so a click
   // on a body maps to a ground tile "behind" it. Probe the clicked tile plus
-  // a couple of tiles down-screen (+1,+1 / +2,+2) to make bodies clickable.
-  for (let k = 0; k <= 2; k++) {
+  // three tiles down-screen to include the adult figure's head.
+  for (let k = 0; k <= 3; k++) {
     const cx = tx + k, cy = ty + k;
 
     for (const npc of npcs) {
@@ -141,7 +164,7 @@ function targetAt(mx, my) {
           tiles,
           label: prop.interact.label,
           approach: { x: cx, y: cy },
-          run: () => runAction(prop.interact.action),
+          run: () => runAction(prop.interact.action, prop),
         };
       }
     }
@@ -178,7 +201,7 @@ canvas.addEventListener('click', (e) => {
     toast('Document review stopped. Click again to move.');
     return;
   }
-  if (player.activity === 'watching') stopWatchingTV();
+  if (['watching', 'sitting'].includes(player.activity)) stopWatchingTV();
   if (dialogueOpen()) hideDialogue();
   const target = targetAt(e.offsetX, e.offsetY);
   if (!target) return;
@@ -205,14 +228,14 @@ canvas.addEventListener('click', (e) => {
 });
 
 function overlayOpen() {
-  return !$('email').classList.contains('hidden')
+  return desk.isOpen() || !$('email').classList.contains('hidden')
       || !$('panel').classList.contains('hidden')
       || !$('gameover').classList.contains('hidden');
 }
 
 function moveBy(dx, dy) {
   if (!inGame || overlayOpen() || dialogueOpen() || player.walking || docReview.active) return;
-  if (player.activity === 'watching') stopWatchingTV();
+  if (['watching', 'sitting'].includes(player.activity)) stopWatchingTV();
   const dest = { x: player.tileX + dx, y: player.tileY + dy };
   if (!isWalkable(dest.x, dest.y)) return;
   player.setPath([dest]);
@@ -221,24 +244,35 @@ function moveBy(dx, dy) {
 function updateQuickActions() {
   const mail = $('btn-mail');
   if (!mail) return;
-  const inOffice = state.zone === 'office';
-  mail.disabled = !inOffice;
-  mail.title = inOffice ? 'Open BarMail (B)' : 'BarMail is on your office computer';
+  const access = canAccessBarMail(state);
+  mail.disabled = !access;
+  mail.title = hasUpgrade('work_phone') ? 'Open BarMail on your work phone (B)' : access ? 'Open BarMail on your office computer (B)' : 'Buy the Work Phone to use BarMail outside the office';
+  const room = $('room-action');
+  room.classList.toggle('hidden', !['sidebar', 'courtroom'].includes(state.zone));
+  room.textContent = state.zone === 'sidebar' ? 'The Sidebar · Room & chat' : 'Talk to Derek Balam';
+  $('room-service').classList.toggle('hidden', !['sidebar','courtroom'].includes(state.zone));
+  $('room-service').textContent = state.zone === 'sidebar' ? 'Order a drink' : 'Sleeping AI judge';
+  $('room-board').classList.toggle('hidden', state.zone !== 'sidebar');
 }
 
 // ---------------------------------------------------------------------------
 // Interactions
 // ---------------------------------------------------------------------------
-function runAction(action) {
+function runAction(action, prop = null) {
   switch (action) {
     case 'email': openEmail(); break;
-    case 'doc_review': startDocumentReview(); break;
+    case 'doc_review': desk.open('files'); break;
     case 'rules': openRuleLibrary(); break;
     case 'shop_office': openShop('Office Upgrades', OFFICE_UPGRADES); break;
     case 'shop_apartment': openShop('Apartment Upgrades', APARTMENT_UPGRADES); break;
     case 'record': openRecord(); break;
     case 'rest': doRest(); break;
     case 'wardrobe': openWardrobe(); break;
+    case 'sidebar_chat': openSidebar(prop?.topic); break;
+    case 'sidebar_sit': sitInSidebar(prop); break;
+    case 'bartender': openBartender(); break;
+    case 'high_scores': openHighScores(); break;
+    case 'judge': openJudgeStatus(); break;
     case 'flavor_coffee':
       drinkCoffee();
       break;
@@ -252,7 +286,21 @@ function runAction(action) {
 }
 
 function talkTo(def) {
-  if (def.talk === 'jim') {
+  if (def.talk === 'bailiff') {
+    showDialogue({
+      name: def.name,
+      text: 'Derek Balam checks the courtroom clock. “Counselor, welcome. I keep order here. The hearing calendar is still being built, so today you can explore the room. Please keep your briefcase out of the aisle.”',
+      choices: [
+        { label: 'What is planned for court?', fn: () => showDialogue({ name: def.name,
+          text: '“Hearings, witnesses, and opportunities to think before you speak. Future exercises will identify the jurisdiction and the record you are working from. For now, practice your written work with Linda and Jim in the journal.”',
+          choices: [{ label: 'Open my journal', fn: () => desk.open() }, { label: 'Thank you, Derek.' }] }) },
+        { label: 'Visit The Sidebar', fn: () => enterZone('sidebar') },
+        { label: 'I will take a look around.' },
+      ],
+    });
+  } else if (def.talk === 'sidebar_host') {
+    openBartender();
+  } else if (def.talk === 'jim') {
     const lines = [
       'Jim reminds you of his email that said “pls fix.”',
       'Jim is on a client call.',
@@ -289,11 +337,11 @@ function talkTo(def) {
 
 function lizLines() {
   const paralegal = hasUpgrade('paralegal');
-  const windowOwned = hasUpgrade('office_window');
+  const phoneOwned = hasUpgrade('work_phone');
   const chair = hasUpgrade('liz_chair');
   const plants = hasUpgrade('houseplants');
   const artwork = hasUpgrade('artwork');
-  const improvedOffice = paralegal && windowOwned;
+  const improvedOffice = paralegal && phoneOwned;
   const lines = [
     'You have emails to answer and documents to review.',
     'Mr. Johnson called regarding his case.',
@@ -332,8 +380,8 @@ function lindaAside() {
     'I used to think making partner meant fewer emails.',
     'If anyone asks, this is my third cup of tea, not my fifth.',
   ];
-  if (!hasUpgrade('office_window')) {
-    lines.push('I asked Mr. Hardsell if we could get you a window, but he said no. Sorry.');
+  if (!hasUpgrade('work_phone')) {
+    lines.push('I asked Jim to get you a work phone. He said the office computer has a perfectly good cord.');
   }
   return lines[Math.floor(Math.random() * lines.length)];
 }
@@ -372,6 +420,7 @@ function talkToLinda(def) {
       {
         label: `Pay ${LINDA_TIP_COST} gold for a tip`,
         fn: () => {
+          if (pendingAttempt(state)) { toast('Wait for the partner reply before making purchases.'); return; }
           if (state.gold < LINDA_TIP_COST) return;
           state.gold -= LINDA_TIP_COST;
           state.tipsPurchased++;
@@ -399,7 +448,10 @@ function openTravelMenu() {
     choices.push({ label: 'Go to the Apartment', fn: () => enterZone('apartment') });
   }
   if (state.zone !== 'courtroom') {
-    choices.push({ label: 'Go to the Empty Courtroom', fn: () => enterZone('courtroom') });
+    choices.push({ label: 'Go to the Courtroom', fn: () => enterZone('courtroom') });
+  }
+  if (state.zone !== 'sidebar') {
+    choices.push({ label: 'Go to The Sidebar', fn: () => enterZone('sidebar') });
   }
   choices.push({ label: 'Stay here', fn: () => {} });
   showDialogue({
@@ -416,10 +468,7 @@ let currentScenario = null;
 let hintPurchasedForCurrent = false;
 
 function billableStudyActive() {
-  return inGame
-    && document.visibilityState === 'visible'
-    && currentScenario !== null
-    && !$('email').classList.contains('hidden');
+  return billableMessageOpen({ inGame, visible: document.visibilityState === 'visible', mailOpen: !$('email').classList.contains('hidden'), messageOpen: !!currentScenario || (mailMode === 'writing' && !!writingTaskId) });
 }
 
 function trackBillableStudy(dt) {
@@ -441,36 +490,70 @@ function currentDifficulty() {
 
 const PRACTICE_PACKS = new Set(['mixed', 'sqe', 'mpre', 'juris']);
 
-function scenarioMatchesPack(scenario, pack) {
-  if (pack === 'sqe') return scenario.sourceType === 'sqe-style';
-  if (pack === 'mpre') return scenario.sourceType === 'mpre-style';
-  if (pack === 'juris') return scenario.sourceType === 'lawscape';
-  return true;
-}
+let mailMode = 'inbox', mailFolder = 'all', writingTaskId = null, questionAnswered = false;
 
-function pickScenario() {
-  const difficulty = currentDifficulty();
-  const selectedPack = PRACTICE_PACKS.has(state.practicePack) ? state.practicePack : 'mixed';
-  const packPool = SCENARIOS.filter((scenario) => scenarioMatchesPack(scenario, selectedPack));
-  const preferredDifficulty = packPool.filter((scenario) => scenario.difficulty === difficulty);
-  const eligible = preferredDifficulty.length ? preferredDifficulty : packPool;
-  let pool = eligible.filter((scenario) => !state.seen.includes(scenario.id));
-  if (!pool.length) {
-    const eligibleIds = new Set(eligible.map((scenario) => scenario.id));
-    state.seen = state.seen.filter((id) => !eligibleIds.has(id));
-    pool = eligible;
+function openEmail(folder = 'all', taskId = null) {
+  if (!canAccessBarMail(state)) {
+    toast('BarMail is on your office computer. The Work Phone unlocks access everywhere.');
+    return;
   }
-  return pool[Math.floor(Math.random() * pool.length)];
+  if (docReview.active) stopDocumentReview(false);
+  desk.close(); desk.releaseWriting(); hideDialogue(); player?.stop();
+  $('panel').classList.add('hidden');
+  $('email').classList.remove('hidden');
+  $('email-appname').textContent = hasUpgrade('work_phone') && state.zone !== 'office'
+    ? 'BarMail — Work Phone' : 'BarMail — Office Computer';
+  mailFolder = folder;
+  mailMode = taskId ? 'writing' : 'inbox';
+  writingTaskId = taskId;
+  currentScenario = null;
+  $('email-pack').value = PRACTICE_PACKS.has(state.practicePack) ? state.practicePack : 'mixed';
+  for (const id of ['email-difficulty','email-source','email-hint','email-rule','email-body','email-writing-body']) $(id).classList.add('hidden');
+  $('email-inbox').classList.toggle('hidden', !!taskId);
+  if (taskId) {
+    $('email-writing-body').classList.remove('hidden');
+    desk.embedWriting($('email-writing-body'),taskId);
+  } else { renderInbox(); $('email-inbox-open').focus(); }
+  hoverLabel(null);
 }
 
-function openEmail() {
-  if (docReview.active) stopDocumentReview(false);
-  currentScenario = pickScenario();
+function renderInbox() {
+  const pool = practiceInbox(state,SCENARIOS);
+  const showPractice = mailFolder !== 'writing', showWriting = mailFolder !== 'practice';
+  const e = escapeHtml;
+  $('email-inbox').innerHTML = `<header class="mail-inbox-heading"><div><span class="mail-eyebrow">HARDSELL &amp; FIRESTONE · INTERNAL MAIL</span><h2>${showPractice && showWriting ? 'Your inbox' : showWriting ? 'Writing assignments' : 'Ethics practice inbox'}</h2><p>Open a subject line to read and reply. All senders and correspondence are synthetic.</p></div><span class="mail-device">${hasUpgrade('work_phone') ? 'Work phone connected' : 'Office terminal'}</span></header>`
+    + (pendingAttempt(state) ? '<p class="mail-notice">A partner reply is pending. You can read your mail; another graded submission waits for that reply.</p>' : '')
+    + (showWriting ? `<h3 class="mail-group-title">Partner correspondence · Writing</h3><div class="mail-list">${[...WRITING_TASKS,CAPSTONE].map((task) => {
+      const latest = taskAttempts(state,task.id).at(-1);
+      const locked = task.id === 'capstone' && !capstoneReady(state);
+      const status = locked ? 'Complete six replies and two files' : latest?.status === 'pending' ? 'Sent · awaiting partner' : latest ? 'Partner replied' : state.apprenticeship.drafts[task.id] ? 'Draft saved' : 'New assignment';
+      return `<button type="button" class="mail-row" data-writing="${task.id}" ${locked ? 'disabled' : ''}><span class="mail-sender">${e(task.partner)}</span><span class="mail-subject">${e(task.title)}<small>${e(task.skill)} · ${e(task.prompt.slice(0,105))}…</small></span><span class="mail-status">${status}</span></button>`;
+    }).join('')}</div>` : '')
+    + (showPractice ? `<h3 class="mail-group-title">Ethics practice · ${pool.levelLabel} · ${pool.unread.length} unanswered</h3><div class="mail-list">${pool.unread.map((s) => `<button type="button" class="mail-row" data-scenario="${e(s.id)}"><span class="mail-sender">${e(s.from)}<small>${e(s.role)}</small></span><span class="mail-subject">${e(s.subject)}<small>${e(s.body.slice(0,95))}…</small></span><span class="mail-status">${s.sourceType === 'mpre-style' ? 'MPRE-style' : s.sourceType === 'sqe-style' ? 'SQE-style' : 'State of Juris'}</span></button>`).join('')}</div>${!pool.unread.length ? '<p class="mail-notice">You have answered this tier’s mail for this practice pack.</p><button type="button" id="mail-new-round">Start another study round</button>' : ''}` : '');
+  $('email-inbox').querySelectorAll('[data-writing]').forEach((row) => row.onclick = () => openEmail('writing',row.dataset.writing));
+  $('email-inbox').querySelectorAll('[data-scenario]').forEach((row) => row.onclick = () => openScenario(row.dataset.scenario));
+  if ($('mail-new-round')) $('mail-new-round').onclick = () => {
+    const ids = new Set(pool.eligible.map((item) => item.id));
+    state.seen = state.seen.filter((id) => !ids.has(id)); save(); renderInbox();
+  };
+}
+
+function openScenario(id) {
+  if (!canAccessBarMail(state)) return;
+  const scenario = practiceInbox(state,SCENARIOS).unread.find((item) => item.id === id);
+  if (!scenario) return;
+  desk.releaseWriting();
+  currentScenario = scenario; mailMode = 'practice'; writingTaskId = null; questionAnswered = false;
+  $('email-inbox').classList.add('hidden');
+  $('email-writing-body').classList.add('hidden');
+  $('email-body').classList.remove('hidden');
+  $('email-difficulty').classList.remove('hidden');
   hintPurchasedForCurrent = false;
   const s = currentScenario;
 
   $('email-subject').textContent = s.subject;
-  $('email-from').textContent = `From: ${s.from} — ${s.role}`;
+  const jurisdiction = s.sourceType === 'sqe-style' ? 'England & Wales · legacy SQE-style study' : s.sourceType === 'mpre-style' ? 'US MPRE-style · model-rule study' : 'State of Juris · legacy mixed-source fiction';
+  $('email-from').textContent = `From: ${s.from} — ${s.role} · ${jurisdiction}`;
   $('email-text').textContent = s.body;
   $('email-pack').value = PRACTICE_PACKS.has(state.practicePack) ? state.practicePack : 'mixed';
   const advancedLabel = s.sourceType === 'sqe-style'
@@ -481,7 +564,7 @@ function openEmail() {
 
   const sourceEl = $('email-source');
   if (s.sourceType === 'mpre-style' || s.sourceType === 'sqe-style') {
-    sourceEl.textContent = s.sourceType === 'sqe-style' ? 'UK SQE-STYLE' : 'MPRE-STYLE';
+    sourceEl.textContent = s.sourceType === 'sqe-style' ? 'ENGLAND & WALES · SQE-STYLE' : 'MPRE-STYLE';
     sourceEl.title = s.sourceNote;
     sourceEl.classList.remove('hidden');
     sourceEl.classList.toggle('sqe-source', s.sourceType === 'sqe-style');
@@ -521,6 +604,7 @@ function openEmail() {
 }
 
 function buyEthicsHint() {
+  if (pendingAttempt(state)) { toast('Wait for the partner reply before making purchases.'); return; }
   if (!currentScenario || hintPurchasedForCurrent) return;
   if (!rileyHintEligible(state.upgrades)) {
     toast('Riley needs both the Paralegal Upgrade and Ethics Treatise Shelf.');
@@ -544,6 +628,9 @@ function buyEthicsHint() {
 $('email-hint').addEventListener('click', buyEthicsHint);
 
 function answerEmail(choice) {
+  if (!currentScenario || questionAnswered) return;
+  if (pendingAttempt(state)) { toast('Wait for the pending partner reply before submitting another answer.'); return; }
+  questionAnswered = true;
   const s = currentScenario;
   const b = bonuses(state.upgrades);
   const verdictEl = $('email-verdict');
@@ -602,10 +689,11 @@ function answerEmail(choice) {
   $('email-replies').classList.add('hidden');
   $('email-result').classList.remove('hidden');
   $('email-continue').onclick = () => {
-    if (disbarred) { closeEmail(); gameOver(); } else { openEmail(); }
+    if (disbarred) { closeEmail(); gameOver(); } else { openEmail(mailFolder); }
   };
   if (disbarred) $('email-continue').textContent = 'Face the Disciplinary Judge';
-  else $('email-continue').textContent = 'Next Email';
+  else $('email-continue').textContent = 'Back to inbox';
+  if (disbarred) gameOver(`${DEFAULT_GAMEOVER_TEXT} ${choice.why || ''} ${s.rule}`);
 }
 
 function appendScenarioSource(container, scenario) {
@@ -619,7 +707,7 @@ function appendScenarioSource(container, scenario) {
   local.target = '_blank';
   local.rel = 'noopener';
   local.textContent = scenario.localSourceFile
-    || (isSqe ? 'UK SQE Ethics Email Pack' : 'MPRE Associate Email Scenarios');
+    || (isSqe ? 'England & Wales SQE Ethics Email Pack' : 'MPRE Associate Email Scenarios');
   source.append(local, ' · ');
   const official = document.createElement('a');
   official.href = scenario.sourceUrl;
@@ -640,6 +728,7 @@ function appendScenarioSource(container, scenario) {
 }
 
 function closeEmail() {
+  desk.releaseWriting(); mailMode = 'inbox'; writingTaskId = null;
   $('email').classList.add('hidden');
   currentScenario = null;
   billableUnsavedMs = 0;
@@ -649,8 +738,10 @@ $('email-close').addEventListener('click', closeEmail);
 $('email-pack').addEventListener('change', (event) => {
   state.practicePack = PRACTICE_PACKS.has(event.target.value) ? event.target.value : 'mixed';
   save();
-  openEmail();
+  openEmail('practice');
 });
+$('email-inbox-open').addEventListener('click', () => openEmail());
+$('email-back').addEventListener('click', () => openEmail(mailFolder));
 
 // ---------------------------------------------------------------------------
 // Disbarment
@@ -660,15 +751,21 @@ const DEFAULT_GAMEOVER_TEXT = 'Your Ethics reached zero. The Presiding Disciplin
   + 'upgrades are forfeit.';
 
 function gameOver(reason = DEFAULT_GAMEOVER_TEXT) {
+  const archived = archiveDisbarredRun(state);
+  desk.releaseWriting();
+  writingTaskId = null;
+  const scoreNote = archived.recorded ? ` Your ${formatBillableTime(state.billableStudyMs)} billable time was recorded on the ${archived.persisted ? 'local' : 'session-only'} Sidebar board.` : '';
   stopDocumentReview(false);
   inGame = false;
+  desk.close();
   $('hud').classList.add('hidden');
   $('email').classList.add('hidden');
   $('panel').classList.add('hidden');
   currentScenario = null;
   hideDialogue();
-  $('gameover-text').textContent = reason;
+  $('gameover-text').textContent = reason + scoreNote;
   $('gameover').classList.remove('hidden');
+  reset(); // End this run immediately; closing/reloading cannot revive it.
 }
 
 $('gameover-restart').addEventListener('click', () => {
@@ -684,6 +781,9 @@ $('gameover-restart').addEventListener('click', () => {
 // ---------------------------------------------------------------------------
 function openPanel(title) {
   if (docReview.active) stopDocumentReview(false);
+  player?.stop();
+  hideDialogue();
+  $('panel-inner').classList.remove('sidebar-panel');
   $('panel-title').textContent = title;
   $('panel-tabs').innerHTML = '';
   $('panel-body').innerHTML = '';
@@ -692,6 +792,82 @@ function openPanel(title) {
   return $('panel-body');
 }
 $('panel-close').addEventListener('click', () => $('panel').classList.add('hidden'));
+
+function openSidebar(topicId = state.sidebar.topic) {
+  const topic = sidebarTopic(topicId);
+  state.sidebar.topic = topic.id;
+  save();
+  const body = openPanel(`${SIDEBAR_ROOM.title} — Room & Chat`);
+  $('panel-inner').classList.add('sidebar-panel');
+  body.innerHTML = `
+    <div class="sidebar-banner"><span class="sidebar-mode">LOCAL PREVIEW</span><h2>A place to talk shop.</h2><p>A quiet corner of the firm. Pull up a chair and choose a table.</p></div>
+    <div class="sidebar-layout"><aside><h3>Conversation tables</h3><nav class="sidebar-topics" aria-label="Conversation tables">${SIDEBAR_TOPICS.map((item) => `<button type="button" data-topic="${item.id}" aria-pressed="${item.id === topic.id}">${item.label}</button>`).join('')}</nav>
+      <h3>In this local room</h3><p class="sidebar-person"><strong>${escapeHtml(state.name)}</strong><span>You · local player</span></p><p class="sidebar-person"><strong>B.A.R.T.</strong><span>Robot butler · scripted NPC</span></p><p class="sidebar-offline">Multiplayer is not connected. The future Cloudflare pilot is planned for ${SIDEBAR_ROOM.participantLimit} invited people, with clearly labeled AI agents.</p></aside>
+      <section class="sidebar-conversation" aria-labelledby="sidebar-topic-title"><h3 id="sidebar-topic-title">${topic.label}</h3><p>${topic.prompt}</p>
+        <blockquote><span>B.A.R.T. · scripted welcome</span>“No billable clock at this table. Bring a question, a useful observation, or an idea worth testing.”</blockquote>
+        <p class="sidebar-empty">No shared messages yet. Your draft stays in this browser.</p>
+        <label for="sidebar-draft">Your conversation draft</label><textarea id="sidebar-draft" maxlength="500" rows="4" placeholder="Draft an introduction or a question…" aria-describedby="sidebar-draft-help"></textarea>
+        <p id="sidebar-draft-help">Saved drafts are private to this local save. They will not be sent automatically when multiplayer launches.</p>
+        <div class="sidebar-compose-actions"><button type="button" id="sidebar-save-draft">Save draft locally</button><button type="button" disabled title="Cloudflare multiplayer is not connected">Send · coming with multiplayer</button></div>
+        <p id="sidebar-draft-status" role="status"></p>
+      </section></div>`;
+  const draft = $('sidebar-draft');
+  draft.value = String(state.sidebar.drafts[topic.id] || '').slice(0, 500);
+  const persist = () => {
+    saveSidebarDraft(state, topic.id, draft.value);
+    const saved = save();
+    $('sidebar-draft-status').textContent = saved ? `Saved locally · ${draft.value.length}/500 characters · nothing sent` : 'Kept for this session only · browser storage unavailable · nothing sent';
+  };
+  draft.addEventListener('input', persist);
+  $('sidebar-save-draft').onclick = persist;
+  body.querySelectorAll('[data-topic]').forEach((button) => {
+    button.onclick = () => { openSidebar(button.dataset.topic); body.querySelector(`[data-topic="${button.dataset.topic}"]`).focus(); };
+  });
+}
+
+function sitInSidebar(prop) {
+  if (!prop || state.zone !== 'sidebar') return;
+  stopWatchingTV();
+  watchReturnPos = { x: player.x, y: player.y };
+  player.stop();
+  player.x = prop.x; player.y = prop.y; player.activity = 'sitting';
+  showDialogue({ name: 'The Sidebar', text: 'You take a seat at the bar. A little distance from the inbox can help.',
+    choices: [{ label: 'Open room & chat', fn: () => openSidebar() }, { label: 'Stand up', fn: stopWatchingTV }],
+  });
+}
+
+function openBartender() {
+  if (state.zone !== 'sidebar') return;
+  const body = openPanel('B.A.R.T. — Robotic Butler & Bartender');
+  body.innerHTML = `<div class="help-lede"><b>“Good evening, counselor. Your usual has been calculated.”</b><p>B.A.R.T. adjusts a bow tie and polishes a glass with a white glove.</p><p>Alcohol served here costs <b>zero Ethics</b> and halves walking speed for 40 seconds. Another drink refreshes the timer. Sparkling water has no effect.</p></div>`
+    + BAR_DRINKS.map((drink) => `<article class="row-item"><div class="grow"><h4>${drink.name}</h4><p>${drink.note}</p><p>${drink.slows ? '0 Ethics damage · slow walking for 40 seconds' : 'No effect on Ethics or movement'}</p></div><button type="button" data-drink="${drink.id}" ${state.gold < drink.cost || pendingAttempt(state) ? 'disabled' : ''}>Order · ${drink.cost ? `${drink.cost} gold` : 'free'}</button></article>`).join('')
+    + '<p id="bar-order-status" role="status"></p><button id="bar-scores" type="button">View billable-hours board</button>';
+  body.querySelectorAll('[data-drink]').forEach((button) => button.onclick = () => {
+    try {
+      const { drink } = orderBarDrink(state,button.dataset.drink);
+      save(); updateHUD(); openBartender();
+      $('bar-order-status').textContent = `${drink.name} served. Ethics unchanged at ${state.ethics}. ${drink.slows ? 'Walking at half speed for 40 seconds.' : 'Enjoy your water.'}`;
+    } catch (error) { $('bar-order-status').textContent = error.message; }
+  });
+  $('bar-scores').onclick = openHighScores;
+}
+
+function openHighScores() {
+  const entries = readBillableBoard();
+  const body = openPanel('The Sidebar — Billable Hours Hall of Fame');
+  body.innerHTML = `<div class="help-lede"><h3>The hours outlive the office.</h3><p>Top 10 completed runs, ranked by billable time before disbarment. This board belongs to this browser; it is not an online or verified ranking.</p></div><p class="board-current">Current run: <b>${escapeHtml(state.name)}</b> · ${formatBillableTime(state.billableStudyMs)} · still practicing</p>`
+    + (entries.length ? `<table class="score-table"><caption>Completed local runs</caption><thead><tr><th scope="col">Rank</th><th scope="col">Attorney</th><th scope="col">Billable time</th></tr></thead><tbody>${entries.map((entry,index) => `<tr><td>${index+1}</td><th scope="row">${escapeHtml(entry.name)}</th><td>${formatBillableTime(entry.billableMs)}</td></tr>`).join('')}</tbody></table>` : '<p class="board-empty">No completed runs yet. A score is recorded when an attorney is disbarred.</p>')
+    + '<p class="board-note">The clock counts visible time inside an open ethics email or writing assignment, including its feedback. It pauses in the inbox list, other windows, and hidden tabs. Scores survive character resets; gold, inventory and progress do not. Shared scores will require the future server-backed multiplayer build.</p>';
+}
+
+function openJudgeStatus() {
+  showDialogue({ name: 'The Honorable A.I. — Standby Judge',
+    text: 'The judge is asleep in a high-backed chair behind the bench. A small light reads STANDBY. Court is not in session. This is a scripted preview: no AI judge is connected and no hearing or grading is taking place.',
+    choices: [{ label: 'Read the future court docket', fn: () => showDialogue({ name: 'Future court docket',
+      text: 'A later build will connect different AI judge agents to reviewed hearing records and jurisdiction-specific court exercises. Judge profiles, evidence-grounded rulings, review controls and evaluation are roadmap work. For now, let the judge sleep.',
+    }) }, { label: 'Quietly step away.' }],
+  });
+}
 
 function openRuleLibrary() {
   if (!hasUpgrade('subscription')) {
@@ -865,6 +1041,7 @@ function updateDocumentReview(now) {
 $('btn-stop-review').addEventListener('click', () => stopDocumentReview());
 
 function openShop(title, catalog) {
+  if (pendingAttempt(state)) { toast('Wait for the partner reply before making purchases.'); return; }
   const body = openPanel(title);
   for (const u of catalog) {
     const row = document.createElement('div');
@@ -881,6 +1058,7 @@ function openShop(title, catalog) {
       btn.textContent = 'Buy';
       btn.disabled = state.gold < u.cost;
       btn.onclick = () => {
+        if (pendingAttempt(state)) { toast('Wait for the partner reply before making purchases.'); return; }
         if (state.gold < u.cost) return;
         const previousMax = maxEthics();
         state.gold -= u.cost;
@@ -891,7 +1069,7 @@ function openShop(title, catalog) {
           state.moneybagsPurchases = (state.moneybagsPurchases || 0) + 1;
         }
         save();
-        updateHUD();
+        updateHUD(); updateQuickActions();
         if (state.moneybagsStolen && moneybagsAuditTriggered(state.moneybagsPurchases)) {
           state.ethics = 0;
           save();
@@ -922,12 +1100,12 @@ function openRecord() {
   const acc = state.casesDone ? Math.round((state.correctDone / state.casesDone) * 100) : 0;
   const pronouns = { male: 'he/him', female: 'she/her', nonbinary: 'they/them' }[state.gender] || 'they/them';
   body.innerHTML = `
-    <div class="row-item"><div class="grow"><h4>${state.name} (${pronouns})</h4>
+    <div class="row-item"><div class="grow"><h4>${escapeHtml(state.name)} (${pronouns})</h4>
       <p>Attorney at law, State of Juris. License status: ${state.ethics > 0 ? 'ACTIVE' : 'REVOKED'}</p></div></div>
     <div class="row-item"><div class="grow"><h4>Scenarios answered</h4></div><div class="meta">${state.casesDone}</div></div>
     <div class="row-item"><div class="grow"><h4>Answered correctly</h4></div><div class="meta">${state.correctDone} (${acc}%)</div></div>
     <div class="row-item"><div class="grow"><h4>Billable study time</h4>
-      <p>Visible time with BarMail open</p></div><div class="meta">⏱ ${formatBillableTime(state.billableStudyMs)}</div></div>
+      <p>Visible time in open BarMail questions, writing assignments and feedback</p></div><div class="meta">⏱ ${formatBillableTime(state.billableStudyMs)}</div></div>
     <div class="row-item"><div class="grow"><h4>Current streak</h4></div><div class="meta">x${state.streak}</div></div>
     <div class="row-item"><div class="grow"><h4>Wrong-answer streak</h4></div><div class="meta">x${state.wrongStreak}</div></div>
     <div class="row-item"><div class="grow"><h4>Document-review cycles</h4></div><div class="meta">${state.documentsReviewed}</div></div>
@@ -976,6 +1154,7 @@ function drinkCoffee() {
 }
 
 function eatApartmentFood(name, ethicsRestore) {
+  if (pendingAttempt(state)) { toast('Wait for the partner reply before making purchases.'); return; }
   if (state.ethics >= maxEthics()) {
     toast('Your Ethics is already full. Save the food for a harder day.');
     return;
@@ -1011,7 +1190,7 @@ function watchTV() {
 }
 
 function stopWatchingTV() {
-  if (!player || player.activity !== 'watching') return;
+  if (!player || !['watching', 'sitting'].includes(player.activity)) return;
   player.activity = null;
   if (watchReturnPos) {
     player.x = watchReturnPos.x;
@@ -1044,6 +1223,7 @@ function openMoneybagsSafe() {
 }
 
 function takeMoneybagsGold() {
+  if (pendingAttempt(state)) { toast('Your partner has a pending reply. Even Jim can wait five seconds.'); return; }
   if (state.moneybagsStolen) return;
   state.moneybagsStolen = true;
   state.moneybagsPurchases = 0;
@@ -1110,7 +1290,7 @@ function drinkWhiskey() {
       {
         label: 'Walk it off',
         fn: () => {
-          whiskeySlowUntil = performance.now() + WHISKEY_SLOW_MS;
+          state.slowUntil = Date.now() + WHISKEY_SLOW_MS; save();
           toast('Your movement is impaired for 40 seconds.');
         },
       },
@@ -1119,37 +1299,19 @@ function drinkWhiskey() {
 }
 
 function openWardrobe() {
-  if (!hasUpgrade('wardrobe_rack')) {
-    toast('A single suit hangs here. The Wardrobe Rack upgrade unlocks more colors.');
-    return;
-  }
-  const names = ['Navy', 'Charcoal', 'Burgundy', 'Archive Green', 'Oak Brown'];
-  showDialogue({
-    name: 'Wardrobe',
-    text: 'Pick a suit. Dress for the discipline hearing you never want to attend.',
-    choices: PAL.suits.map((c, i) => ({
-      label: names[i] || c,
-      fn: () => { state.suitColor = c; player.look.suit = c; save(); toast(`Suited up in ${names[i] || c}.`); },
-    })),
-  });
+  desk.open('wardrobe');
 }
 
 function openHelp() {
   const body = openPanel('How LawScape Works');
   body.innerHTML = `
-    <div class="help-lede">Your first goal: answer a <b>BarMail</b> dilemma or complete a one-minute document-review cycle to earn gold.</div>
+    <div class="help-lede">Open <b>Journal</b> (J) to begin your first firm day: inspect a synthetic file, write a partner reply, and earn a visible reward.</div>
     <div class="row-item"><div class="grow"><h4>💻 BarMail</h4>
-      <p>Click your office computer or use the BarMail quick action. Partners and clients send
-      requests — many of them unethical. Choose Mixed Inbox, UK SQE Ethics, US MPRE, or
-      State of Juris in the toolbar. Questions advance from Foundation to Practice to the
-      advanced tier as your record grows.</p></div></div>
+      <p>Click your office computer or use BarMail. Open an email subject to answer an ethics question or write a partner reply inside the same window. Choose a practice pack in the toolbar. Buy the 2,000-gold Work Phone from the office upgrades cabinet to open all your mail anywhere.</p></div></div>
     <div class="row-item"><div class="grow"><h4>⏱ Billable Hours</h4>
-      <p>The HUD timer records visible time spent with BarMail open, including reading the
-      question, choosing an answer, and studying the explanation. Exploring the office,
-      leaving the tab, and other activities do not count.</p></div></div>
+      <p>The clock records visible time inside an open question, writing assignment or feedback. It pauses in the inbox list, other activities and hidden tabs. At disbarment, that run is recorded on The Sidebar’s local top-10 board. Scores survive resets; character possessions do not.</p></div></div>
     <div class="row-item"><div class="grow"><h4>🗄 Document Review</h4>
-      <p>Use the filing cabinet in the main office. Your attorney sits and reviews files;
-      every uninterrupted one-minute cycle earns 5 gold.</p></div></div>
+      <p>Use the filing cabinet or your journal to open the evidence room. Flag exact passages, explain your findings, then commit a file review for up to 75 study gold. Each file pays once per run.</p></div></div>
     <div class="row-item"><div class="grow"><h4>📚 Ethics Treatises</h4>
       <p>Buy the Ethics Treatise Shelf upgrade, then use the bookshelf to search the bundled
       Nevada, Arizona, and California references.</p></div></div>
@@ -1157,8 +1319,7 @@ function openHelp() {
       <p>Click or tap a floor tile to walk. You can also use WASD or the arrow keys. Select
       a highlighted person or object to walk over and interact.</p></div></div>
     <div class="row-item"><div class="grow"><h4>🪙 Gold</h4>
-      <p>Correct answers earn gold. Spend it on office and apartment upgrades (filing cabinet
-      in the office, furniture catalog at home).</p></div></div>
+      <p>Ethics answers, writing checklists and supported file reviews earn gold. Spend it on wardrobe accessories and office or apartment upgrades. New prose is saved for self-comparison, not AI graded.</p></div></div>
     <div class="row-item"><div class="grow"><h4>⚖ Ethics Bar</h4>
       <p>Wrong answers damage your Ethics — the game explains the violated rule every time.
       Damage rises from 30 to 45 and then 60 as wrong answers pile up; Riley halves it.
@@ -1171,8 +1332,11 @@ function openHelp() {
       <p>Ethics at zero = YOU GOT DISBARRED — GAME OVER. You restart from nothing: no gold,
       no items, no upgrades.</p></div></div>
     <div class="row-item"><div class="grow"><h4>🏛 Court</h4>
-      <p>The furnished courtroom is open to explore, but no matters or court personnel are
-      on calendar yet.</p></div></div>
+      <p>Derek Balam keeps watch while a robot judge sleeps in the judicial chair. Court is not in session. Different AI judge agents and reviewed hearing exercises are planned; no live judge is connected.</p></div></div>
+    <div class="row-item"><div class="grow"><h4>🍵 The Sidebar</h4>
+      <p>Use Travel to visit the lounge. B.A.R.T., a robot in butler dress, serves drinks: Sidebar alcohol costs no Ethics but slows walking for 40 seconds. Water has no effect. The board ranks billable time in completed runs. Room &amp; Chat saves local drafts; shared communication awaits multiplayer.</p></div></div>
+    <div class="row-item"><div class="grow"><h4>✂ Your attorney</h4>
+      <p>Open Journal → Wardrobe to change hair, facial hair, face shape, eyes, skin, suit, shirt, tie, and glasses. Everyone starts in trousers; a skirt suit is optional for every gender. Preview standing, walking, or seated.</p></div></div>
     <div class="row-item"><div class="grow"><h4>✍ Email HR</h4>
       <p>Found a bug, or ready to complain about the working conditions at Hardsell &amp;
       Firestone? Open BarMail and press <b>Email HR</b>. HR will not read it — but your
@@ -1180,9 +1344,7 @@ function openHelp() {
     <div class="row-item"><div class="grow"><h4>🌍 Why LawScape Exists</h4>
       <p>The thesis: legal learning should be fun — and it should be fun to learn how
       lawyers in other countries answer the same questions. The practice-pack selector
-      (UK SQE, US MPRE, State of Juris) is the first step; a full jurisdiction selector
-      (California, Nevada, Arizona) and a Global Law Firm mode with BarMail arriving from
-      around the world are on the roadmap.</p></div></div>`;
+      (England & Wales SQE, US MPRE, State of Juris) is the first step; the Firm Jurisdictions desk collects local requests for future reviewed packs. Requests are not sent until you choose to submit them through GitHub.</p></div></div>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -1340,14 +1502,31 @@ $('email-hr-open').addEventListener('click', () => {
 });
 
 $('btn-help').addEventListener('click', openHelp);
+$('email-writing').addEventListener('click', () => openEmail('writing'));
+$('btn-journal').addEventListener('click', () => desk.open());
+$('quest-status').addEventListener('click', () => desk.open());
 $('btn-mail').addEventListener('click', () => {
-  if (state.zone === 'office') openEmail();
-  else toast('Your secure BarMail terminal is at the office.');
+  openEmail();
 });
 $('btn-record').addEventListener('click', openRecord);
 $('btn-travel').addEventListener('click', openTravelMenu);
+$('room-action').addEventListener('click', () => {
+  if (state.zone === 'sidebar') openSidebar();
+  else if (state.zone === 'courtroom') talkTo(zone.npcs.find((npc) => npc.id === 'derek_balam'));
+});
+$('room-service').addEventListener('click', () => state.zone === 'sidebar' ? openBartender() : openJudgeStatus());
+$('room-board').addEventListener('click', openHighScores);
+
+$('email').addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeEmail(); $('btn-mail').focus(); }
+  if (event.key !== 'Tab') return;
+  const focusable = [...$('email').querySelectorAll('button:not(:disabled), a[href], input, textarea, select, summary, [tabindex="0"]')].filter((el) => el.getClientRects().length);
+  if (event.shiftKey && document.activeElement === focusable[0]) { event.preventDefault(); focusable.at(-1)?.focus(); }
+  else if (!event.shiftKey && document.activeElement === focusable.at(-1)) { event.preventDefault(); focusable[0]?.focus(); }
+});
 
 document.addEventListener('keydown', (event) => {
+  if (desk.isOpen()) return;
   const target = event.target;
   const typing = target instanceof HTMLInputElement
     || target instanceof HTMLTextAreaElement
@@ -1372,7 +1551,9 @@ document.addEventListener('keydown', (event) => {
   if (moves[key]) {
     event.preventDefault();
     moveBy(...moves[key]);
-  } else if (key === 'b' && state.zone === 'office' && !overlayOpen()) {
+  } else if (key === 'j' && !overlayOpen()) {
+    desk.open();
+  } else if (key === 'b' && canAccessBarMail(state) && !overlayOpen()) {
     openEmail();
   } else if (key === 'r' && !overlayOpen()) {
     openRecord();
@@ -1396,23 +1577,8 @@ const GENDERS = [
   { id: 'female', label: 'Female' },
   { id: 'nonbinary', label: 'Non-binary' },
 ];
-const HAIR_STYLES = ['Short', 'Long', 'Ponytail', 'Bun', 'Curly', 'Bald'];
-
-let pick = { suit: PAL.suits[0], gender: 'nonbinary', skin: 1, hairColor: 0, hairStyle: 0, eye: 0 };
-
-function swatchRow(el, colors, selectedIdx, onPick, round = false) {
-  el.innerHTML = '';
-  colors.forEach((c, i) => {
-    const sw = document.createElement('button');
-    sw.type = 'button';
-    sw.className = 'swatch' + (round ? ' round' : '') + (selectedIdx === i ? ' selected' : '');
-    sw.style.background = c;
-    sw.setAttribute('aria-label', `${el.getAttribute('aria-label') || 'Color'} option ${i + 1}`);
-    sw.setAttribute('aria-pressed', selectedIdx === i ? 'true' : 'false');
-    sw.onclick = () => onPick(i);
-    el.appendChild(sw);
-  });
-}
+let pick = { ...normalizeAppearance(), gender: 'nonbinary', skin: 1 };
+let creatorEditor = null;
 
 function pillRow(el, labels, isSelected, onPick) {
   el.innerHTML = '';
@@ -1427,40 +1593,18 @@ function pillRow(el, labels, isSelected, onPick) {
   });
 }
 
-function pickLook() {
-  return {
-    suit: pick.suit, gender: pick.gender, skin: pick.skin,
-    hair: pick.hairColor, hairStyle: pick.hairStyle, eye: pick.eye,
-  };
-}
-
-function drawCreatorPreview() {
-  const canvas = $('c-preview');
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  const model = new Actor(0, 0, pickLook());
-  ctx.save();
-  ctx.scale(2.4, 2.4);
-  model.draw(ctx, canvas.width / 4.8, 66, 0, true);
-  ctx.restore();
-}
-
 function buildCreator() {
-  pillRow($('c-gender'), GENDERS.map((g) => g.label),
-    (i) => GENDERS[i].id === pick.gender,
-    (i) => { pick.gender = GENDERS[i].id; buildCreator(); });
-  pillRow($('c-hairstyles'), HAIR_STYLES,
-    (i) => pick.hairStyle === i,
-    (i) => { pick.hairStyle = i; buildCreator(); });
-  swatchRow($('c-skins'), PAL.skin, pick.skin,
-    (i) => { pick.skin = i; buildCreator(); });
-  swatchRow($('c-haircolors'), PAL.hair, pick.hairColor,
-    (i) => { pick.hairColor = i; buildCreator(); });
-  swatchRow($('c-eyes'), PAL.eyes, pick.eye,
-    (i) => { pick.eye = i; buildCreator(); }, true);
-  swatchRow($('c-suits'), PAL.suits, PAL.suits.indexOf(pick.suit),
-    (i) => { pick.suit = PAL.suits[i]; buildCreator(); });
-  drawCreatorPreview();
+  creatorEditor?.destroy();
+  function genderControls() {
+    pillRow($('c-gender'), GENDERS.map((g) => g.label),
+      (i) => GENDERS[i].id === pick.gender,
+      (i) => { pick.gender = GENDERS[i].id; genderControls(); });
+  }
+  genderControls();
+  creatorEditor = mountAppearanceEditor($('c-appearance'), {
+    prefix: 'creator', read: () => pick,
+    onChange: (key, value) => { pick[key] = value; },
+  });
 }
 
 $('btn-new').addEventListener('click', () => {
@@ -1470,12 +1614,13 @@ $('btn-new').addEventListener('click', () => {
 });
 
 $('btn-creator-back').addEventListener('click', () => {
+  creatorEditor?.destroy();
   $('creator').classList.add('hidden');
   $('title-screen').classList.remove('hidden');
 });
 
 $('btn-continue').addEventListener('click', () => {
-  if (!load()) return;
+  if (!load()) { toast('This save could not be loaded. It has not been changed.'); return; }
   $('title-screen').classList.add('hidden');
   startGame();
 });
@@ -1490,20 +1635,17 @@ $('btn-start').addEventListener('click', () => {
   reset();
   state.name = $('c-name').value.trim() || 'Alex Barrister';
   state.gender = pick.gender;
-  state.suitColor = pick.suit;
-  state.skin = pick.skin;
-  state.hair = pick.hairColor;
-  state.hairStyle = pick.hairStyle;
-  state.eye = pick.eye;
+  Object.assign(state, normalizeAppearance(pick));
+  creatorEditor?.destroy();
   save();
   $('creator').classList.add('hidden');
   startGame();
 });
 
 function startGame() {
+  if (state.ethics <= 0 || state.runStatus === 'ended') { gameOver(); return; }
   player = new Actor(state.pos.x, state.pos.y,
-    { suit: state.suitColor, gender: state.gender, skin: state.skin,
-      hair: state.hair, hairStyle: state.hairStyle, eye: state.eye }, { speed: PLAYER_BASE_SPEED });
+    playerLook(), { speed: PLAYER_BASE_SPEED });
   zone = currentZone();
   if (!isWalkable(player.tileX, player.tileY)) {
     state.pos = { ...zone.spawn };
@@ -1516,13 +1658,13 @@ function startGame() {
   updateHUD();
   $('hud').classList.remove('hidden');
   inGame = true;
-  if (state.casesDone === 0) {
+  desk.tick();
+  if (!state.apprenticeship.introduced) {
     showDialogue({
       name: 'Liz Loza, Secretary',
-      text: `Welcome to Hardsell & Firestone, ${state.name}. BarMail is on your computer, `
-        + 'the filing cabinet has documents to review, and Mr. Johnson called about his case. '
-        + 'Jim Hardsell is busy. Linda Firestone charges for advice. Get to work.',
-      choices: [{ label: 'On it.' }],
+      text: `Welcome to Hardsell & Firestone, ${state.name}. Two files are on your desk. `
+        + 'Linda wants a useful reply. Jim wants it yesterday. Open your journal to inspect the record and begin your first firm day.',
+      choices: [{ label: 'Open my apprenticeship journal', fn: () => desk.open() }, { label: 'Let me look around first.' }],
     });
   }
 }
@@ -1549,7 +1691,8 @@ function loop(now) {
   lastT = now;
 
   if (inGame) {
-    player.speed = now < whiskeySlowUntil ? PLAYER_BASE_SPEED / 2 : PLAYER_BASE_SPEED;
+    desk.tick();
+    player.speed = PLAYER_BASE_SPEED * movementMultiplier(state);
     player.update(dt);
     updateDocumentReview(now);
     trackBillableStudy(dt);
@@ -1604,3 +1747,18 @@ window.LS = {
   get docReview() { return { ...docReview }; },
   get inGame() { return inGame; },
 };
+
+// Another tab must not continue spending or reviving an out-of-date character.
+window.addEventListener('storage', (event) => {
+  if (event.key !== 'lawscape_save_v2' || !inGame) return;
+  inGame = false;
+  desk.close();
+  stopDocumentReview(false);
+  closeEmail();
+  hideDialogue();
+  $('panel').classList.add('hidden');
+  $('hud').classList.add('hidden');
+  $('title-screen').classList.remove('hidden');
+  refreshTitleButtons();
+  toast('Your save changed in another tab. Continue to load the current character.');
+});

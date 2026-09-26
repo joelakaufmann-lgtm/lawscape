@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 
 import { ZONES } from '../js/world/zones.js';
 import { PROPS } from '../js/world/props.js';
+import { findPath } from '../js/engine/pathfind.js';
 
-test('the launch world contains all six requested playable zones', () => {
+test('the local world contains seven playable zones including The Sidebar', () => {
   assert.deepEqual(
     Object.keys(ZONES),
-    ['office', 'corner_office', 'linda_office', 'conference_room', 'courtroom', 'apartment'],
+    ['office', 'corner_office', 'linda_office', 'conference_room', 'courtroom', 'sidebar', 'apartment'],
   );
 });
 
@@ -37,13 +38,10 @@ test('the main office connects the requested workspaces and filing cabinet', () 
   ));
   assert.equal(office.npcs.find((npc) => npc.id === 'secretary').name, 'Liz Loza, Secretary');
   assert.equal(office.npcs.find((npc) => npc.id === 'paralegal').name, 'Riley Readsalot, Paralegal');
-  for (const required of ['officechair', 'plant', 'porthole', 'dotpainting']) {
+  for (const required of ['officechair', 'plant', 'dotpainting']) {
     assert.ok(office.props.some((prop) => prop.type === required), `missing office upgrade prop ${required}`);
   }
-  const liz = office.npcs.find((npc) => npc.id === 'secretary');
-  const porthole = office.props.find((prop) => prop.type === 'porthole');
-  assert.equal(porthole.x, 0);
-  assert.ok(Math.abs(porthole.y - liz.y) <= 1, 'the porthole should be beside Liz');
+  assert.equal(typeof office.props.find((prop) => prop.type === 'desk').phone, 'function');
   assert.equal(office.props.some((prop) => prop.type === 'sofa'), false);
 });
 
@@ -104,10 +102,30 @@ test('apartment food, wardrobe, and clock fixtures match their upgraded layout',
   assert.ok(clock.x <= 6, 'the clock should sit far enough inward to render fully');
 });
 
-test('the courtroom is furnished and intentionally empty', () => {
+test('Derek Balam is the courtroom bailiff with an interactive role and badge', () => {
   const courtroom = ZONES.courtroom;
-  assert.equal(courtroom.npcs.length, 0);
+  assert.equal(courtroom.npcs.length, 1);
+  assert.equal(courtroom.npcs[0].name, 'Derek Balam, Bailiff');
+  assert.equal(courtroom.npcs[0].talk, 'bailiff');
+  assert.equal(courtroom.npcs[0].look.badge, true);
   for (const required of ['judgebench', 'witnessstand', 'counseltable', 'bench']) {
     assert.ok(courtroom.props.some((prop) => prop.type === required), `missing ${required}`);
+  }
+});
+
+test('the new lounge and courtroom interactions are reachable from their entrances', () => {
+  for (const zone of [ZONES.sidebar, ZONES.courtroom]) {
+    const walk = (x, y) => x > 0 && y > 0 && x < zone.w && y < zone.h && zone.tile(x,y) !== 'x'
+      && !zone.props.some((prop) => { const def = PROPS[prop.type]; return def.solid && x >= prop.x && x < prop.x+def.w && y >= prop.y && y < prop.y+def.h; });
+    assert.ok(walk(zone.spawn.x,zone.spawn.y), `${zone.id} spawn`);
+    for (const target of [...zone.props.filter((p) => p.interact), ...zone.npcs]) {
+      const def = PROPS[target.type] || { w: 1, h: 1 };
+      let reachable = false;
+      for (let y=target.y-1; y<=target.y+def.h; y++) for (let x=target.x-1; x<=target.x+def.w; x++) {
+        if (walk(x,y) && findPath(walk,zone.w,zone.h,zone.spawn.x,zone.spawn.y,x,y) !== null) reachable = true;
+      }
+      assert.ok(reachable, `${zone.id}: ${target.type || target.name}`);
+    }
+    for (const exit of zone.portals) assert.notEqual(findPath(walk,zone.w,zone.h,zone.spawn.x,zone.spawn.y,exit.x,exit.y), null);
   }
 });

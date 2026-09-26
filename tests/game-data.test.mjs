@@ -152,7 +152,7 @@ test('upgrade prices and removed upgrades match the revised catalogs', () => {
   assert.equal(office.liz_chair.cost, 250);
   assert.equal(office.houseplants.cost, 500);
   assert.equal(office.paralegal.cost, 2000);
-  assert.equal(office.office_window.cost, 2000);
+  assert.equal(office.work_phone.cost, 2000);
   assert.equal(office.artwork.cost, 2000);
   assert.equal(office.seating, undefined);
   assert.equal(office.conference, undefined);

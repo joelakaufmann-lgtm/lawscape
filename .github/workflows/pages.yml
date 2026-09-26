@@ -1,9 +1,13 @@
 name: Deploy LawScape to GitHub Pages
 
 on:
-  push:
-    branches: ["main"]
   workflow_dispatch:
+    inputs:
+      approved:
+        description: "The owner has approved publishing this version to GitHub Pages"
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -16,6 +20,7 @@ concurrency:
 
 jobs:
   build:
+    if: github.ref == 'refs/heads/main' && inputs.approved == true
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -26,10 +31,10 @@ jobs:
           node-version: "22"
       - name: Build browser package
         run: npm run build
+      - name: Validate release
+        run: npm test && npm run release:check
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
-        with:
-          enablement: true
       - name: Upload site
         uses: actions/upload-pages-artifact@v4
         with:

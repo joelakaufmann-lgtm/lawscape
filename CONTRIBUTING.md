@@ -20,46 +20,25 @@ playable scenario packs.
 
 ## Where the game is heading
 
-A planned release adds a jurisdiction choice at character creation:
+The current game offers a fictional State of Juris apprenticeship, US MPRE-style
+study and England & Wales SQE-style study. Reviewed real-jurisdiction firm packs
+are planned at the firm level. A bundled reference shelf or existing exam-style
+set is not an approved firm curriculum.
 
-- **Pick a jurisdiction** — play under a single scenario pack (**California,
-  Nevada, or Arizona** at launch), with the inbox, rule citations, and
-  treatise shelf following that jurisdiction's operative rules.
-- **Work at the Global Law Firm** — a firm with offices everywhere and an
-  inbox to match: BarMail questions arrive from around the world, each email
-  labeled with its jurisdiction and graded under that jurisdiction's rules.
+The long-term goal is **ethics questions from every jurisdiction where there is
+a LegalQuant**. The [aggregate jurisdiction list](docs/JURISDICTIONS.md) preserves
+27 geographic entries from the supplied July 1, 2026 community snapshot. It is
+incomplete and may be outdated. It is not an admissions register, current member
+census or promise that every listed place is already playable. More places can
+be added, and countries with multiple legal systems need more precise packs.
 
-The first non-US pack already ships in beta: a 28-question **England & Wales
-(UK SQE-style)** set with an explanatory answer key (see
-[SQE_Ethics_Email_Scenarios_UK.md](SQE_Ethics_Email_Scenarios_UK.md) and
-`js/data/sqe.js`), selectable from BarMail's practice-pack menu. Treat it as
-the working model for what a jurisdiction pack looks like.
+Members can propose a pack through **Journal → Firm jurisdictions**. Requests
+save locally; a player may review and submit a GitHub issue separately. No
+member has been assigned authorship, review work or endorsement by this roadmap.
 
-See [ROADMAP.md](ROADMAP.md) for the full picture, including the beta's
-open-answer-key policy.
+See [ROADMAP.md](ROADMAP.md) for live grading, multiplayer and future hearings.
 
 ## Jurisdiction packs — the contribution we want most
-
-LawScape grew out of the LegalQuants (LQ) community of lawyers who build
-software. Per the LQ member directory (published member profiles, reviewed
-July 2026), members are based or qualified in roughly 27 countries and
-regions across five continents:
-
-| Region | Jurisdictions with LQ members |
-| --- | --- |
-| Americas | United States (incl. California, New York, Washington, Washington D.C., Massachusetts, North Carolina, Ohio, Utah), Canada, Uruguay, Argentina |
-| UK & Europe | England & Wales, Ireland, France, Belgium, Netherlands, Germany, Switzerland, Austria, Italy, Greece, Finland, Russia |
-| Middle East | Türkiye, United Arab Emirates, Israel |
-| Asia-Pacific | Hong Kong, mainland China, Singapore, India, Thailand, Malaysia, Australia, New Zealand |
-
-Several members are dual- or triple-qualified (England & Wales + Hong Kong +
-mainland China; Singapore + New York; California + Türkiye; England & Wales +
-Canada) — exactly the comparative spirit the Global Law Firm mode is built
-around. No African jurisdiction appears in the directory yet; be the first.
-
-That map is the natural expansion path for the Global Law Firm. If you
-practice in one of those jurisdictions — or one not listed — a scenario pack
-for it is the single highest-value contribution you can make.
 
 ### What a jurisdiction pack needs
 
@@ -73,7 +52,8 @@ for it is the single highest-value contribution you can make.
    a rule-grounded explanation for every wrong reply.
 3. **A snapshot date and official link** for the rule text, mirroring the
    generated rule-library modules.
-4. **Neutral, educational wording** that never presents the game as legal
+4. **A named legal reviewer and scope.** Record the regulator, legal system, effective/as-of dates, reviewer and rubric version. A location alone does not select the governing law.
+5. **Neutral, educational wording** that never presents the game as legal
    advice. Ethics rules genuinely diverge between jurisdictions, so every
    explanation should say which jurisdiction's rule it applies.
 
@@ -86,7 +66,7 @@ agree on structure before you draft thirty scenarios.
 1. Run `npm start` and open `http://127.0.0.1:8000`.
 2. Edit the source modules under `js/`, plus `index.html` or `css/style.css`.
 3. Run `npm run build` to refresh the browser bundle and deployment package.
-4. Run `npm test` before opening a pull request.
+4. Run `npm test` and `npm run release:check` before opening a pull request.
 
 `js/lawscape.bundle.js` is generated. Please edit the source modules rather
 than the bundle.

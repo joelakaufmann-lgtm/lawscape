@@ -22,6 +22,14 @@
     const { Actor } = require("js/entities/actor.js");
     const { updateHUD, setZoneName, toast, hoverLabel, drawMinimap } = require("js/ui/hud.js");
     const { showDialogue, hideDialogue, dialogueOpen } = require("js/ui/dialogue.js");
+    const { createApprenticeshipUI, escapeHtml } = require("js/ui/apprenticeship.js");
+    const { pendingAttempt, taskAttempts, capstoneReady } = require("js/apprenticeship.js");
+    const { WRITING_TASKS, CAPSTONE } = require("js/data/apprenticeship.js");
+    const { canAccessBarMail, practiceInbox, billableMessageOpen } = require("js/data/mail.js");
+    const { BAR_DRINKS, orderBarDrink, movementMultiplier, archiveDisbarredRun, readBillableBoard } = require("js/lounge.js");
+    const { appearanceLook, normalizeAppearance } = require("js/data/appearance.js");
+    const { mountAppearanceEditor } = require("js/ui/appearance.js");
+    const { SIDEBAR_ROOM, SIDEBAR_TOPICS, sidebarTopic, saveSidebarDraft } = require("js/data/sidebar.js");
     const { SCENARIOS, STREAK_HEAL } = require("js/data/ethics.js");
     const { OFFICE_UPGRADES, APARTMENT_UPGRADES, bonuses } = require("js/data/upgrades.js");
     const { RULE_LIBRARY } = require("js/data/rules.js");
@@ -44,9 +52,21 @@
     let inGame = false;
     const docReview = { active: false, cycleStartedAt: 0 };
     const PLAYER_BASE_SPEED = 4;
-    let whiskeySlowUntil = 0;
     let watchReturnPos = null;
     let billableUnsavedMs = 0;
+
+    const desk = createApprenticeshipUI({
+      beforeOpen: () => { closeEmail(); $('panel').classList.add('hidden'); hideDialogue(); stopDocumentReview(false); player?.stop(); },
+      onChange: () => { if (player) player.look = playerLook(); updateHUD(); if (mailMode === 'inbox' && !$('email').classList.contains('hidden')) renderInbox(); },
+      onLegacy: () => { if (inGame) openEmail(); },
+      onWriting: (id) => openEmail('writing', id),
+      onWritingExit: (next,id) => { closeEmail(); desk.open(next,id); },
+      notify: toast,
+    });
+
+    function playerLook() {
+      return appearanceLook(state, state.apprenticeship.equipped);
+    }
 
     function currentZone() { return ZONES[state.zone] || ZONES.office; }
 
@@ -64,6 +84,7 @@
     }
 
     function buildNpcs() {
+      if (zone.id === 'sidebar') zone.props.find((prop) => prop.type === 'scoreboard').entries = readBillableBoard();
       npcs = (zone.npcs || []).map((def) => ({
         def,
         actor: new Actor(def.x, def.y, def.look, { npc: def }),
@@ -72,6 +93,7 @@
 
     function enterZone(id, pos = null) {
       if (docReview.active) stopDocumentReview(false);
+      stopWatchingTV();
       state.zone = id;
       zone = currentZone();
       const p = pos || zone.spawn;
@@ -83,6 +105,7 @@
       setZoneName(zone.name);
       updateQuickActions();
       hover = null;
+      hoverLabel(null);
       save();
     }
 
@@ -95,8 +118,8 @@
 
       // Tall props and actors extrude up-screen from their footprint, so a click
       // on a body maps to a ground tile "behind" it. Probe the clicked tile plus
-      // a couple of tiles down-screen (+1,+1 / +2,+2) to make bodies clickable.
-      for (let k = 0; k <= 2; k++) {
+      // three tiles down-screen to include the adult figure's head.
+      for (let k = 0; k <= 3; k++) {
         const cx = tx + k, cy = ty + k;
 
         for (const npc of npcs) {
@@ -123,7 +146,7 @@
               tiles,
               label: prop.interact.label,
               approach: { x: cx, y: cy },
-              run: () => runAction(prop.interact.action),
+              run: () => runAction(prop.interact.action, prop),
             };
           }
         }
@@ -160,7 +183,7 @@
         toast('Document review stopped. Click again to move.');
         return;
       }
-      if (player.activity === 'watching') stopWatchingTV();
+      if (['watching', 'sitting'].includes(player.activity)) stopWatchingTV();
       if (dialogueOpen()) hideDialogue();
       const target = targetAt(e.offsetX, e.offsetY);
       if (!target) return;
@@ -187,14 +210,14 @@
     });
 
     function overlayOpen() {
-      return !$('email').classList.contains('hidden')
+      return desk.isOpen() || !$('email').classList.contains('hidden')
           || !$('panel').classList.contains('hidden')
           || !$('gameover').classList.contains('hidden');
     }
 
     function moveBy(dx, dy) {
       if (!inGame || overlayOpen() || dialogueOpen() || player.walking || docReview.active) return;
-      if (player.activity === 'watching') stopWatchingTV();
+      if (['watching', 'sitting'].includes(player.activity)) stopWatchingTV();
       const dest = { x: player.tileX + dx, y: player.tileY + dy };
       if (!isWalkable(dest.x, dest.y)) return;
       player.setPath([dest]);
@@ -203,24 +226,35 @@
     function updateQuickActions() {
       const mail = $('btn-mail');
       if (!mail) return;
-      const inOffice = state.zone === 'office';
-      mail.disabled = !inOffice;
-      mail.title = inOffice ? 'Open BarMail (B)' : 'BarMail is on your office computer';
+      const access = canAccessBarMail(state);
+      mail.disabled = !access;
+      mail.title = hasUpgrade('work_phone') ? 'Open BarMail on your work phone (B)' : access ? 'Open BarMail on your office computer (B)' : 'Buy the Work Phone to use BarMail outside the office';
+      const room = $('room-action');
+      room.classList.toggle('hidden', !['sidebar', 'courtroom'].includes(state.zone));
+      room.textContent = state.zone === 'sidebar' ? 'The Sidebar · Room & chat' : 'Talk to Derek Balam';
+      $('room-service').classList.toggle('hidden', !['sidebar','courtroom'].includes(state.zone));
+      $('room-service').textContent = state.zone === 'sidebar' ? 'Order a drink' : 'Sleeping AI judge';
+      $('room-board').classList.toggle('hidden', state.zone !== 'sidebar');
     }
 
     // ---------------------------------------------------------------------------
     // Interactions
     // ---------------------------------------------------------------------------
-    function runAction(action) {
+    function runAction(action, prop = null) {
       switch (action) {
         case 'email': openEmail(); break;
-        case 'doc_review': startDocumentReview(); break;
+        case 'doc_review': desk.open('files'); break;
         case 'rules': openRuleLibrary(); break;
         case 'shop_office': openShop('Office Upgrades', OFFICE_UPGRADES); break;
         case 'shop_apartment': openShop('Apartment Upgrades', APARTMENT_UPGRADES); break;
         case 'record': openRecord(); break;
         case 'rest': doRest(); break;
         case 'wardrobe': openWardrobe(); break;
+        case 'sidebar_chat': openSidebar(prop?.topic); break;
+        case 'sidebar_sit': sitInSidebar(prop); break;
+        case 'bartender': openBartender(); break;
+        case 'high_scores': openHighScores(); break;
+        case 'judge': openJudgeStatus(); break;
         case 'flavor_coffee':
           drinkCoffee();
           break;
@@ -234,7 +268,21 @@
     }
 
     function talkTo(def) {
-      if (def.talk === 'jim') {
+      if (def.talk === 'bailiff') {
+        showDialogue({
+          name: def.name,
+          text: 'Derek Balam checks the courtroom clock. “Counselor, welcome. I keep order here. The hearing calendar is still being built, so today you can explore the room. Please keep your briefcase out of the aisle.”',
+          choices: [
+            { label: 'What is planned for court?', fn: () => showDialogue({ name: def.name,
+              text: '“Hearings, witnesses, and opportunities to think before you speak. Future exercises will identify the jurisdiction and the record you are working from. For now, practice your written work with Linda and Jim in the journal.”',
+              choices: [{ label: 'Open my journal', fn: () => desk.open() }, { label: 'Thank you, Derek.' }] }) },
+            { label: 'Visit The Sidebar', fn: () => enterZone('sidebar') },
+            { label: 'I will take a look around.' },
+          ],
+        });
+      } else if (def.talk === 'sidebar_host') {
+        openBartender();
+      } else if (def.talk === 'jim') {
         const lines = [
           'Jim reminds you of his email that said “pls fix.”',
           'Jim is on a client call.',
@@ -271,11 +319,11 @@
 
     function lizLines() {
       const paralegal = hasUpgrade('paralegal');
-      const windowOwned = hasUpgrade('office_window');
+      const phoneOwned = hasUpgrade('work_phone');
       const chair = hasUpgrade('liz_chair');
       const plants = hasUpgrade('houseplants');
       const artwork = hasUpgrade('artwork');
-      const improvedOffice = paralegal && windowOwned;
+      const improvedOffice = paralegal && phoneOwned;
       const lines = [
         'You have emails to answer and documents to review.',
         'Mr. Johnson called regarding his case.',
@@ -314,8 +362,8 @@
         'I used to think making partner meant fewer emails.',
         'If anyone asks, this is my third cup of tea, not my fifth.',
       ];
-      if (!hasUpgrade('office_window')) {
-        lines.push('I asked Mr. Hardsell if we could get you a window, but he said no. Sorry.');
+      if (!hasUpgrade('work_phone')) {
+        lines.push('I asked Jim to get you a work phone. He said the office computer has a perfectly good cord.');
       }
       return lines[Math.floor(Math.random() * lines.length)];
     }
@@ -354,6 +402,7 @@
           {
             label: `Pay ${LINDA_TIP_COST} gold for a tip`,
             fn: () => {
+              if (pendingAttempt(state)) { toast('Wait for the partner reply before making purchases.'); return; }
               if (state.gold < LINDA_TIP_COST) return;
               state.gold -= LINDA_TIP_COST;
               state.tipsPurchased++;
@@ -381,7 +430,10 @@
         choices.push({ label: 'Go to the Apartment', fn: () => enterZone('apartment') });
       }
       if (state.zone !== 'courtroom') {
-        choices.push({ label: 'Go to the Empty Courtroom', fn: () => enterZone('courtroom') });
+        choices.push({ label: 'Go to the Courtroom', fn: () => enterZone('courtroom') });
+      }
+      if (state.zone !== 'sidebar') {
+        choices.push({ label: 'Go to The Sidebar', fn: () => enterZone('sidebar') });
       }
       choices.push({ label: 'Stay here', fn: () => {} });
       showDialogue({
@@ -398,10 +450,7 @@
     let hintPurchasedForCurrent = false;
 
     function billableStudyActive() {
-      return inGame
-        && document.visibilityState === 'visible'
-        && currentScenario !== null
-        && !$('email').classList.contains('hidden');
+      return billableMessageOpen({ inGame, visible: document.visibilityState === 'visible', mailOpen: !$('email').classList.contains('hidden'), messageOpen: !!currentScenario || (mailMode === 'writing' && !!writingTaskId) });
     }
 
     function trackBillableStudy(dt) {
@@ -423,36 +472,70 @@
 
     const PRACTICE_PACKS = new Set(['mixed', 'sqe', 'mpre', 'juris']);
 
-    function scenarioMatchesPack(scenario, pack) {
-      if (pack === 'sqe') return scenario.sourceType === 'sqe-style';
-      if (pack === 'mpre') return scenario.sourceType === 'mpre-style';
-      if (pack === 'juris') return scenario.sourceType === 'lawscape';
-      return true;
-    }
+    let mailMode = 'inbox', mailFolder = 'all', writingTaskId = null, questionAnswered = false;
 
-    function pickScenario() {
-      const difficulty = currentDifficulty();
-      const selectedPack = PRACTICE_PACKS.has(state.practicePack) ? state.practicePack : 'mixed';
-      const packPool = SCENARIOS.filter((scenario) => scenarioMatchesPack(scenario, selectedPack));
-      const preferredDifficulty = packPool.filter((scenario) => scenario.difficulty === difficulty);
-      const eligible = preferredDifficulty.length ? preferredDifficulty : packPool;
-      let pool = eligible.filter((scenario) => !state.seen.includes(scenario.id));
-      if (!pool.length) {
-        const eligibleIds = new Set(eligible.map((scenario) => scenario.id));
-        state.seen = state.seen.filter((id) => !eligibleIds.has(id));
-        pool = eligible;
+    function openEmail(folder = 'all', taskId = null) {
+      if (!canAccessBarMail(state)) {
+        toast('BarMail is on your office computer. The Work Phone unlocks access everywhere.');
+        return;
       }
-      return pool[Math.floor(Math.random() * pool.length)];
+      if (docReview.active) stopDocumentReview(false);
+      desk.close(); desk.releaseWriting(); hideDialogue(); player?.stop();
+      $('panel').classList.add('hidden');
+      $('email').classList.remove('hidden');
+      $('email-appname').textContent = hasUpgrade('work_phone') && state.zone !== 'office'
+        ? 'BarMail — Work Phone' : 'BarMail — Office Computer';
+      mailFolder = folder;
+      mailMode = taskId ? 'writing' : 'inbox';
+      writingTaskId = taskId;
+      currentScenario = null;
+      $('email-pack').value = PRACTICE_PACKS.has(state.practicePack) ? state.practicePack : 'mixed';
+      for (const id of ['email-difficulty','email-source','email-hint','email-rule','email-body','email-writing-body']) $(id).classList.add('hidden');
+      $('email-inbox').classList.toggle('hidden', !!taskId);
+      if (taskId) {
+        $('email-writing-body').classList.remove('hidden');
+        desk.embedWriting($('email-writing-body'),taskId);
+      } else { renderInbox(); $('email-inbox-open').focus(); }
+      hoverLabel(null);
     }
 
-    function openEmail() {
-      if (docReview.active) stopDocumentReview(false);
-      currentScenario = pickScenario();
+    function renderInbox() {
+      const pool = practiceInbox(state,SCENARIOS);
+      const showPractice = mailFolder !== 'writing', showWriting = mailFolder !== 'practice';
+      const e = escapeHtml;
+      $('email-inbox').innerHTML = `<header class="mail-inbox-heading"><div><span class="mail-eyebrow">HARDSELL &amp; FIRESTONE · INTERNAL MAIL</span><h2>${showPractice && showWriting ? 'Your inbox' : showWriting ? 'Writing assignments' : 'Ethics practice inbox'}</h2><p>Open a subject line to read and reply. All senders and correspondence are synthetic.</p></div><span class="mail-device">${hasUpgrade('work_phone') ? 'Work phone connected' : 'Office terminal'}</span></header>`
+        + (pendingAttempt(state) ? '<p class="mail-notice">A partner reply is pending. You can read your mail; another graded submission waits for that reply.</p>' : '')
+        + (showWriting ? `<h3 class="mail-group-title">Partner correspondence · Writing</h3><div class="mail-list">${[...WRITING_TASKS,CAPSTONE].map((task) => {
+          const latest = taskAttempts(state,task.id).at(-1);
+          const locked = task.id === 'capstone' && !capstoneReady(state);
+          const status = locked ? 'Complete six replies and two files' : latest?.status === 'pending' ? 'Sent · awaiting partner' : latest ? 'Partner replied' : state.apprenticeship.drafts[task.id] ? 'Draft saved' : 'New assignment';
+          return `<button type="button" class="mail-row" data-writing="${task.id}" ${locked ? 'disabled' : ''}><span class="mail-sender">${e(task.partner)}</span><span class="mail-subject">${e(task.title)}<small>${e(task.skill)} · ${e(task.prompt.slice(0,105))}…</small></span><span class="mail-status">${status}</span></button>`;
+        }).join('')}</div>` : '')
+        + (showPractice ? `<h3 class="mail-group-title">Ethics practice · ${pool.levelLabel} · ${pool.unread.length} unanswered</h3><div class="mail-list">${pool.unread.map((s) => `<button type="button" class="mail-row" data-scenario="${e(s.id)}"><span class="mail-sender">${e(s.from)}<small>${e(s.role)}</small></span><span class="mail-subject">${e(s.subject)}<small>${e(s.body.slice(0,95))}…</small></span><span class="mail-status">${s.sourceType === 'mpre-style' ? 'MPRE-style' : s.sourceType === 'sqe-style' ? 'SQE-style' : 'State of Juris'}</span></button>`).join('')}</div>${!pool.unread.length ? '<p class="mail-notice">You have answered this tier’s mail for this practice pack.</p><button type="button" id="mail-new-round">Start another study round</button>' : ''}` : '');
+      $('email-inbox').querySelectorAll('[data-writing]').forEach((row) => row.onclick = () => openEmail('writing',row.dataset.writing));
+      $('email-inbox').querySelectorAll('[data-scenario]').forEach((row) => row.onclick = () => openScenario(row.dataset.scenario));
+      if ($('mail-new-round')) $('mail-new-round').onclick = () => {
+        const ids = new Set(pool.eligible.map((item) => item.id));
+        state.seen = state.seen.filter((id) => !ids.has(id)); save(); renderInbox();
+      };
+    }
+
+    function openScenario(id) {
+      if (!canAccessBarMail(state)) return;
+      const scenario = practiceInbox(state,SCENARIOS).unread.find((item) => item.id === id);
+      if (!scenario) return;
+      desk.releaseWriting();
+      currentScenario = scenario; mailMode = 'practice'; writingTaskId = null; questionAnswered = false;
+      $('email-inbox').classList.add('hidden');
+      $('email-writing-body').classList.add('hidden');
+      $('email-body').classList.remove('hidden');
+      $('email-difficulty').classList.remove('hidden');
       hintPurchasedForCurrent = false;
       const s = currentScenario;
 
       $('email-subject').textContent = s.subject;
-      $('email-from').textContent = `From: ${s.from} — ${s.role}`;
+      const jurisdiction = s.sourceType === 'sqe-style' ? 'England & Wales · legacy SQE-style study' : s.sourceType === 'mpre-style' ? 'US MPRE-style · model-rule study' : 'State of Juris · legacy mixed-source fiction';
+      $('email-from').textContent = `From: ${s.from} — ${s.role} · ${jurisdiction}`;
       $('email-text').textContent = s.body;
       $('email-pack').value = PRACTICE_PACKS.has(state.practicePack) ? state.practicePack : 'mixed';
       const advancedLabel = s.sourceType === 'sqe-style'
@@ -463,7 +546,7 @@
 
       const sourceEl = $('email-source');
       if (s.sourceType === 'mpre-style' || s.sourceType === 'sqe-style') {
-        sourceEl.textContent = s.sourceType === 'sqe-style' ? 'UK SQE-STYLE' : 'MPRE-STYLE';
+        sourceEl.textContent = s.sourceType === 'sqe-style' ? 'ENGLAND & WALES · SQE-STYLE' : 'MPRE-STYLE';
         sourceEl.title = s.sourceNote;
         sourceEl.classList.remove('hidden');
         sourceEl.classList.toggle('sqe-source', s.sourceType === 'sqe-style');
@@ -503,6 +586,7 @@
     }
 
     function buyEthicsHint() {
+      if (pendingAttempt(state)) { toast('Wait for the partner reply before making purchases.'); return; }
       if (!currentScenario || hintPurchasedForCurrent) return;
       if (!rileyHintEligible(state.upgrades)) {
         toast('Riley needs both the Paralegal Upgrade and Ethics Treatise Shelf.');
@@ -526,6 +610,9 @@
     $('email-hint').addEventListener('click', buyEthicsHint);
 
     function answerEmail(choice) {
+      if (!currentScenario || questionAnswered) return;
+      if (pendingAttempt(state)) { toast('Wait for the pending partner reply before submitting another answer.'); return; }
+      questionAnswered = true;
       const s = currentScenario;
       const b = bonuses(state.upgrades);
       const verdictEl = $('email-verdict');
@@ -584,10 +671,11 @@
       $('email-replies').classList.add('hidden');
       $('email-result').classList.remove('hidden');
       $('email-continue').onclick = () => {
-        if (disbarred) { closeEmail(); gameOver(); } else { openEmail(); }
+        if (disbarred) { closeEmail(); gameOver(); } else { openEmail(mailFolder); }
       };
       if (disbarred) $('email-continue').textContent = 'Face the Disciplinary Judge';
-      else $('email-continue').textContent = 'Next Email';
+      else $('email-continue').textContent = 'Back to inbox';
+      if (disbarred) gameOver(`${DEFAULT_GAMEOVER_TEXT} ${choice.why || ''} ${s.rule}`);
     }
 
     function appendScenarioSource(container, scenario) {
@@ -601,7 +689,7 @@
       local.target = '_blank';
       local.rel = 'noopener';
       local.textContent = scenario.localSourceFile
-        || (isSqe ? 'UK SQE Ethics Email Pack' : 'MPRE Associate Email Scenarios');
+        || (isSqe ? 'England & Wales SQE Ethics Email Pack' : 'MPRE Associate Email Scenarios');
       source.append(local, ' · ');
       const official = document.createElement('a');
       official.href = scenario.sourceUrl;
@@ -622,6 +710,7 @@
     }
 
     function closeEmail() {
+      desk.releaseWriting(); mailMode = 'inbox'; writingTaskId = null;
       $('email').classList.add('hidden');
       currentScenario = null;
       billableUnsavedMs = 0;
@@ -631,8 +720,10 @@
     $('email-pack').addEventListener('change', (event) => {
       state.practicePack = PRACTICE_PACKS.has(event.target.value) ? event.target.value : 'mixed';
       save();
-      openEmail();
+      openEmail('practice');
     });
+    $('email-inbox-open').addEventListener('click', () => openEmail());
+    $('email-back').addEventListener('click', () => openEmail(mailFolder));
 
     // ---------------------------------------------------------------------------
     // Disbarment
@@ -642,15 +733,21 @@
       + 'upgrades are forfeit.';
 
     function gameOver(reason = DEFAULT_GAMEOVER_TEXT) {
+      const archived = archiveDisbarredRun(state);
+      desk.releaseWriting();
+      writingTaskId = null;
+      const scoreNote = archived.recorded ? ` Your ${formatBillableTime(state.billableStudyMs)} billable time was recorded on the ${archived.persisted ? 'local' : 'session-only'} Sidebar board.` : '';
       stopDocumentReview(false);
       inGame = false;
+      desk.close();
       $('hud').classList.add('hidden');
       $('email').classList.add('hidden');
       $('panel').classList.add('hidden');
       currentScenario = null;
       hideDialogue();
-      $('gameover-text').textContent = reason;
+      $('gameover-text').textContent = reason + scoreNote;
       $('gameover').classList.remove('hidden');
+      reset(); // End this run immediately; closing/reloading cannot revive it.
     }
 
     $('gameover-restart').addEventListener('click', () => {
@@ -666,6 +763,9 @@
     // ---------------------------------------------------------------------------
     function openPanel(title) {
       if (docReview.active) stopDocumentReview(false);
+      player?.stop();
+      hideDialogue();
+      $('panel-inner').classList.remove('sidebar-panel');
       $('panel-title').textContent = title;
       $('panel-tabs').innerHTML = '';
       $('panel-body').innerHTML = '';
@@ -674,6 +774,82 @@
       return $('panel-body');
     }
     $('panel-close').addEventListener('click', () => $('panel').classList.add('hidden'));
+
+    function openSidebar(topicId = state.sidebar.topic) {
+      const topic = sidebarTopic(topicId);
+      state.sidebar.topic = topic.id;
+      save();
+      const body = openPanel(`${SIDEBAR_ROOM.title} — Room & Chat`);
+      $('panel-inner').classList.add('sidebar-panel');
+      body.innerHTML = `
+        <div class="sidebar-banner"><span class="sidebar-mode">LOCAL PREVIEW</span><h2>A place to talk shop.</h2><p>A quiet corner of the firm. Pull up a chair and choose a table.</p></div>
+        <div class="sidebar-layout"><aside><h3>Conversation tables</h3><nav class="sidebar-topics" aria-label="Conversation tables">${SIDEBAR_TOPICS.map((item) => `<button type="button" data-topic="${item.id}" aria-pressed="${item.id === topic.id}">${item.label}</button>`).join('')}</nav>
+          <h3>In this local room</h3><p class="sidebar-person"><strong>${escapeHtml(state.name)}</strong><span>You · local player</span></p><p class="sidebar-person"><strong>B.A.R.T.</strong><span>Robot butler · scripted NPC</span></p><p class="sidebar-offline">Multiplayer is not connected. The future Cloudflare pilot is planned for ${SIDEBAR_ROOM.participantLimit} invited people, with clearly labeled AI agents.</p></aside>
+          <section class="sidebar-conversation" aria-labelledby="sidebar-topic-title"><h3 id="sidebar-topic-title">${topic.label}</h3><p>${topic.prompt}</p>
+            <blockquote><span>B.A.R.T. · scripted welcome</span>“No billable clock at this table. Bring a question, a useful observation, or an idea worth testing.”</blockquote>
+            <p class="sidebar-empty">No shared messages yet. Your draft stays in this browser.</p>
+            <label for="sidebar-draft">Your conversation draft</label><textarea id="sidebar-draft" maxlength="500" rows="4" placeholder="Draft an introduction or a question…" aria-describedby="sidebar-draft-help"></textarea>
+            <p id="sidebar-draft-help">Saved drafts are private to this local save. They will not be sent automatically when multiplayer launches.</p>
+            <div class="sidebar-compose-actions"><button type="button" id="sidebar-save-draft">Save draft locally</button><button type="button" disabled title="Cloudflare multiplayer is not connected">Send · coming with multiplayer</button></div>
+            <p id="sidebar-draft-status" role="status"></p>
+          </section></div>`;
+      const draft = $('sidebar-draft');
+      draft.value = String(state.sidebar.drafts[topic.id] || '').slice(0, 500);
+      const persist = () => {
+        saveSidebarDraft(state, topic.id, draft.value);
+        const saved = save();
+        $('sidebar-draft-status').textContent = saved ? `Saved locally · ${draft.value.length}/500 characters · nothing sent` : 'Kept for this session only · browser storage unavailable · nothing sent';
+      };
+      draft.addEventListener('input', persist);
+      $('sidebar-save-draft').onclick = persist;
+      body.querySelectorAll('[data-topic]').forEach((button) => {
+        button.onclick = () => { openSidebar(button.dataset.topic); body.querySelector(`[data-topic="${button.dataset.topic}"]`).focus(); };
+      });
+    }
+
+    function sitInSidebar(prop) {
+      if (!prop || state.zone !== 'sidebar') return;
+      stopWatchingTV();
+      watchReturnPos = { x: player.x, y: player.y };
+      player.stop();
+      player.x = prop.x; player.y = prop.y; player.activity = 'sitting';
+      showDialogue({ name: 'The Sidebar', text: 'You take a seat at the bar. A little distance from the inbox can help.',
+        choices: [{ label: 'Open room & chat', fn: () => openSidebar() }, { label: 'Stand up', fn: stopWatchingTV }],
+      });
+    }
+
+    function openBartender() {
+      if (state.zone !== 'sidebar') return;
+      const body = openPanel('B.A.R.T. — Robotic Butler & Bartender');
+      body.innerHTML = `<div class="help-lede"><b>“Good evening, counselor. Your usual has been calculated.”</b><p>B.A.R.T. adjusts a bow tie and polishes a glass with a white glove.</p><p>Alcohol served here costs <b>zero Ethics</b> and halves walking speed for 40 seconds. Another drink refreshes the timer. Sparkling water has no effect.</p></div>`
+        + BAR_DRINKS.map((drink) => `<article class="row-item"><div class="grow"><h4>${drink.name}</h4><p>${drink.note}</p><p>${drink.slows ? '0 Ethics damage · slow walking for 40 seconds' : 'No effect on Ethics or movement'}</p></div><button type="button" data-drink="${drink.id}" ${state.gold < drink.cost || pendingAttempt(state) ? 'disabled' : ''}>Order · ${drink.cost ? `${drink.cost} gold` : 'free'}</button></article>`).join('')
+        + '<p id="bar-order-status" role="status"></p><button id="bar-scores" type="button">View billable-hours board</button>';
+      body.querySelectorAll('[data-drink]').forEach((button) => button.onclick = () => {
+        try {
+          const { drink } = orderBarDrink(state,button.dataset.drink);
+          save(); updateHUD(); openBartender();
+          $('bar-order-status').textContent = `${drink.name} served. Ethics unchanged at ${state.ethics}. ${drink.slows ? 'Walking at half speed for 40 seconds.' : 'Enjoy your water.'}`;
+        } catch (error) { $('bar-order-status').textContent = error.message; }
+      });
+      $('bar-scores').onclick = openHighScores;
+    }
+
+    function openHighScores() {
+      const entries = readBillableBoard();
+      const body = openPanel('The Sidebar — Billable Hours Hall of Fame');
+      body.innerHTML = `<div class="help-lede"><h3>The hours outlive the office.</h3><p>Top 10 completed runs, ranked by billable time before disbarment. This board belongs to this browser; it is not an online or verified ranking.</p></div><p class="board-current">Current run: <b>${escapeHtml(state.name)}</b> · ${formatBillableTime(state.billableStudyMs)} · still practicing</p>`
+        + (entries.length ? `<table class="score-table"><caption>Completed local runs</caption><thead><tr><th scope="col">Rank</th><th scope="col">Attorney</th><th scope="col">Billable time</th></tr></thead><tbody>${entries.map((entry,index) => `<tr><td>${index+1}</td><th scope="row">${escapeHtml(entry.name)}</th><td>${formatBillableTime(entry.billableMs)}</td></tr>`).join('')}</tbody></table>` : '<p class="board-empty">No completed runs yet. A score is recorded when an attorney is disbarred.</p>')
+        + '<p class="board-note">The clock counts visible time inside an open ethics email or writing assignment, including its feedback. It pauses in the inbox list, other windows, and hidden tabs. Scores survive character resets; gold, inventory and progress do not. Shared scores will require the future server-backed multiplayer build.</p>';
+    }
+
+    function openJudgeStatus() {
+      showDialogue({ name: 'The Honorable A.I. — Standby Judge',
+        text: 'The judge is asleep in a high-backed chair behind the bench. A small light reads STANDBY. Court is not in session. This is a scripted preview: no AI judge is connected and no hearing or grading is taking place.',
+        choices: [{ label: 'Read the future court docket', fn: () => showDialogue({ name: 'Future court docket',
+          text: 'A later build will connect different AI judge agents to reviewed hearing records and jurisdiction-specific court exercises. Judge profiles, evidence-grounded rulings, review controls and evaluation are roadmap work. For now, let the judge sleep.',
+        }) }, { label: 'Quietly step away.' }],
+      });
+    }
 
     function openRuleLibrary() {
       if (!hasUpgrade('subscription')) {
@@ -847,6 +1023,7 @@
     $('btn-stop-review').addEventListener('click', () => stopDocumentReview());
 
     function openShop(title, catalog) {
+      if (pendingAttempt(state)) { toast('Wait for the partner reply before making purchases.'); return; }
       const body = openPanel(title);
       for (const u of catalog) {
         const row = document.createElement('div');
@@ -863,6 +1040,7 @@
           btn.textContent = 'Buy';
           btn.disabled = state.gold < u.cost;
           btn.onclick = () => {
+            if (pendingAttempt(state)) { toast('Wait for the partner reply before making purchases.'); return; }
             if (state.gold < u.cost) return;
             const previousMax = maxEthics();
             state.gold -= u.cost;
@@ -873,7 +1051,7 @@
               state.moneybagsPurchases = (state.moneybagsPurchases || 0) + 1;
             }
             save();
-            updateHUD();
+            updateHUD(); updateQuickActions();
             if (state.moneybagsStolen && moneybagsAuditTriggered(state.moneybagsPurchases)) {
               state.ethics = 0;
               save();
@@ -904,12 +1082,12 @@
       const acc = state.casesDone ? Math.round((state.correctDone / state.casesDone) * 100) : 0;
       const pronouns = { male: 'he/him', female: 'she/her', nonbinary: 'they/them' }[state.gender] || 'they/them';
       body.innerHTML = `
-        <div class="row-item"><div class="grow"><h4>${state.name} (${pronouns})</h4>
+        <div class="row-item"><div class="grow"><h4>${escapeHtml(state.name)} (${pronouns})</h4>
           <p>Attorney at law, State of Juris. License status: ${state.ethics > 0 ? 'ACTIVE' : 'REVOKED'}</p></div></div>
         <div class="row-item"><div class="grow"><h4>Scenarios answered</h4></div><div class="meta">${state.casesDone}</div></div>
         <div class="row-item"><div class="grow"><h4>Answered correctly</h4></div><div class="meta">${state.correctDone} (${acc}%)</div></div>
         <div class="row-item"><div class="grow"><h4>Billable study time</h4>
-          <p>Visible time with BarMail open</p></div><div class="meta">⏱ ${formatBillableTime(state.billableStudyMs)}</div></div>
+          <p>Visible time in open BarMail questions, writing assignments and feedback</p></div><div class="meta">⏱ ${formatBillableTime(state.billableStudyMs)}</div></div>
         <div class="row-item"><div class="grow"><h4>Current streak</h4></div><div class="meta">x${state.streak}</div></div>
         <div class="row-item"><div class="grow"><h4>Wrong-answer streak</h4></div><div class="meta">x${state.wrongStreak}</div></div>
         <div class="row-item"><div class="grow"><h4>Document-review cycles</h4></div><div class="meta">${state.documentsReviewed}</div></div>
@@ -958,6 +1136,7 @@
     }
 
     function eatApartmentFood(name, ethicsRestore) {
+      if (pendingAttempt(state)) { toast('Wait for the partner reply before making purchases.'); return; }
       if (state.ethics >= maxEthics()) {
         toast('Your Ethics is already full. Save the food for a harder day.');
         return;
@@ -993,7 +1172,7 @@
     }
 
     function stopWatchingTV() {
-      if (!player || player.activity !== 'watching') return;
+      if (!player || !['watching', 'sitting'].includes(player.activity)) return;
       player.activity = null;
       if (watchReturnPos) {
         player.x = watchReturnPos.x;
@@ -1026,6 +1205,7 @@
     }
 
     function takeMoneybagsGold() {
+      if (pendingAttempt(state)) { toast('Your partner has a pending reply. Even Jim can wait five seconds.'); return; }
       if (state.moneybagsStolen) return;
       state.moneybagsStolen = true;
       state.moneybagsPurchases = 0;
@@ -1092,7 +1272,7 @@
           {
             label: 'Walk it off',
             fn: () => {
-              whiskeySlowUntil = performance.now() + WHISKEY_SLOW_MS;
+              state.slowUntil = Date.now() + WHISKEY_SLOW_MS; save();
               toast('Your movement is impaired for 40 seconds.');
             },
           },
@@ -1101,37 +1281,19 @@
     }
 
     function openWardrobe() {
-      if (!hasUpgrade('wardrobe_rack')) {
-        toast('A single suit hangs here. The Wardrobe Rack upgrade unlocks more colors.');
-        return;
-      }
-      const names = ['Navy', 'Charcoal', 'Burgundy', 'Archive Green', 'Oak Brown'];
-      showDialogue({
-        name: 'Wardrobe',
-        text: 'Pick a suit. Dress for the discipline hearing you never want to attend.',
-        choices: PAL.suits.map((c, i) => ({
-          label: names[i] || c,
-          fn: () => { state.suitColor = c; player.look.suit = c; save(); toast(`Suited up in ${names[i] || c}.`); },
-        })),
-      });
+      desk.open('wardrobe');
     }
 
     function openHelp() {
       const body = openPanel('How LawScape Works');
       body.innerHTML = `
-        <div class="help-lede">Your first goal: answer a <b>BarMail</b> dilemma or complete a one-minute document-review cycle to earn gold.</div>
+        <div class="help-lede">Open <b>Journal</b> (J) to begin your first firm day: inspect a synthetic file, write a partner reply, and earn a visible reward.</div>
         <div class="row-item"><div class="grow"><h4>💻 BarMail</h4>
-          <p>Click your office computer or use the BarMail quick action. Partners and clients send
-          requests — many of them unethical. Choose Mixed Inbox, UK SQE Ethics, US MPRE, or
-          State of Juris in the toolbar. Questions advance from Foundation to Practice to the
-          advanced tier as your record grows.</p></div></div>
+          <p>Click your office computer or use BarMail. Open an email subject to answer an ethics question or write a partner reply inside the same window. Choose a practice pack in the toolbar. Buy the 2,000-gold Work Phone from the office upgrades cabinet to open all your mail anywhere.</p></div></div>
         <div class="row-item"><div class="grow"><h4>⏱ Billable Hours</h4>
-          <p>The HUD timer records visible time spent with BarMail open, including reading the
-          question, choosing an answer, and studying the explanation. Exploring the office,
-          leaving the tab, and other activities do not count.</p></div></div>
+          <p>The clock records visible time inside an open question, writing assignment or feedback. It pauses in the inbox list, other activities and hidden tabs. At disbarment, that run is recorded on The Sidebar’s local top-10 board. Scores survive resets; character possessions do not.</p></div></div>
         <div class="row-item"><div class="grow"><h4>🗄 Document Review</h4>
-          <p>Use the filing cabinet in the main office. Your attorney sits and reviews files;
-          every uninterrupted one-minute cycle earns 5 gold.</p></div></div>
+          <p>Use the filing cabinet or your journal to open the evidence room. Flag exact passages, explain your findings, then commit a file review for up to 75 study gold. Each file pays once per run.</p></div></div>
         <div class="row-item"><div class="grow"><h4>📚 Ethics Treatises</h4>
           <p>Buy the Ethics Treatise Shelf upgrade, then use the bookshelf to search the bundled
           Nevada, Arizona, and California references.</p></div></div>
@@ -1139,8 +1301,7 @@
           <p>Click or tap a floor tile to walk. You can also use WASD or the arrow keys. Select
           a highlighted person or object to walk over and interact.</p></div></div>
         <div class="row-item"><div class="grow"><h4>🪙 Gold</h4>
-          <p>Correct answers earn gold. Spend it on office and apartment upgrades (filing cabinet
-          in the office, furniture catalog at home).</p></div></div>
+          <p>Ethics answers, writing checklists and supported file reviews earn gold. Spend it on wardrobe accessories and office or apartment upgrades. New prose is saved for self-comparison, not AI graded.</p></div></div>
         <div class="row-item"><div class="grow"><h4>⚖ Ethics Bar</h4>
           <p>Wrong answers damage your Ethics — the game explains the violated rule every time.
           Damage rises from 30 to 45 and then 60 as wrong answers pile up; Riley halves it.
@@ -1153,8 +1314,11 @@
           <p>Ethics at zero = YOU GOT DISBARRED — GAME OVER. You restart from nothing: no gold,
           no items, no upgrades.</p></div></div>
         <div class="row-item"><div class="grow"><h4>🏛 Court</h4>
-          <p>The furnished courtroom is open to explore, but no matters or court personnel are
-          on calendar yet.</p></div></div>
+          <p>Derek Balam keeps watch while a robot judge sleeps in the judicial chair. Court is not in session. Different AI judge agents and reviewed hearing exercises are planned; no live judge is connected.</p></div></div>
+        <div class="row-item"><div class="grow"><h4>🍵 The Sidebar</h4>
+          <p>Use Travel to visit the lounge. B.A.R.T., a robot in butler dress, serves drinks: Sidebar alcohol costs no Ethics but slows walking for 40 seconds. Water has no effect. The board ranks billable time in completed runs. Room &amp; Chat saves local drafts; shared communication awaits multiplayer.</p></div></div>
+        <div class="row-item"><div class="grow"><h4>✂ Your attorney</h4>
+          <p>Open Journal → Wardrobe to change hair, facial hair, face shape, eyes, skin, suit, shirt, tie, and glasses. Everyone starts in trousers; a skirt suit is optional for every gender. Preview standing, walking, or seated.</p></div></div>
         <div class="row-item"><div class="grow"><h4>✍ Email HR</h4>
           <p>Found a bug, or ready to complain about the working conditions at Hardsell &amp;
           Firestone? Open BarMail and press <b>Email HR</b>. HR will not read it — but your
@@ -1162,9 +1326,7 @@
         <div class="row-item"><div class="grow"><h4>🌍 Why LawScape Exists</h4>
           <p>The thesis: legal learning should be fun — and it should be fun to learn how
           lawyers in other countries answer the same questions. The practice-pack selector
-          (UK SQE, US MPRE, State of Juris) is the first step; a full jurisdiction selector
-          (California, Nevada, Arizona) and a Global Law Firm mode with BarMail arriving from
-          around the world are on the roadmap.</p></div></div>`;
+          (England & Wales SQE, US MPRE, State of Juris) is the first step; the Firm Jurisdictions desk collects local requests for future reviewed packs. Requests are not sent until you choose to submit them through GitHub.</p></div></div>`;
     }
 
     // ---------------------------------------------------------------------------
@@ -1322,14 +1484,31 @@
     });
 
     $('btn-help').addEventListener('click', openHelp);
+    $('email-writing').addEventListener('click', () => openEmail('writing'));
+    $('btn-journal').addEventListener('click', () => desk.open());
+    $('quest-status').addEventListener('click', () => desk.open());
     $('btn-mail').addEventListener('click', () => {
-      if (state.zone === 'office') openEmail();
-      else toast('Your secure BarMail terminal is at the office.');
+      openEmail();
     });
     $('btn-record').addEventListener('click', openRecord);
     $('btn-travel').addEventListener('click', openTravelMenu);
+    $('room-action').addEventListener('click', () => {
+      if (state.zone === 'sidebar') openSidebar();
+      else if (state.zone === 'courtroom') talkTo(zone.npcs.find((npc) => npc.id === 'derek_balam'));
+    });
+    $('room-service').addEventListener('click', () => state.zone === 'sidebar' ? openBartender() : openJudgeStatus());
+    $('room-board').addEventListener('click', openHighScores);
+
+    $('email').addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeEmail(); $('btn-mail').focus(); }
+      if (event.key !== 'Tab') return;
+      const focusable = [...$('email').querySelectorAll('button:not(:disabled), a[href], input, textarea, select, summary, [tabindex="0"]')].filter((el) => el.getClientRects().length);
+      if (event.shiftKey && document.activeElement === focusable[0]) { event.preventDefault(); focusable.at(-1)?.focus(); }
+      else if (!event.shiftKey && document.activeElement === focusable.at(-1)) { event.preventDefault(); focusable[0]?.focus(); }
+    });
 
     document.addEventListener('keydown', (event) => {
+      if (desk.isOpen()) return;
       const target = event.target;
       const typing = target instanceof HTMLInputElement
         || target instanceof HTMLTextAreaElement
@@ -1354,7 +1533,9 @@
       if (moves[key]) {
         event.preventDefault();
         moveBy(...moves[key]);
-      } else if (key === 'b' && state.zone === 'office' && !overlayOpen()) {
+      } else if (key === 'j' && !overlayOpen()) {
+        desk.open();
+      } else if (key === 'b' && canAccessBarMail(state) && !overlayOpen()) {
         openEmail();
       } else if (key === 'r' && !overlayOpen()) {
         openRecord();
@@ -1378,23 +1559,8 @@
       { id: 'female', label: 'Female' },
       { id: 'nonbinary', label: 'Non-binary' },
     ];
-    const HAIR_STYLES = ['Short', 'Long', 'Ponytail', 'Bun', 'Curly', 'Bald'];
-
-    let pick = { suit: PAL.suits[0], gender: 'nonbinary', skin: 1, hairColor: 0, hairStyle: 0, eye: 0 };
-
-    function swatchRow(el, colors, selectedIdx, onPick, round = false) {
-      el.innerHTML = '';
-      colors.forEach((c, i) => {
-        const sw = document.createElement('button');
-        sw.type = 'button';
-        sw.className = 'swatch' + (round ? ' round' : '') + (selectedIdx === i ? ' selected' : '');
-        sw.style.background = c;
-        sw.setAttribute('aria-label', `${el.getAttribute('aria-label') || 'Color'} option ${i + 1}`);
-        sw.setAttribute('aria-pressed', selectedIdx === i ? 'true' : 'false');
-        sw.onclick = () => onPick(i);
-        el.appendChild(sw);
-      });
-    }
+    let pick = { ...normalizeAppearance(), gender: 'nonbinary', skin: 1 };
+    let creatorEditor = null;
 
     function pillRow(el, labels, isSelected, onPick) {
       el.innerHTML = '';
@@ -1409,40 +1575,18 @@
       });
     }
 
-    function pickLook() {
-      return {
-        suit: pick.suit, gender: pick.gender, skin: pick.skin,
-        hair: pick.hairColor, hairStyle: pick.hairStyle, eye: pick.eye,
-      };
-    }
-
-    function drawCreatorPreview() {
-      const canvas = $('c-preview');
-      const ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const model = new Actor(0, 0, pickLook());
-      ctx.save();
-      ctx.scale(2.4, 2.4);
-      model.draw(ctx, canvas.width / 4.8, 66, 0, true);
-      ctx.restore();
-    }
-
     function buildCreator() {
-      pillRow($('c-gender'), GENDERS.map((g) => g.label),
-        (i) => GENDERS[i].id === pick.gender,
-        (i) => { pick.gender = GENDERS[i].id; buildCreator(); });
-      pillRow($('c-hairstyles'), HAIR_STYLES,
-        (i) => pick.hairStyle === i,
-        (i) => { pick.hairStyle = i; buildCreator(); });
-      swatchRow($('c-skins'), PAL.skin, pick.skin,
-        (i) => { pick.skin = i; buildCreator(); });
-      swatchRow($('c-haircolors'), PAL.hair, pick.hairColor,
-        (i) => { pick.hairColor = i; buildCreator(); });
-      swatchRow($('c-eyes'), PAL.eyes, pick.eye,
-        (i) => { pick.eye = i; buildCreator(); }, true);
-      swatchRow($('c-suits'), PAL.suits, PAL.suits.indexOf(pick.suit),
-        (i) => { pick.suit = PAL.suits[i]; buildCreator(); });
-      drawCreatorPreview();
+      creatorEditor?.destroy();
+      function genderControls() {
+        pillRow($('c-gender'), GENDERS.map((g) => g.label),
+          (i) => GENDERS[i].id === pick.gender,
+          (i) => { pick.gender = GENDERS[i].id; genderControls(); });
+      }
+      genderControls();
+      creatorEditor = mountAppearanceEditor($('c-appearance'), {
+        prefix: 'creator', read: () => pick,
+        onChange: (key, value) => { pick[key] = value; },
+      });
     }
 
     $('btn-new').addEventListener('click', () => {
@@ -1452,12 +1596,13 @@
     });
 
     $('btn-creator-back').addEventListener('click', () => {
+      creatorEditor?.destroy();
       $('creator').classList.add('hidden');
       $('title-screen').classList.remove('hidden');
     });
 
     $('btn-continue').addEventListener('click', () => {
-      if (!load()) return;
+      if (!load()) { toast('This save could not be loaded. It has not been changed.'); return; }
       $('title-screen').classList.add('hidden');
       startGame();
     });
@@ -1472,20 +1617,17 @@
       reset();
       state.name = $('c-name').value.trim() || 'Alex Barrister';
       state.gender = pick.gender;
-      state.suitColor = pick.suit;
-      state.skin = pick.skin;
-      state.hair = pick.hairColor;
-      state.hairStyle = pick.hairStyle;
-      state.eye = pick.eye;
+      Object.assign(state, normalizeAppearance(pick));
+      creatorEditor?.destroy();
       save();
       $('creator').classList.add('hidden');
       startGame();
     });
 
     function startGame() {
+      if (state.ethics <= 0 || state.runStatus === 'ended') { gameOver(); return; }
       player = new Actor(state.pos.x, state.pos.y,
-        { suit: state.suitColor, gender: state.gender, skin: state.skin,
-          hair: state.hair, hairStyle: state.hairStyle, eye: state.eye }, { speed: PLAYER_BASE_SPEED });
+        playerLook(), { speed: PLAYER_BASE_SPEED });
       zone = currentZone();
       if (!isWalkable(player.tileX, player.tileY)) {
         state.pos = { ...zone.spawn };
@@ -1498,13 +1640,13 @@
       updateHUD();
       $('hud').classList.remove('hidden');
       inGame = true;
-      if (state.casesDone === 0) {
+      desk.tick();
+      if (!state.apprenticeship.introduced) {
         showDialogue({
           name: 'Liz Loza, Secretary',
-          text: `Welcome to Hardsell & Firestone, ${state.name}. BarMail is on your computer, `
-            + 'the filing cabinet has documents to review, and Mr. Johnson called about his case. '
-            + 'Jim Hardsell is busy. Linda Firestone charges for advice. Get to work.',
-          choices: [{ label: 'On it.' }],
+          text: `Welcome to Hardsell & Firestone, ${state.name}. Two files are on your desk. `
+            + 'Linda wants a useful reply. Jim wants it yesterday. Open your journal to inspect the record and begin your first firm day.',
+          choices: [{ label: 'Open my apprenticeship journal', fn: () => desk.open() }, { label: 'Let me look around first.' }],
         });
       }
     }
@@ -1531,7 +1673,8 @@
       lastT = now;
 
       if (inGame) {
-        player.speed = now < whiskeySlowUntil ? PLAYER_BASE_SPEED / 2 : PLAYER_BASE_SPEED;
+        desk.tick();
+        player.speed = PLAYER_BASE_SPEED * movementMultiplier(state);
         player.update(dt);
         updateDocumentReview(now);
         trackBillableStudy(dt);
@@ -1586,6 +1729,21 @@
       get docReview() { return { ...docReview }; },
       get inGame() { return inGame; },
     };
+
+    // Another tab must not continue spending or reviving an out-of-date character.
+    window.addEventListener('storage', (event) => {
+      if (event.key !== 'lawscape_save_v2' || !inGame) return;
+      inGame = false;
+      desk.close();
+      stopDocumentReview(false);
+      closeEmail();
+      hideDialogue();
+      $('panel').classList.add('hidden');
+      $('hud').classList.add('hidden');
+      $('title-screen').classList.remove('hidden');
+      refreshTitleButtons();
+      toast('Your save changed in another tab. Continue to load the current character.');
+    });
   },
   "js/state.js": (exports, require) => {
     // Player state + persistence. Single mutable `state` object, saved to localStorage.
@@ -1595,19 +1753,40 @@
     // damage it, two correct answers in a row heal it, and at 0 you are disbarred
     // and the save is wiped.
 
-    const SAVE_KEY = 'lawscape_save_v2';
+    const { freshApprenticeship } = require("js/apprenticeship.js");
+    const { normalizeAppearance } = require("js/data/appearance.js");
+
+    const SAVE_KEY = 'lawscape_save_v2'; // Preserve the legacy origin/key on migration.
+
+    function newRunId() {
+      return globalThis.crypto?.randomUUID?.() || `run-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    }
 
     const BASE_MAX_ETHICS = 100;
     const MONEYBAGS_MAX_ETHICS = 50;
 
     function freshState() {
       return {
+        schemaVersion: 5,
+        runId: newRunId(),
+        runStatus: 'active',
+        apprenticeship: freshApprenticeship(),
+        silhouette: 'tailored',
+        glasses: false,
+        facialHair: 0,
+        faceShape: 0,
+        outfit: 'trousers',
+        tieColor: '#6e2436',
+        shirtColor: '#f3eee1',
+        sidebar: { topic: 'commons', drafts: {} },
+        sidebarDrinks: 0,
+        slowUntil: 0,
         name: 'Alex Barrister',
         gender: 'nonbinary',   // 'male' | 'female' | 'nonbinary'
         suitColor: '#1f3a5f',
         skin: 0,
         hair: 0,               // hair color index (PAL.hair)
-        hairStyle: 0,          // 0 short, 1 long, 2 ponytail, 3 bun, 4 curly, 5 bald
+        hairStyle: 0,          // stable style index; see data/appearance.js
         eye: 0,                // eye color index (PAL.eyes)
         gold: 0,
         ethics: BASE_MAX_ETHICS,
@@ -1660,13 +1839,15 @@
     // Returns true if the player just got disbarred.
     function damageEthics(n) {
       state.ethics = Math.max(0, state.ethics - n);
+      if (state.ethics <= 0) state.runStatus = 'ended';
       return state.ethics <= 0;
     }
 
     function save() {
       try {
         localStorage.setItem(SAVE_KEY, JSON.stringify(state));
-      } catch { /* storage unavailable (private mode) — play session-only */ }
+        return true;
+      } catch { return false; /* storage unavailable — play session-only */ }
     }
 
     function hasSave() {
@@ -1678,8 +1859,26 @@
         const raw = localStorage.getItem(SAVE_KEY);
         if (!raw) return false;
         const data = JSON.parse(raw);
+        if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+        if (data.schemaVersion > 5) return false;
         replaceState(Object.assign(freshState(), data));
+        state.schemaVersion = 5;
+        Object.assign(state, normalizeAppearance(state));
+        state.sidebar = data.sidebar && typeof data.sidebar === 'object' && !Array.isArray(data.sidebar) ? data.sidebar : { topic: 'commons', drafts: {} };
+        if (!state.sidebar.drafts || typeof state.sidebar.drafts !== 'object' || Array.isArray(state.sidebar.drafts)) state.sidebar.drafts = {};
+        state.apprenticeship = Object.assign(freshApprenticeship(), data.apprenticeship || {});
+        for (const key of ['attempts', 'requests', 'cosmetics', 'equipped']) {
+          if (!Array.isArray(state.apprenticeship[key])) state.apprenticeship[key] = [];
+        }
+        for (const key of ['drafts', 'reviews', 'reviewDrafts']) {
+          if (!state.apprenticeship[key] || typeof state.apprenticeship[key] !== 'object' || Array.isArray(state.apprenticeship[key])) state.apprenticeship[key] = {};
+        }
+        if (!Array.isArray(state.upgrades)) state.upgrades = [];
+        state.upgrades = [...new Set(state.upgrades.map((id) => id === 'office_window' ? 'work_phone' : id))];
+        if (!Number.isFinite(state.slowUntil) || state.slowUntil < 0) state.slowUntil = 0;
+        if (!Array.isArray(state.seen)) state.seen = [];
         state.ethics = Math.min(state.ethics, maxEthics());
+        if (state.ethics <= 0) state.runStatus = 'ended';
         return true;
       } catch { return false; }
     }
@@ -1691,9 +1890,392 @@
     }
     Object.assign(exports, { BASE_MAX_ETHICS, MONEYBAGS_MAX_ETHICS, freshState, state, hasUpgrade, maxEthics, healEthics, damageEthics, save, hasSave, load, reset });
   },
+  "js/apprenticeship.js": (exports, require) => {
+    const { CURRICULUM_VERSION, TRAINING_JURISDICTION, DOCUMENT_PACKS, WRITING_TASKS, CAPSTONE, COSMETICS, evidenceAt } = require("js/data/apprenticeship.js");
+
+    const PARTNER_DELAY_MS = 5_000;
+    function freshApprenticeship() {
+      return { version: 1, office: 'juris', introduced: false, drafts: {}, attempts: [], reviews: {}, reviewDrafts: {}, requests: [], cosmetics: [], equipped: [] };
+    }
+
+    function taskById(id) { return [...WRITING_TASKS, CAPSTONE].find((task) => task.id === id); }
+    function activeRun(player) { return player.ethics > 0 && player.runStatus !== 'ended'; }
+    function pendingAttempt(player) { return player.apprenticeship.attempts.find((a) => a.status === 'pending' && a.runId === player.runId); }
+    function taskAttempts(player, id) { return player.apprenticeship.attempts.filter((a) => a.taskId === id && a.runId === player.runId); }
+    function returnedTasks(player) { return WRITING_TASKS.filter((task) => taskAttempts(player, task.id).some((a) => a.status === 'returned')); }
+    function capstoneReady(player) {
+      return returnedTasks(player).length === WRITING_TASKS.length && DOCUMENT_PACKS.every((pack) => player.apprenticeship.reviews[pack.id]);
+    }
+
+    function saveDraft(player, taskId, draft) {
+      if (!activeRun(player) || !taskById(taskId)) return false;
+      player.apprenticeship.drafts[taskId] = {
+        text: String(draft.text || '').slice(0, 6000),
+        issue: draft.issue, action: draft.action, evidence: String(draft.evidence || '').slice(0, 12),
+      };
+      return true;
+    }
+
+    function commitWriting(player, taskId, now = Date.now()) {
+      const task = taskById(taskId), draft = player.apprenticeship.drafts[taskId];
+      if (!activeRun(player)) throw new Error('This character run has ended.');
+      if (!task || !draft) throw new Error('Write a draft first.');
+      if (pendingAttempt(player)) throw new Error('Wait for the pending partner reply before committing another task.');
+      if (taskId === 'capstone' && !capstoneReady(player)) throw new Error('Finish both document files and receive all six partner replies first.');
+      if (!draft.text.trim() || !Number.isInteger(draft.issue) || !task.issues[draft.issue]
+          || !Number.isInteger(draft.action) || !task.actions[draft.action] || !task.sources.includes(draft.evidence)) {
+        throw new Error('Add your reply, issue, next step and supporting passage before committing.');
+      }
+      const previous = taskAttempts(player, taskId);
+      if (previous.length >= 2 || previous.some((a) => a.result?.correct === 3)) throw new Error('This assignment is complete. You can reread its correspondence.');
+      if (previous.length && previous[0].submission.text === draft.text.trim()) throw new Error('Revise your written reply before sending a new attempt.');
+      const attempt = {
+        id: `${player.runId}:${taskId}:${previous.length + 1}`, runId: player.runId, taskId,
+        version: CURRICULUM_VERSION, jurisdiction: TRAINING_JURISDICTION, rubric: 'structured-choices-1',
+        status: 'pending', committedAt: now, replyAt: now + PARTNER_DELAY_MS,
+        revisionOf: previous[0]?.id || null,
+        submission: { text: draft.text.trim(), issue: draft.issue, action: draft.action, evidence: draft.evidence },
+        rewardApplied: false,
+      };
+      player.apprenticeship.attempts.push(attempt);
+      delete player.apprenticeship.drafts[taskId];
+      return attempt;
+    }
+
+    // Authored checklist assessment only. Free text is preserved for self-comparison,
+    // never keyword graded. Rewards are local study gold, not an online credential.
+    function settleReplies(player, now = Date.now()) {
+      if (!activeRun(player)) return [];
+      const delivered = [];
+      for (const attempt of player.apprenticeship.attempts) {
+        if (attempt.status !== 'pending' || attempt.runId !== player.runId || attempt.replyAt > now || attempt.rewardApplied) continue;
+        const task = taskById(attempt.taskId);
+        if (!task || attempt.version !== CURRICULUM_VERSION) continue;
+        const checks = [attempt.submission.issue === task.issue, attempt.submission.action === task.action, attempt.submission.evidence === task.evidence];
+        const correct = checks.filter(Boolean).length;
+        const base = task.id === 'capstone' ? 175 : 40;
+        const original = player.apprenticeship.attempts.find((a) => a.id === attempt.revisionOf);
+        const gold = original
+          ? Math.round(base * 0.2 * Math.max(0, correct - (original.result?.correct || 0)) / 3)
+          : Math.round(base * (0.25 + 0.75 * correct / 3));
+        attempt.result = { correct, checks, gold, proseAssessed: false };
+        attempt.status = 'returned';
+        attempt.rewardApplied = true;
+        attempt.returnedAt = now;
+        player.gold += gold;
+        delivered.push(attempt);
+      }
+      return delivered;
+    }
+
+    function submitReview(player, packId, selected, notes, now = Date.now()) {
+      if (!activeRun(player)) throw new Error('This character run has ended.');
+      if (pendingAttempt(player)) throw new Error('Wait for your partner’s reply before committing another reward.');
+      const pack = DOCUMENT_PACKS.find((item) => item.id === packId);
+      if (!pack) throw new Error('Unknown document file.');
+      if (player.apprenticeship.reviews[packId]) throw new Error('This file already has a review receipt.');
+      const anchors = [...new Set(selected)].filter((anchor) => evidenceAt(anchor)?.pack.id === packId);
+      if (!anchors.length || !String(notes).trim()) throw new Error('Flag at least one passage and explain your findings.');
+      const expected = pack.findings.map((finding) => finding.anchor);
+      const hits = anchors.filter((anchor) => expected.includes(anchor));
+      const falsePositives = anchors.filter((anchor) => !expected.includes(anchor));
+      const gold = Math.round(15 + 60 * Math.max(0, hits.length - falsePositives.length) / expected.length);
+      const receipt = { runId: player.runId, version: CURRICULUM_VERSION, selected: anchors, notes: String(notes).slice(0, 6000), hits, falsePositives, gold, at: now };
+      player.apprenticeship.reviews[packId] = receipt;
+      delete player.apprenticeship.reviewDrafts[packId];
+      player.gold += gold;
+      return receipt;
+    }
+
+    function buyCosmetic(player, id) {
+      if (!activeRun(player) || pendingAttempt(player)) throw new Error('Finish the pending partner reply before making a purchase.');
+      const item = COSMETICS.find((cosmetic) => cosmetic.id === id);
+      if (!item) throw new Error('Unknown wardrobe item.');
+      if (player.apprenticeship.cosmetics.includes(id)) throw new Error('You already own this item.');
+      if (player.gold < item.price) throw new Error(`You need ${item.price} gold.`);
+      player.gold -= item.price;
+      player.apprenticeship.cosmetics.push(id);
+      player.apprenticeship.equipped.push(id);
+      return item;
+    }
+
+    function requestJurisdiction(player, label, topic, help) {
+      const clean = String(label).trim().replace(/\s+/g, ' ').slice(0, 80);
+      const cleanTopic = String(topic).trim().slice(0, 500);
+      if (!clean || !cleanTopic) throw new Error('Name the legal jurisdiction and the work you would like to practice.');
+      const key = clean.toLocaleLowerCase('en-US');
+      const aliases = { nevada: 'us-nv', 'us-nv': 'us-nv', california: 'us-ca', arizona: 'us-az', 'england and wales': 'gb-ew', 'england & wales': 'gb-ew' };
+      const id = aliases[key] || key;
+      const existing = player.apprenticeship.requests.find((request) => request.id === id);
+      if (existing) return existing;
+      const request = { id, label: clean, topic: cleanTopic, help: String(help || '').trim().slice(0, 500), status: 'Saved locally · not submitted' };
+      player.apprenticeship.requests.push(request);
+      return request;
+    }
+
+    function requestIssueUrl(request) {
+      const body = `Jurisdiction: ${request.label}\n\nPractice interests: ${request.topic}\n\nReviewer offer / public sources: ${request.help || 'None supplied.'}\n\nProduct suggestion only. No real matter information. Saved locally in LawScape; submit this issue to send it to the maintainers.`;
+      return `https://github.com/joelakaufmann-lgtm/lawscape/issues/new?title=${encodeURIComponent(`[Jurisdiction request] ${request.label}`)}&body=${encodeURIComponent(body)}`;
+    }
+    Object.assign(exports, { PARTNER_DELAY_MS, freshApprenticeship, taskById, activeRun, pendingAttempt, taskAttempts, returnedTasks, capstoneReady, saveDraft, commitWriting, settleReplies, submitReview, buyCosmetic, requestJurisdiction, requestIssueUrl });
+  },
+  "js/data/apprenticeship.js": (exports, require) => {
+    // Original, fictional training records. These are not statements of real law.
+    // Transparent authored rubrics are intentional for this offline study build.
+    const CURRICULUM_VERSION = 'firm-1.0';
+    const TRAINING_JURISDICTION = 'State of Juris · fictional firm policy';
+    const FIRM_PACKS = [
+      { id: 'juris', label: 'State of Juris', status: 'Local practice', note: 'Two synthetic matters. Practice evidence handling and communication under supplied fictional office policies.' },
+      { id: 'us-nv', label: 'Nevada', status: 'Needs source review', note: 'Existing reference material; a reviewed firm curriculum is not yet available.' },
+      { id: 'gb-ew', label: 'England & Wales', status: 'Needs source review', note: 'Legacy SQE-style study is in BarMail. A reviewed firm curriculum is not yet available.' },
+      { id: 'us-ca', label: 'California', status: 'Not yet available', note: 'A reference shelf is not a complete training pack.' },
+      { id: 'us-az', label: 'Arizona', status: 'Not yet available', note: 'Source coverage and authored tasks still need review.' },
+    ];
+
+    const DOCUMENT_PACKS = [
+      {
+        id: 'lantern', title: 'The Lantern File', subtitle: 'A missing approval. A very confident summary.',
+        client: 'Lantern Studio', date: '14 September 2026',
+        brief: 'Jim wants a launch update before lunch. Find three passages that require follow-up: uncertain release authority, a timing conflict, and an unsupported AI assertion. Do not flag routine background just because it sounds official.',
+        documents: [
+          { id: 'L1', title: '01 · Matter instruction', date: '10 September', paragraphs: [
+            'Lantern Studio retained the fictional Hardsell & Firestone team to organize the record for a proposed exhibition launch. No proceeding has been filed.',
+            'The project is called the Lantern Launch. The studio uses a blue lantern on its letterhead.',
+          ] },
+          { id: 'L2', title: '02 · Release email', date: '11 September', paragraphs: [
+            'From Mara Vale, studio coordinator: Please send the prototype drawings to Sol at Kite Fabrication. Our director is traveling. I do not know whether Sol has approval to receive this version.',
+            'Mara asks for a reply by noon on 14 September. Her email signature lists the studio reception number.',
+          ] },
+          { id: 'L3', title: '03 · Signed schedule', date: '9 September', paragraphs: [
+            'The signed project schedule records delivery on 20 September. Any change must be confirmed in writing by both project leads under this fictional project arrangement.',
+            'The schedule names Mara Vale and Sol Reed as project contacts. A contact listing does not itself authorize release of every document.',
+          ] },
+          { id: 'L4', title: '04 · Call note', date: '12 September', paragraphs: [
+            'Mara reported: Sol thinks the delivery date moved to 18 September. I have not found a written confirmation from both project leads.',
+            'The call lasted eight minutes. The note was entered by Liz Loza that afternoon.',
+          ] },
+          { id: 'L5', title: '05 · AI draft — unchecked', date: '14 September', paragraphs: [
+            'The AI draft states: The director approved release to Kite, the parties agreed to 18 September, and the exhibition is guaranteed to open on time. It supplies no supporting record citations.',
+            'This is a deliberately flawed, prewritten training draft. No live AI service generated it during play.',
+          ] },
+          { id: 'L6', title: '06 · Fictional office policy', date: 'Current for this exercise', paragraphs: [
+            'Before releasing a prototype, verify the recipient, version and recorded approval with the supervising partner. If approval is unclear, hold the release and identify the missing confirmation.',
+            'For this file, distinguish signed dates, reports and unresolved changes. Every factual assertion in the partner update must cite a record passage; a draft summary is not independent evidence.',
+          ] },
+        ],
+        findings: [
+          { anchor: 'L2.1', label: 'Uncertain release approval', why: 'Mara expressly does not know whether the recipient is approved. Check the version and authority before release under L6.1.' },
+          { anchor: 'L4.1', label: 'Unconfirmed date change', why: 'The call reports 18 September, while L3.1 records 20 September and written confirmation for changes. Preserve both accounts.' },
+          { anchor: 'L5.1', label: 'Unsupported AI assertions', why: 'The record does not establish director approval, agreement on 18 September, or a guaranteed opening. Compare L2.1, L3.1 and L4.1.' },
+        ],
+      },
+      {
+        id: 'harbor', title: 'The Harbor File', subtitle: 'Two versions. One detail nobody mentioned.',
+        client: 'Harbor Workshop', date: '22 September 2026',
+        brief: 'Linda needs a reliable status update. Flag three passages that need follow-up: a changed draft obligation, uncertain inspection evidence, and a summary that hides adverse facts.',
+        documents: [
+          { id: 'H1', title: '01 · Client objective', date: '17 September', paragraphs: [
+            'Harbor Workshop wants to purchase six display cabinets from North Pier Makers before a studio open day on 30 September. Its manager asks for a clear list of unresolved decisions.',
+            'The client favors practical options over promises. No claim or legal outcome has been assessed.',
+          ] },
+          { id: 'H2', title: '02 · Draft A', date: '18 September', paragraphs: [
+            'Draft A, paragraph 4: The buyer may inspect the cabinets before paying the final installment. This document is marked DRAFT and has no signatures.',
+            'Draft A describes six oak display cabinets. Its file name is harbor-draft-a.',
+          ] },
+          { id: 'H3', title: '03 · Draft B', date: '20 September', paragraphs: [
+            'Draft B, paragraph 4: The buyer must pay the final installment before inspecting the cabinets. This document is marked DRAFT and has no signatures.',
+            'The cover email asks the buyer to review the change. The record contains no reply accepting Draft B.',
+          ] },
+          { id: 'H4', title: '04 · Inspection log', date: '21 September', paragraphs: [
+            'A workshop log says two cabinets may have damaged hinges. The note does not identify the inspector, and photographs were requested but are not in this file.',
+            'The same log says the other four cabinets appeared ready for packing. This is a report, not a warranty.',
+          ] },
+          { id: 'H5', title: '05 · AI status draft — unchecked', date: '22 September', paragraphs: [
+            'The AI draft says: All six cabinets passed inspection and the signed deal preserves inspection before payment. There are no open issues. It cites no document passages.',
+            'This summary was authored to contain errors for the exercise. Check it against both drafts and the log.',
+          ] },
+          { id: 'H6', title: '06 · Fictional office policy', date: 'Current for this exercise', paragraphs: [
+            'Identify each document by version and status. Do not describe an unsigned draft as an executed agreement or resolve a disputed factual question by selecting the more favorable account.',
+            'Partner updates must include material unfavorable information, the evidence gaps, a named follow-up and a realistic next step. Only the client can select its commercial preference in this exercise.',
+          ] },
+        ],
+        findings: [
+          { anchor: 'H3.1', label: 'Payment and inspection order changed', why: 'Compare H2.1 and H3.1: Draft B puts payment first. Neither draft is signed; explain the change and seek instructions.' },
+          { anchor: 'H4.1', label: 'Unverified adverse inspection report', why: 'Two possible defects require follow-up. The missing inspector and photographs limit what can be asserted; they do not justify hiding the report.' },
+          { anchor: 'H5.1', label: 'AI draft contradicts the file', why: 'H2.1 and H3.1 are unsigned drafts, H3.1 changes the sequence, and H4.1 reports possible defects. The all-clear summary is unsupported.' },
+        ],
+      },
+    ];
+
+    const WRITING_TASKS = [
+      {
+        id: 'release', pack: 'lantern', title: 'Before you press send', skill: 'Professional responsibility', partner: 'Linda Firestone',
+        prompt: 'Mara wants the drawings sent now. Jim has forwarded her email with “pls handle.” Write Linda a short reply explaining what the file establishes, what is missing, and the next step. Your answer stays inside this fictional firm.',
+        sources: ['L2.1', 'L6.1'],
+        issues: ['A lunch deadline proves authority to release.', 'Recipient approval and the approved version are uncertain.', 'All outside sharing is permanently forbidden.'], issue: 1,
+        actions: ['Hold release; ask the partner to verify recipient, version and approval.', 'Send the newest file and ask permission afterward.', 'Tell Mara the director already approved it.'], action: 0, evidence: 'L2.1',
+        reply: 'Speed is lovely. An invented approval is less lovely. L2.1 leaves authority unresolved. Under our fictional policy at L6.1, hold the release and obtain the missing confirmation. In your prose, say who will check it and when you will update Mara.',
+      },
+      {
+        id: 'timeline', pack: 'lantern', title: 'The date that moved itself', skill: 'Evidence handling', partner: 'Jim Hardsell',
+        prompt: 'Jim asks: “Is delivery the 18th or the 20th? Please make the ambiguity less ambiguous.” Explain the signed schedule, later report and verification needed without silently choosing a date.',
+        sources: ['L3.1', 'L4.1', 'L6.2'],
+        issues: ['The signed schedule and later unconfirmed report differ.', 'A later phone call always replaces a signed date.', 'There is no delivery date anywhere in the file.'], issue: 0,
+        actions: ['Promise the 18th.', 'Discard the call note.', 'Report both dates; obtain written confirmation from the project leads.'], action: 2, evidence: 'L4.1',
+        reply: 'L3.1 records the 20th; L4.1 reports the 18th without the required confirmation. Give me both, with their different status. Ask for the missing written confirmation. “I made it sound certain” is not one of our billing codes.',
+      },
+      {
+        id: 'ai-check', pack: 'lantern', title: 'Confidently incorrect', skill: 'Research and source checking', partner: 'Linda Firestone',
+        prompt: 'The unchecked AI draft sounds ready for a client. Identify its unsupported claims and send Linda a restrained replacement summary with evidence references and open questions.',
+        sources: ['L5.1', 'L2.1', 'L3.1', 'L4.1'],
+        issues: ['A polished draft is a source.', 'The draft only needs a friendlier tone.', 'The draft invents approval, agreement and certainty.'], issue: 2,
+        actions: ['Forward it with an AI disclaimer.', 'Replace unsupported claims with record-based statements and unresolved questions.', 'Add a fabricated citation to improve confidence.'], action: 1, evidence: 'L5.1',
+        reply: 'Compare each claim in L5.1 to the underlying records. Approval is unclear, the date change is unconfirmed, and no exhibit guarantees the opening. A useful replacement tells us what we know, how we know it, and what we still need. AI confidence does not fill a file gap.',
+      },
+      {
+        id: 'versions', pack: 'harbor', title: 'One sentence, different deal', skill: 'Analysis', partner: 'Linda Firestone',
+        prompt: 'Compare paragraph 4 in Draft A and Draft B. Explain the practical change to Linda, label each document’s status, and ask for the client instruction needed before responding.',
+        sources: ['H2.1', 'H3.1', 'H3.2', 'H6.1'],
+        issues: ['Both versions promise inspection first.', 'Draft B moves payment before inspection; neither version is signed.', 'Draft B is a court order.'], issue: 1,
+        actions: ['Describe the change and ask whether the client accepts that commercial sequence.', 'Declare Draft B binding.', 'Tell the client nothing changed.'], action: 0, evidence: 'H3.1',
+        reply: 'H2.1 permits inspection before payment; H3.1 reverses the sequence. Explain the practical consequence and obtain instructions. Both are unsigned drafts. Do not smuggle a conclusion about enforceability into a comparison of text.',
+      },
+      {
+        id: 'adverse', pack: 'harbor', title: 'The inconvenient two cabinets', skill: 'Supervision', partner: 'Jim Hardsell',
+        prompt: 'Jim wants “the good version” of the inspection news. Write a candid internal update that includes the possible defects, limits of the log and a concrete follow-up.',
+        sources: ['H4.1', 'H4.2', 'H6.2'],
+        issues: ['The possible defects matter, but the report needs verification.', 'Missing photos prove there are no defects.', 'All six cabinets are certainly defective.'], issue: 0,
+        actions: ['Omit the two cabinets.', 'Guarantee an inspection result.', 'Report the uncertainty; identify the inspector and obtain the missing photographs.'], action: 2, evidence: 'H4.1',
+        reply: 'Include both sides: four reportedly looked ready, two may have hinge damage. H4.1 does not establish who inspected them or provide photographs. Ask for both. By “good version” I apparently meant “the accurate one.” Please quote me selectively.',
+      },
+      {
+        id: 'client-update', pack: 'harbor', title: 'Useful by five o’clock', skill: 'Written communication', partner: 'Linda Firestone',
+        prompt: 'Prepare Linda’s internal draft of a short client update. Correct the unchecked all-clear summary, distinguish the two unsigned versions, disclose the inspection uncertainty and identify a client decision. Do not send it to anyone.',
+        sources: ['H5.1', 'H2.1', 'H3.1', 'H4.1', 'H6.2'],
+        issues: ['Only spelling needs checking.', 'The client has already accepted Draft B.', 'The all-clear draft conflicts with unsigned versions and an unresolved defect report.'], issue: 2,
+        actions: ['Tell the client the deal is signed.', 'Give a source-based update, request inspection evidence and ask about payment sequencing.', 'Delete the adverse facts.'], action: 1, evidence: 'H5.1',
+        reply: 'Use H2.1 and H3.1 to explain the versions, H4.1 for the qualified defect report, and H6.2 for the required next steps. Ask the client about payment sequencing. Keep the prose civil and useful. “All clear” is a status we earn, not a font choice.',
+      },
+    ];
+
+    const CAPSTONE = {
+      id: 'capstone', pack: 'harbor', title: 'The partner’s desk', skill: 'Connected matter', partner: 'Linda Firestone',
+      prompt: 'Close your first firm day: write a handoff comparing Lantern and Harbor. For each file, give the material uncertainty, an exact evidence reference, and a next step. Explain what you corrected in the AI drafts. End with the decisions that still need a human. These are separate matters; do not mix their facts.',
+      sources: ['L2.1', 'L4.1', 'L5.1', 'H3.1', 'H4.1', 'H5.1', 'H6.2'],
+      evidencePrompt: 'Choose the office policy that supports this handoff approach',
+      issues: ['Both files are ready for an unconditional all-clear.', 'Both contain unresolved facts and unsupported summaries, but different decisions.', 'An AI summary removes the need to inspect exhibits.'], issue: 1,
+      actions: ['Send both flawed summaries.', 'Promise both clients their preferred outcome.', 'Separate the files, cite the record and assign specific verification and client decisions.'], action: 2, evidence: 'H6.2',
+      reply: 'Lantern needs release authority (L2.1) and date confirmation (L4.1). Harbor needs instructions about the changed payment sequence (H3.1) and better inspection evidence (H4.1). Both AI drafts overstate the record (L5.1 and H5.1). Under H6.2, your handoff should preserve those distinctions and identify who owns each next action. You have survived a day in which “pls fix” was considered a complete brief.',
+    };
+
+    const COSMETICS = [
+      { id: 'tie-brass', label: 'Partner’s gold tie', price: 30, note: 'A little ambition. Absolutely no grading advantage.', tie: '#cba64b' },
+      { id: 'case-oxblood', label: 'Oxblood briefcase', price: 60, note: 'Carries documents and unreasonable expectations.', briefcase: '#713c46' },
+    ];
+
+    function evidenceAt(anchor) {
+      const [id, number] = String(anchor).split('.');
+      for (const pack of DOCUMENT_PACKS) {
+        const doc = pack.documents.find((item) => item.id === id);
+        if (doc && doc.paragraphs[Number(number) - 1]) return { pack, doc, text: doc.paragraphs[Number(number) - 1], anchor };
+      }
+      return null;
+    }
+    Object.assign(exports, { CURRICULUM_VERSION, TRAINING_JURISDICTION, FIRM_PACKS, DOCUMENT_PACKS, WRITING_TASKS, CAPSTONE, COSMETICS, evidenceAt });
+  },
+  "js/data/appearance.js": (exports, require) => {
+    const { PAL } = require("js/engine/palette.js");
+
+    // The first six hair IDs and the first six color indices match legacy saves.
+    const HAIR_STYLES = ['Side part', 'Long waves', 'Low ponytail', 'Neat bun', 'Natural curls', 'Bald',
+      'Close crop', 'Swept back', 'Chin-length bob', 'High ponytail', 'Braids', 'Locs', 'Tapered curls', 'Side-swept fringe', 'Textured crop', 'Half-up waves'];
+    const HAIR_COLORS = ['Soft black', 'Walnut brown', 'Golden blond', 'Silver', 'Auburn', 'Platinum',
+      'Espresso', 'Chestnut', 'Honey blond', 'Copper', 'Strawberry blond', 'Salt and pepper',
+      'Charcoal', 'Blue black', 'Burgundy', 'Midnight blue', 'Plum', 'Dusty rose'];
+    const FACIAL_HAIR = ['Clean shaven', 'Stubble', 'Moustache', 'Goatee', 'Short beard', 'Full beard', 'Moustache & goatee'];
+    const EYE_COLORS = ['Brown', 'Blue', 'Green', 'Hazel', 'Gray', 'Amber'];
+    const SKIN_COLORS = ['Porcelain', 'Light warm', 'Golden', 'Medium warm', 'Deep golden', 'Rich brown', 'Deep brown'];
+    const TIE_COLORS = ['Burgundy', 'Navy', 'Forest', 'Ochre', 'Plum', 'Teal', 'Rose', 'Charcoal', 'Steel', 'Ivory', 'Rust', 'Slate blue'];
+    const SUIT_COLORS = ['Navy', 'Charcoal', 'Burgundy', 'Forest', 'Oak'];
+    const SHIRT_COLORS = ['Ivory', 'Pale blue', 'Lilac', 'Blush', 'Sage', 'Charcoal'];
+    const FACE_SHAPES = ['Oval', 'Angular', 'Rounded'];
+    const OUTFITS = [{ id: 'trousers', label: 'Suit with trousers' }, { id: 'skirt', label: 'Suit with skirt' }];
+
+    function index(value, options, fallback = 0) { return Number.isInteger(value) && value >= 0 && value < options.length ? value : fallback; }
+    function color(value, options, fallback = options[0]) { return options.includes(value) ? value : fallback; }
+
+    function normalizeAppearance(value = {}) {
+      return {
+        skin: index(value.skin, PAL.skin), hair: index(value.hair, PAL.hair),
+        hairStyle: index(value.hairStyle, HAIR_STYLES), eye: index(value.eye, PAL.eyes),
+        facialHair: index(value.facialHair, FACIAL_HAIR), faceShape: index(value.faceShape, FACE_SHAPES),
+        suitColor: color(value.suitColor, PAL.suits), tieColor: color(value.tieColor, PAL.ties),
+        shirtColor: color(value.shirtColor, PAL.shirts), outfit: value.outfit === 'skirt' ? 'skirt' : 'trousers',
+        silhouette: ['tailored', 'relaxed', 'slim'].includes(value.silhouette) ? value.silhouette : 'tailored',
+        glasses: value.glasses === true,
+      };
+    }
+
+    // Used everywhere: creator, wardrobe, journal portrait and walking actor.
+    function appearanceLook(value, equipped = []) {
+      const a = normalizeAppearance(value);
+      return { ...a, suit: a.suitColor, shirt: a.shirtColor,
+        tie: equipped.includes('tie-brass') ? '#cba64b' : a.tieColor,
+        briefcase: equipped.includes('case-oxblood') ? '#713c46' : '#694c35' };
+    }
+
+    function appearanceDescription(value) {
+      const a = normalizeAppearance(value);
+      return `${HAIR_COLORS[a.hair]} ${HAIR_STYLES[a.hairStyle].toLowerCase()}, ${FACIAL_HAIR[a.facialHair].toLowerCase()}, ${EYE_COLORS[a.eye].toLowerCase()} eyes, ${a.outfit === 'skirt' ? 'skirt suit' : 'trouser suit'}${a.glasses ? ', glasses' : ''}`;
+    }
+    Object.assign(exports, { HAIR_STYLES, HAIR_COLORS, FACIAL_HAIR, EYE_COLORS, SKIN_COLORS, TIE_COLORS, SUIT_COLORS, SHIRT_COLORS, FACE_SHAPES, OUTFITS, normalizeAppearance, appearanceLook, appearanceDescription });
+  },
+  "js/engine/palette.js": (exports, require) => {
+    // Single source of truth for every color in the game world (see VISUAL_DESIGN.md §2).
+    const PAL = {
+      marble: '#e8e4da',
+      marbleDark: '#d6d0c2',
+      stone: '#9a958c',
+      stoneDark: '#7d786f',
+      wood: '#8b5e3c',
+      woodLight: '#a97a52',
+      woodDark: '#6b4529',
+      parchment: '#f3e9d2',
+      brass: '#b8912f',
+      brassLight: '#d9b656',
+      navy: '#1f3a5f',
+      navyLight: '#2c5085',
+      burgundy: '#6e2436',
+      burgundyLight: '#8d3449',
+      archiveGreen: '#3f5d4b',
+      archiveGreenLight: '#557a63',
+      ink: '#2b2b33',
+      grass: '#6a8f57',
+      grassDark: '#5a7c49',
+      water: '#5b87a6',
+      skin: ['#f2d6b3', '#e8c39e', '#d4a373', '#c68e5f', '#a06a42', '#8d5a3b', '#5f3d28'],
+      // Append shades so existing saved color indices retain their meaning.
+      hair: ['#2b2b33', '#6b4529', '#b8912f', '#9a958c', '#8c3b2e', '#e8e2d4',
+        '#3a261d', '#8a5434', '#c59b63', '#b96b3d', '#d0ab85', '#69645e',
+        '#4b4650', '#1d2c38', '#592d3b', '#334763', '#715278', '#ad7789'],
+      eyes: ['#4a3728', '#3b6ea5', '#4a7c59', '#8c6b3f', '#7a8288', '#b3541e'],
+      suits: ['#1f3a5f', '#3a3a42', '#6e2436', '#3f5d4b', '#8b5e3c'],
+      ties: ['#6e2436', '#253d65', '#3f6252', '#a68238', '#66537d', '#2f6670', '#b18672', '#34363c', '#bac3d2', '#ece1c5', '#944b3f', '#486886'],
+      shirts: ['#f3eee1', '#c8d8e6', '#d4c6d8', '#e2c9c1', '#d4d9d0', '#363b45'],
+    };
+
+    // Lighten (amt > 0) or darken (amt < 0) a hex color. Used to fake 3-tone flat shading.
+    function shade(hex, amt) {
+      const n = parseInt(hex.slice(1), 16);
+      const f = (v) => Math.max(0, Math.min(255, Math.round(v + amt * 255)));
+      const r = f((n >> 16) & 255), g = f((n >> 8) & 255), b = f(n & 255);
+      return `rgb(${r},${g},${b})`;
+    }
+    Object.assign(exports, { PAL, shade });
+  },
   "js/world/zones.js": (exports, require) => {
     // Zone definitions: floor tiles, props, portals, NPCs, and interaction nodes.
-    // The world is an upgradeable office suite, apartment, and an empty courtroom.
+    // The world is an office suite, apartment, courtroom and future social lounge.
     // Office portals lead to the partners' offices and conference room.
     //
     // Tile chars: 'w' wood  'r' rug  'x' void (never walkable)
@@ -1718,6 +2300,7 @@
           { type: 'desk', x: 6, y: 1,
             tier: () => (hasUpgrade('subscription') ? 1 : 0),
             monitors: () => (hasUpgrade('monitor') ? 2 : 1),
+            phone: () => hasUpgrade('work_phone'),
             interact: { label: 'Your Computer — BarMail', action: 'email' } },
           { type: 'caseboard', x: 2, y: 1,
             interact: { label: 'Case Board — Your Record', action: 'record' } },
@@ -1733,7 +2316,6 @@
           { type: 'officechair', x: 3, y: 8, visible: () => hasUpgrade('liz_chair') },
           { type: 'plant', x: 1, y: 6, visible: () => hasUpgrade('houseplants') },
           { type: 'plant', x: 4, y: 1, visible: () => hasUpgrade('houseplants') },
-          { type: 'porthole', x: 0, y: 6, visible: () => hasUpgrade('office_window') },
           { type: 'dotpainting', x: 8, y: 0, visible: () => hasUpgrade('artwork') },
         ],
         portals: [
@@ -1847,7 +2429,7 @@
       // --------------------------------------------------------------- COURTROOM
       courtroom: {
         id: 'courtroom',
-        name: 'Courtroom — No Matters on Calendar',
+        name: 'Courtroom — Derek Balam on Duty',
         w: 13, h: 11,
         walls: 'marble',
         spawn: { x: 6, y: 9 },
@@ -1856,7 +2438,7 @@
           return 'M';
         },
         props: [
-          { type: 'judgebench', x: 5, y: 1 },
+          { type: 'judgebench', x: 5, y: 1, interact: { label: 'Sleeping AI Judge — Court Not in Session', action: 'judge' } },
           { type: 'witnessstand', x: 2, y: 3 },
           { type: 'clerkcounter', x: 9, y: 3 },
           { type: 'counseltable', x: 3, y: 6 },
@@ -1866,9 +2448,51 @@
           { type: 'bench', x: 8, y: 8 },
         ],
         portals: [
-          { x: 6, y: 10, label: 'Leave the Empty Courtroom', travel: true },
+          { x: 6, y: 10, label: 'Leave the Courtroom', travel: true },
         ],
-        npcs: [],
+        npcs: [
+          { id: 'derek_balam', name: 'Derek Balam, Bailiff', x: 10, y: 5,
+            look: { suit: '#1f3a5f', shirt: '#c8d8e6', tie: '#34363c', skin: 3, hair: 6, hairStyle: 6, eye: 0, facialHair: 2, faceShape: 1, silhouette: 'relaxed', outfit: 'trousers', badge: true },
+            icon: 'dot', talk: 'bailiff' },
+        ],
+      },
+
+      // --------------------------------------------------------------- THE SIDEBAR
+      sidebar: {
+        id: 'sidebar', name: 'The Sidebar — Local Lounge',
+        w: 14, h: 12, walls: 'green', spawn: { x: 7, y: 10 },
+        tile(x, y) {
+          if (inRect(x, y, 8, 4, 12, 10) || inRect(x, y, 1, 7, 5, 10)) return 'r';
+          return 'w';
+        },
+        props: [
+          { type: 'sidebarback', x: 2, y: 1 },
+          { type: 'sidebarcounter', x: 2, y: 3,
+            interact: { label: 'B.A.R.T. — Order a Drink', action: 'bartender' } },
+          { type: 'barstool', x: 2, y: 5, interact: { label: 'Bar Stool — Take a Seat', action: 'sidebar_sit' } },
+          { type: 'barstool', x: 4, y: 5, interact: { label: 'Bar Stool — Take a Seat', action: 'sidebar_sit' } },
+          { type: 'barstool', x: 6, y: 5, interact: { label: 'Bar Stool — Take a Seat', action: 'sidebar_sit' } },
+          { type: 'topictable', x: 9, y: 4, label: 'EVIDENCE', topic: 'evidence',
+            interact: { label: 'Evidence Table', action: 'sidebar_chat' } },
+          { type: 'clientchair', x: 12, y: 4 },
+          { type: 'topictable', x: 9, y: 8, label: 'AI & AGENTS', topic: 'agents',
+            interact: { label: 'AI & Agents Table', action: 'sidebar_chat' } },
+          { type: 'clientchair', x: 12, y: 8 },
+          { type: 'topictable', x: 2, y: 8, label: 'WRITING', topic: 'writing',
+            interact: { label: 'Writing Table', action: 'sidebar_chat' } },
+          { type: 'clientchair', x: 5, y: 8 },
+          { type: 'scoreboard', x: 10, y: 1,
+            interact: { label: 'Billable Hours — High Score Board', action: 'high_scores' } },
+          { type: 'plant', x: 1, y: 6 },
+          { type: 'plant', x: 12, y: 2 },
+          { type: 'lamppost', x: 1, y: 10 },
+        ],
+        portals: [{ x: 7, y: 11, label: 'Leave The Sidebar', travel: true }],
+        npcs: [
+          { id: 'sidebar_host', name: 'B.A.R.T., Robotic Butler & Bartender', x: 5, y: 2,
+            look: { robotButler: true },
+            icon: 'dot', talk: 'sidebar_host' },
+        ],
       },
 
       // ---------------------------------------------------------------- APARTMENT
@@ -1892,7 +2516,7 @@
           { type: 'fridge', x: 7, y: 1, visible: () => hasUpgrade('kitchen') },
           { type: 'coffeemachine', x: 8, y: 2, owned: () => hasUpgrade('coffee'),
             interact: { label: 'Coffee Machine', action: 'flavor_coffee' } },
-          { type: 'wardrobe', x: 1, y: 5, interact: { label: 'Wardrobe', action: 'wardrobe' } },
+          { type: 'wardrobe', x: 1, y: 5, expanded: () => hasUpgrade('wardrobe_rack'), interact: { label: 'Wardrobe', action: 'wardrobe' } },
           { type: 'cabinet', x: 1, y: 4,
             interact: { label: 'Furniture Catalog', action: 'shop_apartment' } },
           { type: 'wallclock', x: 6, y: 0, visible: () => hasUpgrade('homedesk') },
@@ -1920,6 +2544,7 @@
     //   t      — time in seconds, for subtle animation (water, glows)
 
     const { PAL, shade } = require("js/engine/palette.js");
+    const { drawSleepingJudge } = require("js/entities/robots.js");
 
     // Screen offset of a point (u, v) tiles away from the anchor tile center.
     function p(ox, oy, u, v) {
@@ -1973,11 +2598,150 @@
       }
     }
 
+    // Detail planes follow the actual furniture surfaces, including their perspective.
+    function face(ctx,ox,oy,u,v,lift,draw) {
+      const at=p(ox,oy,u,v); ctx.save();ctx.transform(1,.5,0,1,at.x,at.y-lift);draw();ctx.restore();
+    }
+    function surface(ctx,ox,oy,u,v,lift,draw) {
+      const at=p(ox,oy,u,v);ctx.save();ctx.transform(1,.5,-1,.5,at.x,at.y-lift);draw();ctx.restore();
+    }
+    function stroke(ctx,points,color,width=1) {
+      ctx.strokeStyle=color;ctx.lineWidth=width;ctx.beginPath();points.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.stroke();
+    }
+    function roundRect(ctx,x,y,w,h,r,color) {ctx.fillStyle=color;ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fill();}
+    function table(ctx,ox,oy,w,h,color=PAL.woodDark,lift=31) {
+      for (const u of [-.29,w-.75]) for (const v of [-.23,h-.75]) {
+        box(ctx,ox,oy,u,v,.12,.12,lift-3,color);
+        box(ctx,ox,oy,u-.015,v-.015,.15,.15,3,'#a28b63');
+      }
+      box(ctx,ox,oy,-.34,-.29,w-.28,h-.28,4,color,lift-5);
+      box(ctx,ox,oy,-.43,-.38,w-.1,h-.1,4,color,lift);
+      surface(ctx,ox,oy,-.36,-.31,lift+4,()=>{
+        for (let y=2;y<(h-.24)*32;y+=4) stroke(ctx,[[1,y],[(w-.25)*32,y+Math.sin(y)*.5]],'rgba(223,193,138,.12)',.6);
+        ctx.strokeStyle='#d7b98155';ctx.lineWidth=.8;ctx.strokeRect(1,1,(w-.25)*32-2,(h-.25)*32-2);
+      });
+    }
+    function papers(ctx,ox,oy,u,v,lift) {
+      surface(ctx,ox,oy,u,v,lift,()=>{
+        roundRect(ctx,0,0,15,19,1,'#c4bb9d');roundRect(ctx,-1,-2,15,19,1,'#f0ecdf');
+        for (let y=2;y<12;y+=3) stroke(ctx,[[2,y],[10-(y%2)*2,y]],'#969d95',.6);
+        stroke(ctx,[[11,6],[11,17]],'#253e55',1.2);
+      });
+    }
+    function monitor(ctx,ox,oy,u,v,lift) {
+      const c=p(ox,oy,u,v);
+      surface(ctx,ox,oy,u+.1,v+.08,lift,()=>roundRect(ctx,0,0,14,8,1,'#646f73'));
+      face(ctx,ox,oy,u,v,lift,()=>{
+        roundRect(ctx,11,-12,3,14,1,'#7b898c');
+        roundRect(ctx,-4,-37,37,26,2,'#17252d');
+        roundRect(ctx,-2,-35,33,21,1,'#d3e2df');
+        ctx.fillStyle='#305c63';ctx.fillRect(-2,-35,33,4);
+        ctx.fillStyle='#92aaa8';ctx.fillRect(0,-29,6,13);
+        for(let y=-28;y<-16;y+=4){ctx.fillStyle='#adbdb5';ctx.fillRect(9,y,18,2);ctx.fillStyle='#e8efe4';ctx.fillRect(10,y+.4,11,.6);}
+        ctx.fillStyle='#90d4b2';ctx.fillRect(27,-12.5,2,1);
+        stroke(ctx,[[30,-34],[24,-15]],'#ffffff33',2);
+      });
+      // Curved cable disappears under the desktop.
+      ctx.strokeStyle='#252e3388';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(c.x+12,c.y-lift+3);ctx.quadraticCurveTo(c.x+23,c.y-lift+16,c.x+6,c.y-lift+24);ctx.stroke();
+    }
+    function workstation(ctx,ox,oy,prop={},executive=false) {
+      const w=executive?3:2, lift=33;
+      table(ctx,ox,oy,w,1,executive?'#70513a':'#87684d',lift);
+      box(ctx,ox,oy,-.3,-.18,.5,.58,26,'#72553e',3);
+      face(ctx,ox,oy,-.3,.4,3,()=>{
+        for(let y=-24;y<-4;y+=8){ctx.strokeStyle='#453c31';ctx.lineWidth=.6;ctx.strokeRect(1,y,14,7);ctx.fillStyle='#bba474';ctx.fillRect(5,y+3,6,1.2);}
+      });
+      const monitors=typeof prop.monitors==='function'?prop.monitors():1;
+      for(let i=0;i<monitors;i++)monitor(ctx,ox,oy,.25+i*.88,-.16,lift+4);
+      surface(ctx,ox,oy,.28,.32,lift+5,()=>{
+        roundRect(ctx,-2,0,26,9,1,'#35494b');
+        for(let y=1;y<7;y+=2)for(let x=0;x<22;x+=3){ctx.fillStyle='#b7c1b8';ctx.fillRect(x,y,2,1.2);}
+        roundRect(ctx,7,7,10,1,0,'#a5b4b1');roundRect(ctx,28,1,5,8,2,'#b1bab4');stroke(ctx,[[30.5,1],[30.5,4]],'#5e7576',.5);
+      });
+      papers(ctx,ox,oy,-.25,.17,lift+5);
+      const c=p(ox,oy,w-.95,.07);
+      ctx.fillStyle='#eae3cf';ctx.beginPath();ctx.ellipse(c.x,c.y-42,4,2,0,0,Math.PI*2);ctx.fill();ctx.fillRect(c.x-4,c.y-42,8,7);
+      ctx.strokeStyle='#eae3cf';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(c.x+4,c.y-38,2.4,-1.6,1.6);ctx.stroke();
+      if(executive){ papers(ctx,ox,oy,1.55,.12,lift+5);face(ctx,ox,oy,.8,.39,lift+4,()=>{roundRect(ctx,0,-4,26,5,1,'#b69b58');ctx.fillStyle='#423d32';ctx.font='4px Verdana';ctx.fillText('PARTNER',3,0);}); }
+      if(prop.phone?.()) surface(ctx,ox,oy,1.06,.35,lift+5,()=>{roundRect(ctx,0,0,7,12,1.5,'#1d2931');roundRect(ctx,.8,1,5.4,9,1,'#6fa7a9');ctx.fillStyle='#d8e5db';ctx.fillRect(2,3,3,1);ctx.fillRect(2,5,3,1);});
+    }
+
     // ---------------------------------------------------------------------------
     // Prop registry. w/h = tile footprint, solid = blocks walking.
     // `interactLabel` marks clickable resource nodes (main.js wires the actions).
     // ---------------------------------------------------------------------------
     const PROPS = {
+      scoreboard: {
+        w:2,h:1,solid:true,
+        draw(ctx,ox,oy,prop) {
+          for(const u of [-.3,1.3])box(ctx,ox,oy,u,-.1,.12,.15,68,'#68513a');
+          box(ctx,ox,oy,-.43,-.12,1.95,.25,52,'#a1844c',22);
+          face(ctx,ox,oy,-.38,.13,24,()=>{
+            roundRect(ctx,0,-48,59,47,1,'#213d35');ctx.fillStyle='#dfc68b';ctx.font='bold 5px Georgia';ctx.fillText('BILLABLE HOURS',5,-38);ctx.font='3.7px Verdana';ctx.fillText('HALL OF FAME',13,-31);
+            const entries=(prop.entries || []).slice(0,3);
+            if (!entries.length) { ctx.font='3px Verdana';ctx.fillStyle='#afc0a3';ctx.fillText('NO COMPLETED RUNS',8,-16); }
+            entries.forEach((entry,i)=>{ctx.fillStyle='#d5cbaa';ctx.font='3.4px Verdana';ctx.fillText(`${i+1}  ${entry.name.slice(0,11)}`,4,-22+i*8);const minutes=Math.floor(entry.billableMs/60000);ctx.fillText(`${minutes}m`,46,-22+i*8);});
+          });
+        },
+      },
+      sidebarcounter: {
+        w: 5, h: 1, solid: true,
+        draw(ctx, ox, oy) {
+          box(ctx, ox, oy, -.4, -.35, 4.8, .8, 32, '#684834');
+          box(ctx, ox, oy, -.48, -.43, 4.96, .96, 4, '#c7bda2', 32);
+          face(ctx,ox,oy,-.4,.45,0,()=>{
+            for(let x=3;x<145;x+=30){ctx.strokeStyle='#b3905a';ctx.lineWidth=1;ctx.strokeRect(x,-28,24,22);ctx.strokeStyle='#48362b';ctx.strokeRect(x+2,-26,20,18);}
+            stroke(ctx,[[0,-6],[153,-6]],'#c0a26e',2);
+          });
+          surface(ctx,ox,oy,-.4,-.35,37,()=>{for(let x=0;x<140;x+=28)stroke(ctx,[[x,0],[x+8,8],[x+24,13]],'#ffffff35',.7);});
+          for (const u of [.25, 1.4, 2.6, 3.8]) {
+            box(ctx, ox, oy, u, .43, .05, .05, 25, PAL.brass, 2);
+            const c = p(ox, oy, u, 0);
+            ctx.fillStyle = '#e8e3d3'; ctx.fillRect(c.x - 3, c.y - 45, 6, 9);
+            ctx.fillStyle = '#476858'; ctx.fillRect(c.x - 3, c.y - 41, 6, 4);
+          }
+        },
+      },
+      sidebarback: {
+        w: 4, h: 1, solid: true,
+        draw(ctx, ox, oy) {
+          box(ctx, ox, oy, -.35, -.3, 3.7, .65, 60, '#304d40');
+          const c = p(ox, oy, 1.4, .3);
+          ctx.fillStyle = '#192e29'; ctx.fillRect(c.x - 63, c.y - 67, 126, 23);
+          ctx.strokeStyle = '#c1a46c'; ctx.lineWidth = 1; ctx.strokeRect(c.x - 63, c.y - 67, 126, 23);
+          ctx.fillStyle = '#e4ce98'; ctx.font = 'bold 13px Georgia'; ctx.textAlign = 'center';
+          ctx.fillText('THE SIDEBAR', c.x, c.y - 51);
+          for (let i=0; i<9; i++) {
+            const b = p(ox, oy, i*.37, .35);
+            ctx.fillStyle = ['#79854b','#8d6251','#b48b43'][i%3];
+            ctx.fillRect(b.x-3,b.y-34,6,13); ctx.fillRect(b.x-1.5,b.y-38,3,5);
+            ctx.fillStyle = PAL.parchment; ctx.fillRect(b.x-2,b.y-29,4,4);
+          }
+          ctx.textAlign = 'left';
+        },
+      },
+      barstool: {
+        w: 1, h: 1, solid: true,
+        draw(ctx, ox, oy) {
+          box(ctx, ox, oy, -.06, -.06, .12, .12, 20, '#5e5747');
+          const c = p(ox, oy, 0, 0);
+          ctx.fillStyle = '#86765a'; ctx.beginPath(); ctx.ellipse(c.x,c.y-3,10,4,0,0,Math.PI*2); ctx.fill();
+          ctx.fillStyle = '#61383b'; ctx.beginPath(); ctx.ellipse(c.x,c.y-23,13,6,0,0,Math.PI*2); ctx.fill();
+          ctx.strokeStyle = '#c4a263'; ctx.lineWidth = 1; ctx.stroke();
+        },
+      },
+      topictable: {
+        w: 2, h: 2, solid: true,
+        draw(ctx, ox, oy, prop) {
+          table(ctx,ox,oy,2,2,'#946c45',28);
+          papers(ctx,ox,oy,.2,.2,33);
+          const c = p(ox, oy, .5, .5);
+          ctx.fillStyle = PAL.parchment; ctx.fillRect(c.x - 12,c.y - 36,24,9);
+          ctx.fillStyle = '#17392e'; ctx.fillRect(c.x - 45,c.y - 48,90,14);
+          ctx.fillStyle = '#ead9ac'; ctx.font = 'bold 9px Verdana'; ctx.textAlign = 'center';
+          ctx.fillText(prop.label || 'DISCUSSION',c.x,c.y-38); ctx.textAlign = 'left';
+        },
+      },
       // ---- Justice Square -----------------------------------------------------
       fountain: {
         w: 2, h: 2, solid: true,
@@ -2014,12 +2778,13 @@
         },
       },
       bench: {
-        w: 2, h: 1, solid: true,
-        draw(ctx, ox, oy) {
-          box(ctx, ox, oy, -0.35, -0.2, 1.7, 0.5, 6, PAL.wood, 10);
-          box(ctx, ox, oy, -0.35, -0.25, 1.7, 0.12, 26, PAL.wood, 10);
-          box(ctx, ox, oy, -0.3, 0, 0.12, 0.35, 10, PAL.stoneDark);
-          box(ctx, ox, oy, 1.2, 0, 0.12, 0.35, 10, PAL.stoneDark);
+        w:2,h:1,solid:true,
+        draw(ctx,ox,oy) {
+          for(const u of [-.3,1.2])box(ctx,ox,oy,u,-.12,.12,.5,17,'#594531');
+          box(ctx,ox,oy,-.4,-.24,1.85,.62,5,'#94704a',17);
+          for(const z of [24,34])box(ctx,ox,oy,-.4,-.29,1.85,.12,8,'#a07b52',z);
+          for(const u of [-.39,1.34])box(ctx,ox,oy,u,-.3,.1,.15,43,'#6b4c34');
+          face(ctx,ox,oy,-.38,-.17,0,()=>{for(const y of [-27,-37])stroke(ctx,[[2,y],[55,y]],'#dfc18a44',.7);});
         },
       },
       lamppost: {
@@ -2109,65 +2874,22 @@
       },
 
       // ---- Law Office ----------------------------------------------------------
-      desk: {
-        w: 2, h: 1, solid: true,
-        draw(ctx, ox, oy, prop) {
-          const tier = typeof prop.tier === 'function' ? prop.tier() : (prop.tier || 0);
-          const col = [PAL.stone, PAL.wood, PAL.woodDark][tier] || PAL.wood;
-          box(ctx, ox, oy, -0.4, -0.35, 1.8, 0.7, 22, col);
-          const c = p(ox, oy, 0.5, 0);
-          // monitors: 1 by default, 2 with the Second Monitor upgrade
-          const monitors = typeof prop.monitors === 'function' ? prop.monitors() : 1;
-          for (let i = 0; i < monitors; i++) {
-            const mx = c.x - 10 + i * 22;
-            ctx.fillStyle = PAL.ink;
-            ctx.fillRect(mx - 8, c.y - 44, 17, 12);
-            ctx.fillStyle = '#bcd8e8';
-            ctx.fillRect(mx - 6, c.y - 42, 13, 8);
-            ctx.fillStyle = PAL.ink;
-            ctx.fillRect(mx - 1, c.y - 32, 3, 4);
-          }
-          // papers
-          ctx.fillStyle = PAL.parchment;
-          ctx.fillRect(c.x - 30, c.y - 27, 12, 7);
-          if (tier >= 2) { ctx.fillStyle = PAL.brass; ctx.fillRect(c.x + 18, c.y - 29, 8, 4); }
-        },
-      },
-      executivedesk: {
-        w: 3, h: 1, solid: true,
-        draw(ctx, ox, oy, prop) {
-          box(ctx, ox, oy, -0.42, -0.36, 2.84, 0.72, 26, PAL.woodDark);
-          const c = p(ox, oy, 1, 0);
-          ctx.fillStyle = PAL.parchment;
-          ctx.fillRect(c.x - 34, c.y - 32, 17, 9);
-          ctx.fillStyle = PAL.ink;
-          ctx.fillRect(c.x + 2, c.y - 49, 25, 17);
-          ctx.fillStyle = '#bcd8e8';
-          ctx.fillRect(c.x + 5, c.y - 46, 19, 11);
-          ctx.fillStyle = PAL.brass;
-          ctx.fillRect(c.x - 2, c.y - 30, 10, 3);
-          if (prop.nameplate) {
-            ctx.fillStyle = PAL.brassLight;
-            ctx.fillRect(c.x - 12, c.y - 37, 22, 5);
-          }
-        },
-      },
+      desk: { w: 2, h: 1, solid: true, draw(ctx,ox,oy,prop) { workstation(ctx,ox,oy,prop); } },
+      executivedesk: { w: 3, h: 1, solid: true, draw(ctx,ox,oy,prop) { workstation(ctx,ox,oy,prop,true); } },
       filingstation: {
-        w: 2, h: 1, solid: true,
-        draw(ctx, ox, oy, prop, t) {
-          box(ctx, ox, oy, -0.4, -0.3, 0.72, 0.62, 44, PAL.stoneDark);
-          box(ctx, ox, oy, 0.68, -0.3, 0.72, 0.62, 44, PAL.stoneDark);
-          const c = p(ox, oy, 0.5, 0.25);
-          ctx.fillStyle = PAL.brass;
-          for (const offset of [-28, -17, -6]) {
-            ctx.fillRect(c.x - 39, c.y + offset, 10, 2);
-            ctx.fillRect(c.x + 18, c.y + offset, 10, 2);
+        w:2,h:1,solid:true,
+        draw(ctx,ox,oy) {
+          for(const u of [-.4,.68]) {
+            box(ctx,ox,oy,u,-.3,.72,.62,48,'#7b8583',3);
+            face(ctx,ox,oy,u,.32,3,()=>{
+              for(let y=-45;y<-5;y+=14){
+                roundRect(ctx,1,y,21,13,1,'#899591');ctx.strokeStyle='#5c6b65';ctx.lineWidth=.5;ctx.strokeRect(1,y,21,13);
+                ctx.fillStyle='#deddd0';ctx.fillRect(6,y+3,11,4);ctx.fillStyle='#64746f';ctx.fillRect(8,y+4,7,.7);
+                roundRect(ctx,8,y+9,8,1.5,.5,'#c2c6b3');
+              }
+            });
           }
-          ctx.fillStyle = PAL.parchment;
-          ctx.fillRect(c.x - 8, c.y - 48, 21, 13);
-          ctx.strokeStyle = `rgba(110,36,54,${0.45 + Math.sin(t * 2) * 0.12})`;
-          ctx.lineWidth = 1;
-          ctx.strokeRect(c.x - 8, c.y - 48, 21, 13);
+          papers(ctx,ox,oy,.75,-.18,53);
         },
       },
       wallwindow: {
@@ -2282,45 +3004,56 @@
       },
       bookshelf: {
         w: 2, h: 1, solid: true,
-        draw(ctx, ox, oy, prop) {
-          const full = typeof prop.full === 'function' ? prop.full() : true;
-          box(ctx, ox, oy, -0.4, -0.15, 1.8, 0.35, 56, PAL.wood);
-          const c = p(ox, oy, 0.5, 0.2);
-          spines(ctx, c.x - 38, c.y - 40, full ? 12 : 5, 2);
-          if (full) spines(ctx, c.x - 38, c.y - 24, 12, 7);
+        draw(ctx,ox,oy,prop) {
+          const full=typeof prop.full==='function'?prop.full():true;
+          box(ctx,ox,oy,-.4,-.22,1.8,.44,72,'#71503a',4);
+          face(ctx,ox,oy,-.4,.22,4,()=>{
+            ctx.fillStyle='#312c25';ctx.fillRect(3,-68,51,65);
+            for(const x of [1,27,54]){ctx.fillStyle='#a78154';ctx.fillRect(x,-68,2,65);}
+            for(let row=0;row<3;row++) {
+              const base=-5-row*21;
+              for(let i=0;i<(full?11:row===0?4:0);i++) {
+                const x=4+i*4.4, height=13+(i*7+row)%5;
+                ctx.fillStyle=['#703e3d','#283e51','#485943','#9a7846'][(i+row)%4];ctx.fillRect(x,base-height,3.5,height);
+                ctx.fillStyle='#ddc385';ctx.fillRect(x+.3,base-height+2,2.9,.7);ctx.fillRect(x+.3,base-2,2.9,.7);
+                ctx.fillStyle='#ddcda1';ctx.fillRect(x+.8,base-height+5,1.8,3);
+                ctx.fillStyle='#ffffff12';ctx.fillRect(x+.3,base-height,.5,height);
+              }
+              ctx.fillStyle='#a37d51';ctx.fillRect(2,base,52,2);ctx.fillStyle='#483524';ctx.fillRect(2,base+2,52,1);
+            }
+            ctx.fillStyle='#ccb474';ctx.fillRect(13,-74,31,5);ctx.fillStyle='#302f27';ctx.font='3.4px Verdana';ctx.fillText('ETHICS TREATISES',14,-70.5);
+          });
+          box(ctx,ox,oy,-.46,-.27,1.92,.54,4,'#93734b',76);
+          box(ctx,ox,oy,-.44,-.26,1.88,.52,5,'#71503a');
         },
       },
       clientchair: {
-        w: 1, h: 1, solid: true,
-        draw(ctx, ox, oy) {
-          box(ctx, ox, oy, -0.28, -0.28, 0.56, 0.56, 14, PAL.burgundy);
-          box(ctx, ox, oy, -0.28, -0.32, 0.56, 0.14, 34, PAL.burgundy);
+        w:1,h:1,solid:true,
+        draw(ctx,ox,oy) {
+          for(const u of [-.25,.22])for(const v of [-.22,.24])box(ctx,ox,oy,u,v,.09,.09,16,'#503e31');
+          box(ctx,ox,oy,-.3,-.28,.65,.65,7,'#6f4146',16);
+          box(ctx,ox,oy,-.3,-.33,.65,.12,28,'#63383f',21);
+          face(ctx,ox,oy,-.25,-.2,21,()=>{roundRect(ctx,0,-25,17,21,3,'#81565a');ctx.strokeStyle='#ae818166';ctx.lineWidth=.5;ctx.strokeRect(2,-23,13,17);});
+          for(const u of [-.34,.3])box(ctx,ox,oy,u,-.05,.09,.42,3,'#8b6647',28);
         },
       },
       officechair: {
-        w: 1, h: 1, solid: true,
-        draw(ctx, ox, oy) {
-          box(ctx, ox, oy, -0.28, -0.28, 0.56, 0.56, 11, PAL.ink, 8);
-          box(ctx, ox, oy, -0.28, -0.32, 0.56, 0.12, 34, PAL.ink, 8);
-          const c = p(ox, oy, 0, 0);
-          ctx.strokeStyle = PAL.stoneDark;
-          ctx.lineWidth = 3;
-          ctx.beginPath();
-          ctx.moveTo(c.x, c.y - 5);
-          ctx.lineTo(c.x, c.y + 7);
-          ctx.moveTo(c.x - 10, c.y + 10);
-          ctx.lineTo(c.x + 10, c.y + 10);
-          ctx.stroke();
+        w:1,h:1,solid:true,
+        draw(ctx,ox,oy) {
+          const c=p(ox,oy,0,0);ctx.strokeStyle='#88958f';ctx.lineWidth=2;
+          for(let i=0;i<5;i++){const a=i*Math.PI*2/5;const x=c.x+Math.cos(a)*15,y=c.y+Math.sin(a)*6;stroke(ctx,[[c.x,c.y-6],[x,y]],'#87928b',2);roundRect(ctx,x-2,y-1,4,3,1,'#202b30');}
+          box(ctx,ox,oy,-.05,-.05,.1,.1,20,'#87948f');
+          box(ctx,ox,oy,-.3,-.25,.65,.62,7,'#344a4c',19);
+          box(ctx,ox,oy,-.3,-.34,.65,.14,30,'#283c41',26);
+          face(ctx,ox,oy,-.26,-.2,26,()=>{roundRect(ctx,0,-27,17,25,4,'#43595b');for(let y=-24;y<-4;y+=3)stroke(ctx,[[2,y],[15,y]],'#728b8244',.6);});
+          for(const u of [-.34,.3]){box(ctx,ox,oy,u,.03,.07,.12,14,'#7a8983',16);box(ctx,ox,oy,u-.02,-.07,.13,.45,3,'#263a3e',30);}
         },
       },
       cabinet: {
-        w: 1, h: 1, solid: true,
-        draw(ctx, ox, oy) {
-          box(ctx, ox, oy, -0.3, -0.3, 0.6, 0.6, 40, PAL.stoneDark);
-          const c = p(ox, oy, 0, 0.3);
-          ctx.fillStyle = PAL.brass;
-          ctx.fillRect(c.x - 8, c.y - 34, 8, 2); ctx.fillRect(c.x - 8, c.y - 24, 8, 2);
-          ctx.fillRect(c.x - 8, c.y - 14, 8, 2);
+        w:1,h:1,solid:true,
+        draw(ctx,ox,oy) {
+          box(ctx,ox,oy,-.3,-.3,.6,.6,44,'#6f7f7c',3);
+          face(ctx,ox,oy,-.3,.3,3,()=>{for(const y of [-41,-28,-15]){roundRect(ctx,1,y,17,12,1,'#89938a');ctx.strokeStyle='#4c6460';ctx.lineWidth=.6;ctx.strokeRect(1,y,17,12);ctx.fillStyle='#d7d3b9';ctx.fillRect(5,y+2,9,3);ctx.fillStyle='#bac2b0';ctx.fillRect(6,y+8,7,1.5);}});
         },
       },
       safe: {
@@ -2350,12 +3083,17 @@
         },
       },
       sofa: {
-        w: 2, h: 1, solid: true,
-        draw(ctx, ox, oy) {
-          box(ctx, ox, oy, -0.4, -0.25, 1.8, 0.6, 14, PAL.navy);
-          box(ctx, ox, oy, -0.4, -0.3, 1.8, 0.16, 30, PAL.navy);
-          box(ctx, ox, oy, -0.4, -0.25, 0.16, 0.6, 22, PAL.navyLight);
-          box(ctx, ox, oy, 1.24, -0.25, 0.16, 0.6, 22, PAL.navyLight);
+        w:2,h:1,solid:true,
+        draw(ctx,ox,oy) {
+          for(const u of [-.32,1.14])for(const v of [-.2,.26])box(ctx,ox,oy,u,v,.12,.12,8,'#5c4837');
+          box(ctx,ox,oy,-.4,-.25,1.8,.68,8,'#243953',8);
+          box(ctx,ox,oy,-.4,-.32,1.8,.17,30,'#28415e',10);
+          for(const u of [-.24,.51]) {
+            box(ctx,ox,oy,u,-.15,.69,.51,6,'#486681',16);
+            box(ctx,ox,oy,u,-.27,.69,.14,18,'#3b5872',20);
+            face(ctx,ox,oy,u,-.12,20,()=>{ctx.strokeStyle='#96aba155';ctx.lineWidth=.6;ctx.strokeRect(2,-16,17,13);});
+          }
+          for(const u of [-.42,1.2])box(ctx,ox,oy,u,-.22,.19,.62,18,'#395673',12);
         },
       },
       barcart: {
@@ -2386,24 +3124,13 @@
           ctx.fill();
         },
       },
-      paralegaldesk: {
-        w: 2, h: 1, solid: true,
-        draw(ctx, ox, oy) {
-          box(ctx, ox, oy, -0.4, -0.3, 1.6, 0.6, 20, PAL.woodLight);
-          const c = p(ox, oy, 0.4, 0);
-          ctx.fillStyle = PAL.ink; ctx.fillRect(c.x - 7, c.y - 40, 14, 10);
-          ctx.fillStyle = '#bcd8e8'; ctx.fillRect(c.x - 5, c.y - 38, 10, 6);
-          ctx.fillStyle = PAL.parchment;
-          ctx.fillRect(c.x + 12, c.y - 26, 14, 8);
-        },
-      },
+      paralegaldesk: { w: 2, h: 1, solid: true, draw(ctx,ox,oy) { workstation(ctx,ox,oy); } },
       conftable: {
-        w: 3, h: 2, solid: true,
-        draw(ctx, ox, oy) {
-          box(ctx, ox, oy, -0.35, -0.2, 2.7, 1.4, 22, PAL.woodDark);
-          const c = p(ox, oy, 1, 0.5);
-          ctx.fillStyle = PAL.parchment;
-          ctx.fillRect(c.x - 20, c.y - 28, 12, 7); ctx.fillRect(c.x + 8, c.y - 24, 12, 7);
+        w:3,h:2,solid:true,
+        draw(ctx,ox,oy) {
+          table(ctx,ox,oy,3,2,'#6d503e',32);
+          for(const [u,v] of [[0,0],[1.4,.05],[.25,.65],[1.6,.68]])papers(ctx,ox,oy,u,v,37);
+          surface(ctx,ox,oy,1,.4,37,()=>{roundRect(ctx,0,0,15,11,3,'#273b3e');roundRect(ctx,3,2,9,4,1,'#77a39b');for(let x=3;x<12;x+=3){ctx.fillStyle='#abbbb0';ctx.fillRect(x,8,1,1);}});
         },
       },
       tv: {
@@ -2436,42 +3163,40 @@
 
       // ---- Courthouse ----------------------------------------------------------
       judgebench: {
-        w: 3, h: 1, solid: true,
-        draw(ctx, ox, oy) {
-          box(ctx, ox, oy, -0.45, -0.4, 2.9, 0.8, 40, PAL.woodDark);
-          box(ctx, ox, oy, 0.85, -0.5, 0.3, 0.2, 56, PAL.woodDark);
-          const c = p(ox, oy, 1, 0);
-          ctx.fillStyle = PAL.brass;
-          ctx.fillRect(c.x - 26, c.y - 46, 52, 3);
-          // gavel block
-          ctx.fillStyle = PAL.woodLight; ctx.fillRect(c.x + 14, c.y - 45, 8, 4);
+        w:3,h:1,solid:true,
+        draw(ctx,ox,oy,prop,t) {
+          // Raised dais, dedicated chair and sleeping judge behind the woodwork.
+          box(ctx,ox,oy,-.52,-.5,3.04,1,7,'#8b7559');
+          const c=p(ox,oy,1,-.2);drawSleepingJudge(ctx,c.x,c.y-5,t);
+          box(ctx,ox,oy,-.45,-.2,2.9,.65,43,'#765039',7);
+          face(ctx,ox,oy,-.45,.45,7,()=>{
+            for(const x of [4,34,64]){ctx.strokeStyle='#c89e5d';ctx.lineWidth=1;ctx.strokeRect(x,-37,23,31);ctx.strokeStyle='#4d3429';ctx.strokeRect(x+2,-35,19,27);}
+          });
+          box(ctx,ox,oy,-.51,-.26,3.02,.78,4,'#99724d',50);
+          const g=p(ox,oy,1.9,.1);ctx.fillStyle='#bb9965';ctx.beginPath();ctx.ellipse(g.x,g.y-55,7,3,0,0,Math.PI*2);ctx.fill();stroke(ctx,[[g.x-4,g.y-58],[g.x+7,g.y-65]],'#654631',2);roundRect(ctx,g.x+3,g.y-69,9,5,1,'#5e3e28');
+          face(ctx,ox,oy,.2,.45,54,()=>{roundRect(ctx,0,-1,50,9,1,'#202f36');ctx.fillStyle='#d4c392';ctx.font='4.4px Verdana';ctx.fillText('COURT NOT IN SESSION',2,5);});
         },
       },
       witnessstand: {
-        w: 1, h: 1, solid: true,
-        draw(ctx, ox, oy) {
-          box(ctx, ox, oy, -0.3, -0.3, 0.6, 0.6, 28, PAL.wood);
-          const c = p(ox, oy, 0, 0);
-          ctx.fillStyle = PAL.brass; ctx.fillRect(c.x - 10, c.y - 32, 20, 2);
+        w:1,h:1,solid:true,
+        draw(ctx,ox,oy) {
+          box(ctx,ox,oy,-.35,-.33,.75,.74,6,'#735840');
+          box(ctx,ox,oy,-.3,.13,.65,.22,30,'#916945',6);
+          face(ctx,ox,oy,-.3,.35,6,()=>{ctx.strokeStyle='#c8a676';ctx.lineWidth=.8;ctx.strokeRect(2,-26,16,22);});
+          box(ctx,ox,oy,-.35,.1,.75,.28,3,'#ba9865',36);
+          const c=p(ox,oy,0,.12);stroke(ctx,[[c.x,c.y-36],[c.x,c.y-47],[c.x+4,c.y-50]],'#273b3b',1.2);
         },
       },
       counseltable: {
-        w: 2, h: 1, solid: true,
-        draw(ctx, ox, oy) {
-          box(ctx, ox, oy, -0.35, -0.25, 1.7, 0.5, 20, PAL.wood);
-          const c = p(ox, oy, 0.5, 0);
-          ctx.fillStyle = PAL.parchment;
-          ctx.fillRect(c.x - 18, c.y - 26, 12, 7); ctx.fillRect(c.x + 6, c.y - 24, 12, 7);
+        w:2,h:1,solid:true,
+        draw(ctx,ox,oy) {
+          table(ctx,ox,oy,2,1,'#876346',32);papers(ctx,ox,oy,-.2,.05,37);papers(ctx,ox,oy,.65,.08,37);
+          const c=p(ox,oy,1.15,.15);stroke(ctx,[[c.x,c.y-37],[c.x,c.y-50],[c.x-4,c.y-54]],'#34413f',1.2);roundRect(ctx,c.x-6,c.y-55,5,2,1,'#1b292c');
         },
       },
       clerkcounter: {
-        w: 2, h: 1, solid: true,
-        draw(ctx, ox, oy) {
-          box(ctx, ox, oy, -0.4, -0.3, 1.8, 0.6, 26, PAL.marbleDark);
-          const c = p(ox, oy, 0.5, 0);
-          ctx.fillStyle = PAL.parchment; ctx.fillRect(c.x - 12, c.y - 32, 11, 6);
-          ctx.fillStyle = PAL.brass; ctx.fillRect(c.x + 6, c.y - 33, 10, 4);
-        },
+        w:2,h:1,solid:true,
+        draw(ctx,ox,oy){workstation(ctx,ox,oy);},
       },
 
       // ---- Law Library ----------------------------------------------------------
@@ -2514,13 +3239,15 @@
 
       // ---- Apartment -------------------------------------------------------------
       bed: {
-        w: 2, h: 1, solid: true,
-        draw(ctx, ox, oy, prop) {
-          const tier = typeof prop.tier === 'function' ? prop.tier() : 0;
-          box(ctx, ox, oy, -0.4, -0.35, 1.8, 0.7, 10, PAL.woodDark);
-          box(ctx, ox, oy, -0.32, -0.28, 1.64, 0.56, 8, tier >= 1 ? PAL.navy : PAL.stone, 10);
-          box(ctx, ox, oy, -0.28, -0.22, 0.4, 0.44, 5, PAL.parchment, 18);
-          box(ctx, ox, oy, -0.44, -0.4, 0.12, 0.8, 34, PAL.woodDark);
+        w:2,h:1,solid:true,
+        draw(ctx,ox,oy,prop) {
+          const tier=typeof prop.tier==='function'?prop.tier():0;
+          box(ctx,ox,oy,-.4,-.35,1.8,.7,11,'#66503e',4);
+          box(ctx,ox,oy,-.33,-.28,1.66,.56,8,'#e1d9c5',15);
+          box(ctx,ox,oy,.16,-.3,1.17,.6,3,tier?'#3d5870':'#888979',23);
+          surface(ctx,ox,oy,.2,-.26,26,()=>{for(let x=2;x<32;x+=6)stroke(ctx,[[x,1],[x,16]],'#edf0dd30',.7);});
+          box(ctx,ox,oy,-.26,-.2,.38,.4,4,'#f0e9d7',23);
+          box(ctx,ox,oy,-.45,-.4,.12,.8,37,'#846441');
         },
       },
       coffeemachine: {
@@ -2542,13 +3269,24 @@
       },
       wardrobe: {
         w: 1, h: 1, solid: true,
-        draw(ctx, ox, oy) {
+        draw(ctx, ox, oy, prop) {
           box(ctx, ox, oy, -0.35, -0.3, 0.7, 0.6, 54, PAL.wood);
           const c = p(ox, oy, 0, 0.3);
           ctx.strokeStyle = PAL.woodDark; ctx.lineWidth = 1;
           ctx.beginPath(); ctx.moveTo(c.x, c.y - 50); ctx.lineTo(c.x, c.y - 8); ctx.stroke();
           ctx.fillStyle = PAL.brass;
           ctx.fillRect(c.x - 4, c.y - 30, 2, 5); ctx.fillRect(c.x + 2, c.y - 30, 2, 5);
+          if (prop.expanded?.()) {
+            ctx.fillStyle = PAL.woodDark; ctx.fillRect(c.x - 14, c.y - 48, 28, 39);
+            ctx.fillStyle = PAL.brass; ctx.fillRect(c.x - 16, c.y - 47, 32, 2);
+            [PAL.navy, PAL.burgundy, PAL.archiveGreen].forEach((color, index) => {
+              const x = c.x - 9 + index * 9;
+              ctx.strokeStyle = PAL.brass; ctx.lineWidth = 1;
+              ctx.beginPath(); ctx.moveTo(x,c.y-46); ctx.lineTo(x-4,c.y-40); ctx.lineTo(x+4,c.y-40); ctx.closePath(); ctx.stroke();
+              ctx.fillStyle = color; ctx.fillRect(x-4,c.y-39,8,23);
+              ctx.fillStyle = PAL.parchment; ctx.fillRect(x-1,c.y-39,2,7);
+            });
+          }
         },
       },
       kitchenette: {
@@ -2635,43 +3373,73 @@
     };
     Object.assign(exports, { box, shadow, PROPS });
   },
-  "js/engine/palette.js": (exports, require) => {
-    // Single source of truth for every color in the game world (see VISUAL_DESIGN.md §2).
-    const PAL = {
-      marble: '#e8e4da',
-      marbleDark: '#d6d0c2',
-      stone: '#9a958c',
-      stoneDark: '#7d786f',
-      wood: '#8b5e3c',
-      woodLight: '#a97a52',
-      woodDark: '#6b4529',
-      parchment: '#f3e9d2',
-      brass: '#b8912f',
-      brassLight: '#d9b656',
-      navy: '#1f3a5f',
-      navyLight: '#2c5085',
-      burgundy: '#6e2436',
-      burgundyLight: '#8d3449',
-      archiveGreen: '#3f5d4b',
-      archiveGreenLight: '#557a63',
-      ink: '#2b2b33',
-      grass: '#6a8f57',
-      grassDark: '#5a7c49',
-      water: '#5b87a6',
-      skin: ['#f2d6b3', '#e8c39e', '#d4a373', '#c68e5f', '#a06a42', '#8d5a3b', '#5f3d28'],
-      hair: ['#2b2b33', '#6b4529', '#b8912f', '#9a958c', '#8c3b2e', '#e8e2d4'],
-      eyes: ['#4a3728', '#3b6ea5', '#4a7c59', '#8c6b3f', '#7a8288', '#b3541e'],
-      suits: ['#1f3a5f', '#3a3a42', '#6e2436', '#3f5d4b', '#8b5e3c'],
-    };
-
-    // Lighten (amt > 0) or darken (amt < 0) a hex color. Used to fake 3-tone flat shading.
-    function shade(hex, amt) {
-      const n = parseInt(hex.slice(1), 16);
-      const f = (v) => Math.max(0, Math.min(255, Math.round(v + amt * 255)));
-      const r = f((n >> 16) & 255), g = f((n >> 8) & 255), b = f(n & 255);
-      return `rgb(${r},${g},${b})`;
+  "js/entities/robots.js": (exports, require) => {
+    // Original character art: scripted personalities, with no live AI service.
+    function line(ctx, points, color, width=1) {
+      ctx.strokeStyle=color; ctx.lineWidth=width; ctx.lineCap='round'; ctx.beginPath();
+      points.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y)); ctx.stroke();
     }
-    Object.assign(exports, { PAL, shade });
+    function rounded(ctx,x,y,w,h,r,color) { ctx.fillStyle=color; ctx.beginPath(); ctx.roundRect(x,y,w,h,r); ctx.fill(); }
+    function oval(ctx,x,y,rx,ry,color) { ctx.fillStyle=color; ctx.beginPath(); ctx.ellipse(x,y,rx,ry,0,0,Math.PI*2); ctx.fill(); }
+    function polygon(ctx,points,color) { ctx.fillStyle=color; ctx.beginPath(); points.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.closePath();ctx.fill(); }
+
+    function drawRobotButler(ctx,x,y,t) {
+      ctx.save(); ctx.translate(x,y);
+      oval(ctx,0,2,15,5,'#10191840');
+      for (const side of [-1,1]) {
+        rounded(ctx,side*4-2.5,-36,5,32,2,'#20282e');
+        line(ctx,[[side*4,-32],[side*4,-5]],'#596468',.7);
+        rounded(ctx,side*4-3,-4,9,4,1.5,'#111b23');
+      }
+      polygon(ctx,[[-10,-58],[10,-58],[8,-36],[10,-22],[3,-27],[0,-34],[-3,-27],[-10,-22],[-8,-36]],'#18232a');
+      polygon(ctx,[[-4,-60],[4,-60],[5,-38],[-5,-38]],'#eee9da');
+      polygon(ctx,[[-5,-60],[-9,-55],[-4,-47],[0,-38],[-2,-54]],'#3c464c');
+      polygon(ctx,[[5,-60],[9,-55],[4,-47],[0,-38],[2,-54]],'#303b43');
+      for (let yy=-48;yy<-37;yy+=4) oval(ctx,0,yy,.7,.7,'#b9a66c');
+      polygon(ctx,[[-1,-56],[-4,-58],[-4,-54],[0,-55],[4,-54],[4,-58],[1,-56]],'#101a22');
+      line(ctx,[[-9,-56],[-13,-44],[-10,-34]],'#293841',5);
+      oval(ctx,-10,-32,2.3,3.4,'#f5f0dd');
+      line(ctx,[[9,-56],[14,-44],[23,-43]],'#293841',5);
+      oval(ctx,23,-42,3.2,2,'#f5f0dd');
+      oval(ctx,25,-46,12,3,'#8faaa9');
+      line(ctx,[[14,-47],[35,-47]],'#e0e4cd',1.2);
+      rounded(ctx,24,-60,6,12,1,'#abc8c67a');
+      rounded(ctx,25,-55,4,6,1,'#ae7134');
+      line(ctx,[[25,-59],[25,-51]],'#e3eeeb',.7);
+      rounded(ctx,-2,-66,4,7,1,'#9eafaf');
+      rounded(ctx,-7,-80,14,16,4,'#9eafb0');
+      rounded(ctx,-5.7,-78.7,11.4,11.5,3,'#c9d5cd');
+      rounded(ctx,-5,-75,10,4,1.5,'#223f45');
+      const glow=.65+Math.sin(t*1.3)*.15;
+      ctx.globalAlpha=glow; line(ctx,[[-3.5,-73],[-1.5,-73]],'#a6eee0',1.2); line(ctx,[[1.5,-73],[3.5,-73]],'#a6eee0',1.2); ctx.globalAlpha=1;
+      line(ctx,[[-2,-68],[2,-68]],'#526868',.9);
+      oval(ctx,-7.5,-72,1.4,2.2,'#6b8585'); oval(ctx,7.5,-72,1.4,2.2,'#6b8585');
+      line(ctx,[[5,-82],[5,-85]],'#b59c64',.8); oval(ctx,5,-86,1.4,1.4,'#bfe7d4');
+      ctx.restore();
+    }
+
+    function drawSleepingJudge(ctx,x,y,t) {
+      ctx.save();ctx.translate(x,y);
+      // A tall padded judicial chair; the bench is drawn in front by the caller.
+      rounded(ctx,-17,-91,34,66,5,'#5c3a2b');
+      rounded(ctx,-13,-87,26,51,5,'#31483f');
+      for (const xx of [-9,0,9]) for (const yy of [-80,-68,-56]) oval(ctx,xx,yy,.85,.85,'#a39668');
+      line(ctx,[[-18,-49],[-18,-27]],'#8f724c',3);line(ctx,[[18,-49],[18,-27]],'#8f724c',3);
+      polygon(ctx,[[-6,-69],[-14,-63],[-17,-32],[17,-32],[14,-63],[6,-69]],'#19212c');
+      for (const xx of [-10,-5,5,10]) line(ctx,[[xx,-58],[xx*1.2,-33]],'#3b4350',1.4);
+      polygon(ctx,[[-5,-68],[5,-68],[2,-56],[-2,-56]],'#ece6d5');
+      ctx.save();ctx.translate(1,-70);ctx.rotate(.18+Math.sin(t*.9)*.025);
+      rounded(ctx,-8,-18,16,18,4,'#9fb1b7');rounded(ctx,-6,-16,12,12,3,'#c5cfce');
+      // Closed eyelids on a dim robot faceplate.
+      rounded(ctx,-6,-13,12,6,2,'#34505a');
+      line(ctx,[[-4,-10],[-1.5,-9.4]],'#a5c7c4',.8);line(ctx,[[1.5,-9.4],[4,-10]],'#a5c7c4',.8);
+      line(ctx,[[-2,-4],[2,-4]],'#637978',.8);ctx.restore();
+      oval(ctx,-11,-38,3,2,'#bcc9c6');oval(ctx,11,-38,3,2,'#bcc9c6');
+      ctx.fillStyle='#bbcdcc';ctx.font='italic 11px Georgia';ctx.textAlign='center';
+      ctx.fillText('z',23,-91-Math.sin(t)*2);ctx.fillText('Z',31,-101-Math.sin(t)*2);
+      ctx.restore();
+    }
+    Object.assign(exports, { drawRobotButler, drawSleepingJudge });
   },
   "js/engine/iso.js": (exports, require) => {
     // Isometric projection math. 2:1 diamond tiles, 64x32 px.
@@ -2902,7 +3670,7 @@
       drawIndicator(def, s, t) {
         const { ctx } = this;
         if (!def.icon) return;
-        const y = s.y - 58 - Math.sin(t * 2.5) * 3;
+        const y = s.y - 91 - Math.sin(t * 2.5) * 3;
         if (def.icon === 'task') {
           ctx.fillStyle = PAL.brass;
           ctx.beginPath(); ctx.arc(s.x, y, 9, 0, Math.PI * 2); ctx.fill();
@@ -2997,6 +3765,7 @@
     // follows an A* path of tile steps. Drawing is a layered paper-doll figure.
 
     const { PAL, shade } = require("js/engine/palette.js");
+    const { drawRobotButler } = require("js/entities/robots.js");
 
     class Actor {
       constructor(x, y, look = {}, opts = {}) {
@@ -3049,149 +3818,235 @@
         }
       }
 
-      // Draw at screen point (sx, sy) = center of the tile under the feet.
+      // Original articulated figure shared by portraits, the creator and the world.
+      // Adult proportions: a small head, visible neck, tapered torso and long legs.
       draw(ctx, sx, sy, t, isPlayer = false) {
-        const seated = this.activity === 'reviewing' || this.activity === 'watching';
-        const bob = this.walking && !seated ? Math.sin(t * 12) * 1.6 : 0;
-        const f = this.facing;
-        const suit = this.look.suit || PAL.navy;
-        const skin = PAL.skin[this.look.skin ?? 0] || PAL.skin[0];
-        const hair = PAL.hair[this.look.hair ?? 0] || PAL.hair[0];
-        const eye = PAL.eyes[this.look.eye ?? 0] || PAL.eyes[0];
-        const style = this.look.hairStyle ?? 0;
-        // Silhouette: suit cut varies slightly by gender.
-        const hw = this.look.gender === 'male' ? 8.5
-                 : this.look.gender === 'female' ? 7.2 : 8;
+        const look = this.look;
+        if (look.robotButler) { drawRobotButler(ctx,sx,sy,t); return; }
+        const seated = ['reviewing', 'watching', 'sitting'].includes(this.activity);
+        const walking = this.walking && !seated;
+        const stride = walking ? Math.sin(t * 9) : 0;
+        const breath = Math.sin(t * 1.7) * 0.15;
+        const skin = PAL.skin[look.skin ?? 0] || PAL.skin[0];
+        const hair = PAL.hair[look.hair ?? 0] || PAL.hair[0];
+        const eye = PAL.eyes[look.eye ?? 0] || PAL.eyes[0];
+        const suit = look.suit || PAL.navy;
+        const shirt = look.shirt || '#f3eee1';
+        const tie = look.tie || PAL.burgundy;
+        const style = look.hairStyle ?? 0;
+        const beard = look.facialHair ?? 0;
+        const face = look.faceShape ?? 0;
+        const shoulder = look.silhouette === 'relaxed' ? 10.3 : look.silhouette === 'slim' ? 8.3 : 9.3;
+        const waist = shoulder - 2.3;
+        const skirt = look.outfit === 'skirt';
+        const facing = this.facing === 0 ? 0 : 1;
+        const headX = facing * 0.6;
+        const lift = seated ? 18 : walking ? Math.abs(stride) * 0.6 : breath;
 
-        // shadow
-        ctx.fillStyle = 'rgba(20,20,28,0.3)';
-        ctx.beginPath();
-        ctx.ellipse(sx, sy + 2, 11, 5, 0, 0, Math.PI * 2);
-        ctx.fill();
+        const poly = (points, color) => {
+          ctx.fillStyle = color; ctx.beginPath();
+          points.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
+          ctx.closePath(); ctx.fill();
+        };
+        const ellipse = (x, y, rx, ry, color) => {
+          ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+        };
+        const line = (points, color, width = 1) => {
+          ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+          ctx.beginPath(); points.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke();
+        };
+        const round = (x, y, w, h, radius, color) => {
+          ctx.fillStyle = color; ctx.beginPath(); ctx.roundRect(x, y, w, h, radius); ctx.fill();
+        };
 
-        const y0 = sy - bob + (seated ? 6 : 0);
-        if (this.activity === 'reviewing') {
-          ctx.fillStyle = PAL.woodDark;
-          ctx.beginPath();
-          ctx.roundRect(sx - 11, y0 - 25, 22, 24, 4);
-          ctx.fill();
+        ctx.save();
+        ctx.translate(sx, sy);
+        ellipse(0, 2, seated ? 14 : 12, 4.5, 'rgba(13,21,27,.28)');
+        ctx.scale(this.facing < 0 ? -1 : 1, 1);
+        if (seated && (look.previewSeat || this.activity === 'reviewing')) {
+          round(-12, -39, 24, 27, 3, '#60452f');
+          round(-12, -18, 24, 5, 2, '#89673f');
+          line([[-10,-15],[-10,1]], '#3e342b', 2.2);
+          line([[10,-15],[10,1]], '#3e342b', 2.2);
         }
-        // legs
-        ctx.fillStyle = shade(suit, -0.25);
-        const stride = this.walking && !seated ? Math.sin(t * 12) * 3 : 0;
-        if (seated) {
-          ctx.fillRect(sx - 8, y0 - 11, 7, 8);
-          ctx.fillRect(sx + 1, y0 - 11, 7, 8);
-        } else {
-          ctx.fillRect(sx - 5, y0 - 12 + Math.max(0, stride), 4, 12 - Math.max(0, stride));
-          ctx.fillRect(sx + 1, y0 - 12 + Math.max(0, -stride), 4, 12 - Math.max(0, -stride));
-        }
-        // body (suit)
-        ctx.fillStyle = suit;
-        ctx.beginPath();
-        ctx.roundRect(sx - hw, y0 - 30, hw * 2, 20, 4);
-        ctx.fill();
-        // lapel / shirt
-        ctx.fillStyle = PAL.parchment;
-        ctx.beginPath();
-        ctx.moveTo(sx, y0 - 29);
-        ctx.lineTo(sx + 3 * f, y0 - 24);
-        ctx.lineTo(sx, y0 - 19);
-        ctx.lineTo(sx - 3 * f, y0 - 24);
-        ctx.closePath();
-        ctx.fill();
-        // tie
-        ctx.fillStyle = this.npc ? shade(suit, -0.3) : PAL.burgundy;
-        ctx.fillRect(sx - 1, y0 - 25, 2, 7);
-        // arms
-        ctx.fillStyle = suit;
-        ctx.fillRect(sx - hw - 3, y0 - 28, 4, 14);
-        ctx.fillRect(sx + hw - 1, y0 - 28, 4, 14);
-        ctx.fillStyle = shade(suit, -0.12);
-        ctx.fillRect(sx - hw - 3, y0 - 17, 4, 3);
-        ctx.fillRect(sx + hw - 1, y0 - 17, 4, 3);
+        ctx.translate(0, lift);
 
-        // curly/afro halo sits behind the head
-        if (style === 4) {
-          ctx.fillStyle = hair;
-          ctx.beginPath();
-          ctx.arc(sx, y0 - 39, 9.5, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        // head
-        ctx.fillStyle = skin;
-        ctx.beginPath();
-        ctx.arc(sx, y0 - 37, 7, 0, Math.PI * 2);
-        ctx.fill();
-        // eyes
-        ctx.fillStyle = eye;
-        ctx.fillRect(sx - 3.6 + f, y0 - 38.2, 2.2, 2.2);
-        ctx.fillRect(sx + 1.4 + f, y0 - 38.2, 2.2, 2.2);
-        // hair style (drawn over the head)
-        ctx.fillStyle = hair;
-        switch (style) {
-          case 0: // short
-            ctx.beginPath();
-            ctx.arc(sx, y0 - 39, 7, Math.PI, Math.PI * 2);
-            ctx.fill();
-            break;
-          case 1: // long — cap plus falls over the shoulders
-            ctx.beginPath();
-            ctx.arc(sx, y0 - 39, 7, Math.PI, Math.PI * 2);
-            ctx.fill();
-            ctx.beginPath();
-            ctx.roundRect(sx - 9, y0 - 41, 4, 18, 2);
-            ctx.roundRect(sx + 5, y0 - 41, 4, 18, 2);
-            ctx.fill();
-            break;
-          case 2: // ponytail — cap plus a tail behind the facing direction
-            ctx.beginPath();
-            ctx.arc(sx, y0 - 39, 7, Math.PI, Math.PI * 2);
-            ctx.fill();
-            ctx.beginPath();
-            ctx.roundRect(sx - f * 10 - 1.5, y0 - 40, 3, 13, 1.5);
-            ctx.fill();
-            ctx.fillStyle = PAL.brass;
-            ctx.fillRect(sx - f * 10 - 1.5, y0 - 34, 3, 1.6);
-            break;
-          case 3: // bun
-            ctx.beginPath();
-            ctx.arc(sx, y0 - 39, 7, Math.PI, Math.PI * 2);
-            ctx.fill();
-            ctx.beginPath();
-            ctx.arc(sx, y0 - 46.5, 3.2, 0, Math.PI * 2);
-            ctx.fill();
-            break;
-          case 4: // curly — front cap over the halo drawn earlier
-            ctx.beginPath();
-            ctx.arc(sx, y0 - 39.5, 7.6, Math.PI, Math.PI * 2);
-            ctx.fill();
-            break;
-          case 5: // bald — nothing
-          default:
-            break;
-        }
-
-        // briefcase for the player
-        if (isPlayer && this.activity === 'reviewing') {
-          const pageY = y0 - 17 + Math.sin(t * 1.8) * 0.5;
-          ctx.fillStyle = PAL.parchment;
-          ctx.fillRect(sx - 12, pageY, 24, 12);
-          ctx.strokeStyle = PAL.brass;
-          ctx.lineWidth = 1;
-          ctx.strokeRect(sx - 12, pageY, 24, 12);
-          ctx.fillStyle = PAL.ink;
-          for (let line = 0; line < 3; line++) {
-            ctx.fillRect(sx - 8, pageY + 3 + line * 3, 16, 1);
+        // Rear hair is attached to the skull and sits behind the shoulders.
+        if ([1, 8, 10, 11, 15].includes(style)) {
+          const length = style === 8 ? 14 : 24;
+          round(-6.4, -77, 13, length, [6,6,3,3], shade(hair, -0.06));
+          if ([1, 15].includes(style)) {
+            for (const side of [-1,1]) {
+              ctx.fillStyle = hair; ctx.beginPath();
+              ctx.moveTo(side * 4.8, -74);
+              ctx.bezierCurveTo(side * 9, -69, side * 3, -64, side * 8, -59);
+              ctx.bezierCurveTo(side * 10, -53, side * 3, -52, side * 4, -55);
+              ctx.lineTo(side * 2.8,-68); ctx.closePath(); ctx.fill();
+            }
           }
-        } else if (isPlayer && !seated) {
-          ctx.fillStyle = PAL.woodDark;
-          ctx.beginPath();
-          ctx.roundRect(sx + 9 * f - 4, y0 - 16, 9, 7, 1.5);
-          ctx.fill();
-          ctx.fillStyle = PAL.brass;
-          ctx.fillRect(sx + 9 * f - 1, y0 - 14, 3, 2);
+          if ([10, 11].includes(style)) {
+            for (const x of [-5.2,-2.8,0,2.8,5.2]) {
+              line([[x,-73],[x + Math.sin(x)*1.2,-64],[x + Math.sin(x+1)*1.5,-54]], shade(hair, x > 0 ? .07 : -.05), style === 10 ? 2.5 : 2.8);
+              if (style === 10) for (let y=-70;y<-55;y+=3) line([[x-0.7,y],[x+0.7,y+1.3]], shade(hair,.14),.55);
+            }
+          }
         }
+        if ([2,9].includes(style)) {
+          const rootY = style === 9 ? -77 : -69;
+          const sway = walking ? stride * 1.4 : 0;
+          // Curved taper grows from the back of the head; never a floating rectangle.
+          ctx.fillStyle = shade(hair,-.025); ctx.beginPath();
+          ctx.moveTo(-4.5,rootY-1);
+          ctx.bezierCurveTo(-12,rootY-4,-11+sway,rootY+9,-8+sway,rootY+15);
+          ctx.bezierCurveTo(-7+sway,rootY+19,-8+sway,rootY+22,-6+sway,rootY+22);
+          ctx.bezierCurveTo(-11+sway,rootY+16,-4+sway,rootY+8,-4.5,rootY+2);
+          ctx.closePath(); ctx.fill();
+          ellipse(-5.3,rootY,2,1.2,'#b59458');
+          line([[-7,rootY+2],[-8+sway,rootY+10],[-7+sway,rootY+17]], shade(hair,.12),.65);
+        }
+        if (style === 3) ellipse(-4.3,-77,3.6,3.5,hair);
+        if (style === 15) ellipse(-4,-73,2.4,2.5,hair);
+
+        // Legs articulate from the hip, with separate knee and shoe placement.
+        for (const side of [-1,1]) {
+          const step = side * stride;
+          const footY = seated ? -lift : -Math.max(0, step) * 3.2;
+          const hipX = side * 3.8;
+          const kneeX = side * (seated ? 7.5 : 4.1) + step * 1.5;
+          const kneeY = seated ? -30 : -17;
+          const footX = side * (seated ? 8.2 : 4.4) + step * 2;
+          poly([[hipX-3.1,-36],[hipX+3.1,-36],[kneeX+2.6,kneeY],[footX+2,footY-2],[footX-2.5,footY-2],[kneeX-2.8,kneeY]], skirt ? shade(skin,-.025) : shade(suit,side < 0 ? -.17 : -.085));
+          if (!skirt) line([[hipX,-32],[kneeX,kneeY],[footX,footY-5]],shade(suit,side < 0 ? -.10 : .015),.6);
+          round(footX-2.8,footY-3,7.8,4,1.5,'#272b30');
+          line([[footX-1.6,footY-2],[footX+3,footY-2]],'#515451',.6);
+        }
+        if (skirt) {
+          const hem = seated ? -25 : -19;
+          poly([[-waist,-37],[waist,-37],[waist+2,hem],[-waist-2,hem]],shade(suit,-.08));
+          poly([[1,-35],[waist,-36],[waist+2,hem],[3,hem]],shade(suit,.025));
+          line([[-waist-1.5,hem],[waist+1.5,hem]],shade(suit,-.18),.8);
+          line([[1,hem-6],[1,hem]],shade(suit,-.22),.65);
+        }
+
+        // Jacket shoulders taper into the waist. The shirt is a real inset layer.
+        poly([[-4.5,-62],[-shoulder,-58],[-shoulder+.8,-49],[-waist,-36],[-waist-1,-32],[0,-33],[waist+1,-32],[waist,-36],[shoulder-.8,-49],[shoulder,-58],[4.5,-62]],suit);
+        poly([[-shoulder,-58],[-4,-58],[-1,-42],[-2,-33],[-waist-1,-32],[-waist,-44]],shade(suit,-.13));
+        poly([[4,-59],[shoulder,-57],[waist,-42],[waist+1,-32],[1,-34],[1,-47]],shade(suit,.07));
+        poly([[-3.7,-61],[3.7,-61],[2.4,-42],[-2.4,-42]],shirt);
+        poly([[-2.8,-60],[0,-57],[-2.1,-54],[-4.5,-60]],shade(shirt,-.1));
+        poly([[2.8,-60],[0,-57],[2.1,-54],[4.5,-60]],shade(shirt,.025));
+        poly([[-1.1,-56],[1.2,-56],[1.7,-44],[0,-42],[-1.7,-44]],tie);
+        poly([[-1.4,-58],[1.4,-58],[1,-55],[-1,-55]],shade(tie,-.08));
+        poly([[-4,-62],[-7,-57],[-4.5,-53],[-5.5,-51],[-1.5,-43],[-2,-53]],shade(suit,.15));
+        poly([[4,-62],[7,-57],[4.5,-53],[5.5,-51],[1.5,-43],[2,-53]],shade(suit,.19));
+        line([[.7,-42],[.7,-35]],shade(suit,-.15),.75);
+        ellipse(.7,-39,.65,.65,'#b8ada0');
+        line([[4.6,-48],[7.3,-48]],shade(suit,-.2),.65);
+        poly([[5,-49],[6,-50.3],[7,-49]],shirt);
+        line([[-6,-38],[-3,-38]],shade(suit,-.22),.65);
+
+        // Arms, cuffs and hands are separate tapered shapes, with a restrained swing.
+        for (const side of [-1,1]) {
+          const swing = walking ? -side * stride * 2.8 : 0;
+          const elbowX = side * (shoulder + 1.7);
+          const handX = seated ? side * 6 : side * (shoulder + 1.1) + swing * .45;
+          const handY = seated ? -36 : -35 + swing;
+          poly([[side*(shoulder-1),-58],[side*(shoulder+2),-56],[elbowX+side*1.5,-45],[handX+side*1.6,handY],[handX-side*1.8,handY+1],[elbowX-side*2,-45]],shade(suit,side < 0 ? -.075 : .025));
+          line([[handX-1.4,handY],[handX+1.5,handY]],shirt,1.5);
+          ellipse(handX,handY+2.2,1.8,3,skin);
+          line([[handX+.8,handY+1],[handX+.8,handY+3]],shade(skin,-.13),.5);
+        }
+
+        // Neck and jaw give the face a distinct silhouette instead of a round mask.
+        round(-2,-66,4,6,1.5,shade(skin,-.09));
+        ellipse(headX-5,-70.2,1.1,2.2,shade(skin,-.065));
+        ellipse(headX+5,-70.2,1.1,2.2,skin);
+        const jaw = face === 1 ? 4 : face === 2 ? 4.5 : 3.1;
+        ctx.fillStyle = skin; ctx.beginPath();
+        ctx.moveTo(headX-4.8,-74.8);
+        ctx.bezierCurveTo(headX-4.8,-79,headX+4.8,-79,headX+4.8,-74.8);
+        ctx.lineTo(headX+4.6,-68.5);
+        ctx.quadraticCurveTo(headX+jaw,-64.7,headX+1,-64.4);
+        ctx.lineTo(headX-1,-64.4);
+        ctx.quadraticCurveTo(headX-jaw,-64.7,headX-4.6,-68.5);
+        ctx.closePath(); ctx.fill();
+        poly([[headX+3.5,-74],[headX+4.6,-71],[headX+4.3,-68],[headX+jaw*.7,-65],[headX+1.3,-65.2],[headX+2.7,-69]],shade(skin,-.07));
+        ellipse(headX-2.8,-68.4,1.3,.6,shade(skin,.022));
+
+        // Narrow almond eyes: subtle sclera, colored iris, pupil, lid and brow.
+        for (const side of [-1,1]) {
+          const x = headX + side * 2.05 + facing * .25;
+          const width = side < 0 && facing ? 1.35 : 1.55;
+          ellipse(x,-71.9,width,.69,'#ede8df');
+          ellipse(x+facing*.25,-71.9,.61,.69,eye);
+          ellipse(x+facing*.3,-71.9,.27,.48,'#20292b');
+          ellipse(x+facing*.3-.17,-72.15,.14,.16,'#faf6ed');
+          line([[x-width,-72],[x-.4,-72.57],[x+.6,-72.5],[x+width,-72]],shade(skin,-.26),.5);
+          line([[x-width,-74],[x-.1,-74.3],[x+width*.8,-74]],hair,.65);
+        }
+        line([[headX+.4,-71],[headX+1,-68.6],[headX+.1,-68.3]],shade(skin,-.18),.55);
+        line([[headX-1.25,-66.8],[headX+.3,-66.55],[headX+1.55,-66.9]],shade(skin,-.22),.65);
+        line([[headX-.6,-66.05],[headX+.8,-66.05]],shade(skin,.06),.5);
+
+        // Facial hair follows jaw contours, keeping lips and the nose readable.
+        if ([1,4,5].includes(beard)) {
+          ctx.save(); ctx.globalAlpha = beard === 1 ? .25 : .9;
+          poly([[headX-4.4,-69.1],[headX-2.7,-67.9],[headX-1.8,-66],[headX+1.8,-66],[headX+2.7,-67.9],[headX+4.4,-69.1],[headX+4,-65.3],[headX+(beard===5?2.8:1.5),beard===5?-60.6:-64],[headX-(beard===5?2.8:1.5),beard===5?-60.6:-64],[headX-4,-65.3]],hair);
+          ctx.restore();
+          if (beard === 5) for (const x of [-2,0,2]) line([[headX+x,-65],[headX+x*.8,-61.6]],shade(hair,.10),.5);
+        }
+        if ([2,4,5,6].includes(beard)) {
+          poly([[headX,-68],[headX-1.6,-68],[headX-3,-66.7],[headX-1,-67],[headX,-67.3],[headX+1,-67],[headX+3,-66.7],[headX+1.6,-68]],hair);
+        }
+        if ([3,6].includes(beard)) poly([[headX-1.5,-66],[headX+1.5,-66],[headX+1.8,-63],[headX,-62.2],[headX-1.8,-63]],hair);
+
+        // Front hair: distinct original silhouettes; scalp/face remain visible.
+        if (style !== 5) {
+          const short = style === 6;
+          ctx.fillStyle = hair; ctx.beginPath();
+          ctx.moveTo(headX-5,-70.5);
+          ctx.lineTo(headX-5.2,-75.5);
+          ctx.bezierCurveTo(headX-4.7,short?-79:-80,headX+4.5,short?-79:-80,headX+5.1,-75.5);
+          ctx.lineTo(headX+4.8,-70.5); ctx.lineTo(headX+3.6,-74.5);
+          ctx.quadraticCurveTo(headX+.8,-75.1,headX-1.5,-75.2);
+          ctx.lineTo(headX-3.5,-73.9); ctx.closePath(); ctx.fill();
+          if ([0,7,13,14].includes(style)) {
+            const drop = style === 13 ? -71.7 : -74.5;
+            poly([[headX-4.7,-76],[headX-2,-79.3],[headX+4.4,-77],[headX+4.2,drop],[headX+1.3,-74.8],[headX-2.4,-75.3]],shade(hair,.055));
+            line([[headX-2.7,-78],[headX-.6,-76.6],[headX+2.7,drop-.7]],shade(hair,.15),.5);
+          }
+          if ([4,12,14].includes(style)) {
+            for (let i=0;i<7;i++) {
+              const x = headX-4.5+i*1.5;
+              const y = -77.2-Math.sin(i/6*Math.PI)*(style===4?3.1:1.5);
+              ellipse(x,y,style===4?2.1:1.5,style===4?2.5:1.6,shade(hair,(i%3)*.03));
+            }
+          }
+          if ([1,8,15].includes(style)) line([[headX-.5,-78],[headX-1.3,-75.5],[headX-3.5,-73.6]],shade(hair,.16),.55);
+          if ([10,11].includes(style)) for (const x of [-3,-1,1,3]) line([[headX+x,-77],[headX+x*.8,-75]],shade(hair,.13),.65);
+          if (style===7) for (const x of [-2,0,2]) line([[headX+x,-75.4],[headX+x-1,-77.7]],shade(hair,.13),.6);
+        }
+        if (look.glasses) {
+          ctx.strokeStyle = '#3b3f3d'; ctx.lineWidth = .55;
+          for (const x of [-2.1,2.1]) { ctx.beginPath(); ctx.roundRect(headX+x-1.75,-73,3.5,2.2,.7); ctx.stroke(); }
+          line([[headX-.4,-72.4],[headX+.4,-72.4]],'#3b3f3d',.5);
+          line([[headX-3.9,-72.2],[headX-5,-72.6]],'#3b3f3d',.5);
+        }
+        if (look.badge) {
+          poly([[-6,-53],[-3,-53],[-3.2,-50],[-4.5,-49],[-5.8,-50]],'#cfaf5c');
+          ellipse(-4.5,-51.5,.65,.65,'#f1dfac');
+        }
+        if (isPlayer && !seated) {
+          const handY = -35 + (walking ? -stride*2.8 : 0);
+          line([[shoulder+.1,handY+5],[shoulder+.1,handY+3],[shoulder+4.3,handY+3],[shoulder+4.3,handY+5]],'#594c38',1);
+          round(shoulder-2,handY+5,11,8.5,1.2,look.briefcase || '#694c35');
+          line([[shoulder-1,handY+7],[shoulder+8,handY+7]],'#aa8453',.7);
+          round(shoulder+2.8,handY+7,1.6,1.5,.3,'#d1b572');
+        } else if (isPlayer && this.activity === 'reviewing') {
+          poly([[-11,-35],[8,-35],[12,-27],[-8,-27]],PAL.parchment);
+          for (let i=0;i<3;i++) line([[-7+i,-33+i*1.5],[7+i,-33+i*1.5]],'#8b8a7f',.55);
+        }
+        ctx.restore();
       }
     }
     Object.assign(exports, { Actor });
@@ -3220,6 +4075,10 @@
       streakEl.classList.toggle('hot', state.streak >= 2);
 
       $('stat-billable').querySelector('b').textContent = formatBillableTime(state.billableStudyMs);
+      const remaining = Math.max(0, Math.ceil((state.slowUntil - Date.now()) / 1000));
+      const movement = $('movement-status');
+      movement.classList.toggle('hidden', !remaining);
+      movement.textContent = remaining ? `Slow walking · ${remaining}s` : '';
     }
 
     function setZoneName(name) {
@@ -3360,6 +4219,539 @@
       return !$('dialogue').classList.contains('hidden');
     }
     Object.assign(exports, { showDialogue, hideDialogue, dialogueOpen });
+  },
+  "js/ui/apprenticeship.js": (exports, require) => {
+    const { state, save } = require("js/state.js");
+    const { DOCUMENT_PACKS, WRITING_TASKS, CAPSTONE, FIRM_PACKS, COSMETICS, TRAINING_JURISDICTION, evidenceAt } = require("js/data/apprenticeship.js");
+    const { taskById, pendingAttempt, taskAttempts, returnedTasks, capstoneReady, saveDraft, commitWriting, settleReplies, submitReview, buyCosmetic, requestJurisdiction, requestIssueUrl } = require("js/apprenticeship.js");
+    const { Actor } = require("js/entities/actor.js");
+    const { appearanceLook } = require("js/data/appearance.js");
+    const { mountAppearanceEditor } = require("js/ui/appearance.js");
+    const { GLOBAL_CURRICULUM } = require("js/data/jurisdictions.js");
+
+    const $ = (id) => document.getElementById(id);
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+    const e = escapeHtml;
+    function linkedEvidence(text, sources) {
+      return e(text).replace(/\b([LH]\d+\.\d+)\b/g, (anchor) => sources.includes(anchor)
+        ? `<a href="#source-${anchor}">${anchor}</a>` : anchor);
+    }
+    const button = (text, action, value = '', extra = '') => `<button type="button" data-action="${action}" data-value="${e(value)}" ${extra}>${e(text)}</button>`;
+    const note = (text) => `<p class="desk-note">${e(text)}</p>`;
+
+    function createApprenticeshipUI({ beforeOpen, onChange, onLegacy, onWriting, onWritingExit, notify }) {
+      const modal = $('apprenticeship'), body = $('desk-body');
+      const home = body.parentElement;
+      let writingEmbedded = false;
+      let view = 'journal', selected = null, previousFocus = null, lastTick = 0;
+
+      function drawAvatar() {
+        const canvas = $('desk-portrait');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const look = appearanceLook(state, state.apprenticeship.equipped);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.save(); ctx.scale(2.05, 2.05);
+        new Actor(0, 0, look).draw(ctx, 41, 92, 0, true);
+        ctx.restore();
+      }
+
+      function render() {
+        $('desk-player').textContent = state.name;
+        $('desk-gold').textContent = `${Math.floor(state.gold)} gold`;
+        document.querySelectorAll('[data-desk-tab]').forEach((tab) => {
+          tab.setAttribute('aria-current', tab.dataset.deskTab === view ? 'page' : 'false');
+        });
+        if (view === 'journal') renderJournal();
+        else if (view === 'writing') renderWriting();
+        else if (view === 'files') renderFiles();
+        else if (view === 'firm') renderFirm();
+        else if (view === 'wardrobe') renderWardrobe();
+        drawAvatar();
+      }
+
+      function open(next = 'journal', id = null) {
+        if (state.ethics <= 0) return;
+        if (next === 'writing') { onWriting(id); return; }
+        if (!isOpen()) previousFocus = document.activeElement;
+        beforeOpen();
+        view = next; selected = id;
+        state.apprenticeship.introduced = true;
+        save();
+        modal.classList.remove('hidden');
+        render();
+        $('desk-close').focus();
+      }
+      function close() {
+        modal.classList.add('hidden');
+        if (previousFocus?.isConnected) previousFocus.focus();
+      }
+      function isOpen() { return !modal.classList.contains('hidden'); }
+      function navigate(next, id = null) {
+        if (next === 'writing' && (!writingEmbedded || !id)) { onWriting(id); return; }
+        if (writingEmbedded && next !== 'writing') { onWritingExit(next,id); return; }
+        view = next; selected = id; render(); body.scrollTop = 0; body.focus();
+      }
+      function embedWriting(host, id) {
+        modal.classList.add('hidden');
+        host.appendChild(body);
+        writingEmbedded = true; view = 'writing'; selected = id;
+        state.apprenticeship.introduced = true;
+        render(); body.scrollTop = 0; body.focus();
+      }
+      function releaseWriting() {
+        if (!writingEmbedded) return;
+        home.appendChild(body); writingEmbedded = false;
+      }
+      function section(kicker, title, intro) { return `<header class="desk-section"><p class="desk-kicker">${e(kicker)}</p><h2>${e(title)}</h2><p>${e(intro)}</p></header>`; }
+
+      function renderJournal() {
+        const done = returnedTasks(state).length;
+        const reviews = DOCUMENT_PACKS.filter((pack) => state.apprenticeship.reviews[pack.id]).length;
+        const pending = pendingAttempt(state);
+        const next = WRITING_TASKS.find((task) => !taskAttempts(state, task.id).length);
+        const finished = taskAttempts(state, 'capstone').some((a) => a.status === 'returned');
+        body.innerHTML = section('Hardsell & Firestone · First day', 'A small firm. Large expectations.', 'Inspect the record. Write something useful. Let the partner get back to you.')
+          + `<div class="desk-hero"><div><span class="desk-badge">${e(TRAINING_JURISDICTION)}</span><h3>${finished ? 'Your first handoff is complete.' : 'Your apprenticeship starts here.'}</h3><p>Linda wants evidence. Jim wants it yesterday. Liz has put the files in order, which is more than can be said for the partners.</p>${button(pending ? 'Read sent correspondence' : next ? 'Continue your assignments' : 'Open the capstone', 'task', pending?.taskId || next?.id || 'capstone')}</div><canvas id="desk-portrait" width="168" height="200" aria-label="Your attorney portrait"></canvas></div>`
+          + `<div class="desk-metrics"><span><b>${done}/6</b> partner replies</span><span><b>${reviews}/2</b> files reviewed</span><span><b>${finished ? 'Complete' : 'In progress'}</b> first firm day</span></div>`
+          + (pending ? `<p class="desk-pending" role="status">Sent — awaiting partner review. Your submitted answer is locked. You can walk around while Linda or Jim replies.</p>` : '')
+          + `<ol class="quest-path"><li><b>Read the source file</b><span>Open the exhibits and flag exact passages that need follow-up.</span>${button('Open files', 'files')}</li><li><b>Write and commit</b><span>Draft your reply, select your issue, next step and evidence. Sending locks that attempt.</span>${button('Open BarMail writing', 'writing')}</li><li><b>Read the partner’s reply</b><span>Compare the authored guidance to your prose. Study gold is based on the explicit checklist choices.</span></li><li><b>Make it your practice</b><span>Earn a 30-gold tie, improve your office, then bring both matters together.</span>${button('Open wardrobe', 'wardrobe')}</li></ol>`
+          + `<details class="desk-disclosure"><summary>How this local apprenticeship works</summary><p>The new files are synthetic and governed by fictional office policies. Authored partner replies assess your three checklist choices; your prose and review notes are saved for self-comparison, not AI graded. New exercises award local study gold without Ethics damage. Existing BarMail ethics dilemmas retain full-reset disbarment at zero Ethics. Gold, drafts, quests and cosmetics are lost when that run ends.</p><p>This build stores progress in this browser. It has no accounts or shared room. Other careers, reviewed jurisdiction packs and online assessment are later releases.</p></details>`;
+      }
+
+      function renderWriting() {
+        if (!selected) {
+          body.innerHTML = section('BarMail · Write a reply', 'The partner inbox', 'Six assignments, two matters, one connected handoff. All replies stay inside this game.')
+            + `<div class="assignment-list">${[...WRITING_TASKS, CAPSTONE].map((task, index) => {
+              const attempts = taskAttempts(state, task.id), latest = attempts.at(-1);
+              const locked = task.id === 'capstone' && !capstoneReady(state);
+              const status = locked ? 'Complete six replies and two files' : latest?.status === 'pending' ? 'Awaiting partner' : latest ? `${latest.result.correct}/3 checklist · reply received` : state.apprenticeship.drafts[task.id] ? 'Draft saved' : 'Ready to draft';
+              return `<article class="assignment-card"><span class="desk-number">${String(index + 1).padStart(2, '0')}</span><div><p class="desk-kicker">${e(task.partner)} · ${e(task.skill)}</p><h3>${e(task.title)}</h3><p>${e(status)}</p></div>${button(latest ? 'Open correspondence' : 'Open assignment', 'task', task.id, locked ? 'disabled' : '')}</article>`;
+            }).join('')}</div>`;
+          return;
+        }
+        const task = taskById(selected);
+        if (!task) { selected = null; renderWriting(); return; }
+        if (task.id === 'capstone' && !capstoneReady(state)) {
+          body.innerHTML = section('Connected capstone', 'The partner’s desk is not ready yet.', 'Receive all six assignment replies and review both document files, then return for the final handoff.') + button('Return to assignments', 'writing');
+          return;
+        }
+        const attempts = taskAttempts(state, selected), latest = attempts.at(-1);
+        const draft = state.apprenticeship.drafts[selected];
+        const composing = !latest || (latest.status === 'returned' && draft);
+        body.innerHTML = button('← Assignment inbox', 'writing')
+          + section(`${task.partner} · ${task.skill}`, task.title, task.prompt)
+          + `<p class="desk-meta">From: ${e(task.partner)}<br>To: ${e(state.name)} · Hardsell &amp; Firestone<br>${e(TRAINING_JURISDICTION)} · Synthetic assignment, September 2026</p>`
+          + `<details class="desk-sources" open><summary>Assignment record and source briefing</summary>${task.sources.map((anchor) => {
+            const source = evidenceAt(anchor);
+            return `<article id="source-${e(anchor)}"><strong>${e(anchor)} · ${e(source.doc.title)}</strong><p>${e(source.text)}</p></article>`;
+          }).join('')}</details>`;
+        if (composing) {
+          const value = draft || { text: '', issue: null, action: null, evidence: '' };
+          const options = (key, label, list) => `<fieldset><legend>${label}</legend>${list.map((text, index) => `<label class="desk-choice"><input type="radio" name="${key}" value="${index}" ${value[key] === index ? 'checked' : ''}>${e(text)}</label>`).join('')}</fieldset>`;
+          body.innerHTML += `<form id="writing-form"><label class="desk-label" for="writing-text">Your reply <span>75–150 words suggested · flexible, 6,000 characters maximum</span></label><textarea id="writing-text" name="text" rows="7" maxlength="6000" placeholder="Explain what the record shows, what remains uncertain, and what should happen next…">${e(value.text)}</textarea><p id="draft-status" class="desk-note" role="status"></p>`
+            + options('issue', 'What is the central issue?', task.issues) + options('action', 'What is your next step?', task.actions)
+            + `<label class="desk-label" for="writing-evidence">${e(task.evidencePrompt || 'Choose the passage that most directly supports the central issue')}</label><select id="writing-evidence" name="evidence"><option value="">Select an evidence reference</option>${task.sources.map((anchor) => `<option value="${e(anchor)}" ${value.evidence === anchor ? 'selected' : ''}>${e(anchor)} · ${e(evidenceAt(anchor).doc.title)}</option>`).join('')}</select>`
+            + note('Commit locks this reply. The partner returns in a few seconds. Gold reflects your checklist choices; the prose is for self-comparison.')
+            + `<p id="writing-error" class="desk-error" role="alert"></p><button type="submit" ${pendingAttempt(state) ? 'disabled' : ''}>Commit reply & send to partner</button></form>`;
+          const form = $('writing-form');
+          function persist() {
+            const formData = new FormData(form);
+            saveDraft(state, task.id, { text: formData.get('text'), issue: formData.has('issue') ? Number(formData.get('issue')) : null, action: formData.has('action') ? Number(formData.get('action')) : null, evidence: formData.get('evidence') });
+            const saved = save();
+            const words = String(formData.get('text')).trim().split(/\s+/).filter(Boolean).length;
+            $('draft-status').textContent = `${words} words · ${saved ? 'Draft saved in this browser' : 'Session only — browser storage is unavailable'}`;
+          }
+          form.addEventListener('input', persist);
+          form.addEventListener('change', persist);
+          form.addEventListener('submit', (event) => {
+            event.preventDefault(); persist();
+            try { commitWriting(state, task.id); save(); render(); onChange(); }
+            catch (error) { $('writing-error').textContent = error.message; }
+          });
+          persist();
+        }
+        if (latest && !composing) {
+          body.innerHTML += `<article class="sent-reply"><p class="desk-kicker">${latest.status === 'pending' ? 'Sent — awaiting partner review' : 'Your committed reply'} · Attempt ${attempts.length}</p><p class="preserve-lines">${e(latest.submission.text)}</p><dl><dt>Issue</dt><dd>${e(task.issues[latest.submission.issue])}</dd><dt>Next step</dt><dd>${e(task.actions[latest.submission.action])}</dd><dt>Evidence</dt><dd>${e(latest.submission.evidence)}</dd></dl></article>`;
+          if (latest.status === 'pending') body.innerHTML += `<p class="desk-pending" role="status">Your answer is locked. Your partner will reply shortly; closing this window will not cancel the submission.</p>`;
+          else {
+            body.innerHTML += `<article class="partner-reply"><p class="desk-kicker">From ${e(task.partner)} · Authored practice feedback</p><h3>${latest.result.correct}/3 checklist choices · +${latest.result.gold} gold</h3><p>${linkedEvidence(task.reply, task.sources)}</p><ul>${['Issue recognition', 'Next action', 'Evidence selection'].map((label, index) => `<li>${latest.result.checks[index] ? '✓' : 'Revisit:'} ${label}</li>`).join('')}</ul><p class="desk-note">Compare your prose to this guidance. Your free text was not graded. Reward credited once when this reply arrived.</p></article>`;
+            if (latest.result.correct < 3 && attempts.length < 2) body.innerHTML += button('Accept invitation to revise', 'revise', task.id) + note('One revision is available. Improving the checklist can earn up to 20% extra; your original answer remains in the correspondence.');
+            else body.innerHTML += button('Return to journal', 'journal');
+          }
+        }
+        if (attempts.length > 1 || (latest && composing)) body.innerHTML += `<details class="desk-disclosure"><summary>Earlier committed correspondence</summary>${attempts.slice(0, composing ? undefined : -1).map((a) => `<p class="preserve-lines">${e(a.submission.text)}</p><p>${a.result?.correct ?? 'Pending'}/3 checklist · ${a.result?.gold || 0} gold</p>`).join('')}</details>`;
+      }
+
+      function renderFiles() {
+        const pack = DOCUMENT_PACKS.find((item) => item.id === selected);
+        if (!pack) {
+          body.innerHTML = section('Evidence room', 'Open the file before the opinion.', 'Two matters. Twelve original exhibits. Every passage has a stable reference you can cite.')
+            + `<div class="desk-card-grid">${DOCUMENT_PACKS.map((item) => `<article class="desk-card"><p class="desk-kicker">${e(item.client)} · ${e(item.date)}</p><h3>${e(item.title)}</h3><p>${e(item.subtitle)}</p><p>${state.apprenticeship.reviews[item.id] ? 'Review complete · revisit the record anytime' : 'Six documents · up to 75 study gold'}</p>${button('Open file', 'file', item.id)}</article>`).join('')}</div>`
+            + note('All exhibits are synthetic training material. Flagging a passage is an evidence exercise, not a final legal or privilege determination.');
+          return;
+        }
+        const receipt = state.apprenticeship.reviews[pack.id];
+        const draft = receipt || state.apprenticeship.reviewDrafts[pack.id] || { selected: [], notes: '' };
+        body.innerHTML = button('← All files', 'files') + section('Synthetic training material · State of Juris', pack.title, pack.brief)
+          + `<div class="file-workspace"><nav class="file-index" aria-label="Document list">${pack.documents.map((doc) => `<a href="#doc-${doc.id}">${e(doc.title)}</a>`).join('')}</nav><div class="file-exhibits">${pack.documents.map((doc) => `<article class="exhibit" id="doc-${doc.id}"><p class="desk-kicker">Synthetic training material · ${e(doc.date)}</p><h3>${e(doc.title)}</h3>${doc.paragraphs.map((text, index) => {
+            const anchor = `${doc.id}.${index + 1}`;
+            return `<div class="evidence-paragraph" id="passage-${anchor}"><label><input type="checkbox" name="finding" value="${anchor}" ${draft.selected.includes(anchor) ? 'checked' : ''} ${receipt ? 'disabled' : ''}><span>${anchor}</span><span class="sr-only">Flag this passage</span></label><p>${e(text)}</p></div>`;
+          }).join('')}</article>`).join('')}</div><aside class="file-notes"><h3>Your findings</h3><p id="finding-count" role="status">${draft.selected.length} passages flagged</p><label class="desk-label" for="review-notes">Explain each flag, cite its reference, and identify the follow-up.</label><textarea id="review-notes" rows="9" maxlength="6000" ${receipt ? 'readonly' : ''}>${e(draft.notes)}</textarea>${receipt ? `<p class="desk-badge">Review credited · +${receipt.gold} gold</p>` : button('Commit file review', 'review', pack.id, pendingAttempt(state) ? 'disabled' : '')}<p id="review-error" class="desk-error" role="alert"></p>${note('Checklist gold: 15 for completion, up to 60 for supported flags. Unsupported flags reduce the bonus. Notes are for self-comparison.')}</aside></div>`;
+        if (receipt) body.innerHTML += `<article class="partner-reply"><h3>Linda’s file review · ${receipt.hits.length}/3 supported flags</h3>${pack.findings.map((finding) => `<p><a href="#passage-${finding.anchor}">${finding.anchor}</a> · <b>${e(finding.label)}</b><br>${e(finding.why)}</p>`).join('')}<p>${receipt.falsePositives.length ? `Revisit these extra flags: ${receipt.falsePositives.join(', ')}. The passage may provide context, but does not itself establish one of the three requested follow-up issues.` : 'No extra flags.'}</p>${button('Take this to the partner inbox', 'writing')}</article>`;
+        else {
+          function persist() {
+            const anchors = [...body.querySelectorAll('input[name="finding"]:checked')].map((input) => input.value);
+            state.apprenticeship.reviewDrafts[pack.id] = { selected: anchors, notes: $('review-notes').value };
+            save();
+            $('finding-count').textContent = `${anchors.length} passages flagged · draft saved`;
+          }
+          body.querySelectorAll('input[name="finding"], #review-notes').forEach((input) => input.addEventListener('input', persist));
+        }
+      }
+
+      function renderFirm(prefill = '') {
+        body.innerHTML = section('Your firm · Jurisdictions', 'Where will your firm practice?', 'Start in the fictional State of Juris. Request a real jurisdiction for a future reviewed firm pack.')
+          + `<section class="global-curriculum" aria-labelledby="global-mission"><span class="desk-kicker">A worldwide ambition · future curriculum</span><h3 id="global-mission">${e(GLOBAL_CURRICULUM.mission)}</h3><p>A new way to learn legal ethics: inhabit the firm, face a dilemma, and discover how the answer depends on the jurisdiction.</p><div class="global-regions">${GLOBAL_CURRICULUM.regions.map((region) => `<article><h4>${e(region.name)}</h4><p>${region.places.map(e).join(' · ')}</p></article>`).join('')}</div><p class="desk-note">27 geographic entries from the supplied LegalQuants community list (${GLOBAL_CURRICULUM.asOf}). A starting point, not a complete or current membership census. These are future curriculum targets, not 27 playable packs. Legal systems within a country need separate review.</p><p class="global-available"><strong>Play today:</strong> US MPRE-style and England &amp; Wales SQE-style questions, plus the fictional State of Juris apprenticeship. Future packs need local source review and authored questions.</p></section>`
+          + `<div class="desk-card-grid">${FIRM_PACKS.map((pack) => `<article class="desk-card"><span class="desk-badge">${e(pack.status)}</span><h3>${e(pack.label)}</h3><p>${e(pack.note)}</p>${pack.id === 'juris' ? '<p class="desk-active">✓ Your active office</p>' : button('Request this jurisdiction', 'request-prefill', pack.label)}</article>`).join('')}</div>`
+          + button('Open legacy exam-style BarMail', 'legacy')
+          + `<form id="jurisdiction-form" class="request-form"><h3>Put a jurisdiction on the wish list</h3><p>Use an exact legal system, such as a U.S. state, England & Wales, Scotland or Northern Ireland. No real client facts or private documents.</p><label class="desk-label" for="request-label">Jurisdiction</label><input id="request-label" name="label" maxlength="80" required value="${e(prefill)}"><label class="desk-label" for="request-topic">What would you like to practice?</label><textarea id="request-topic" name="topic" maxlength="500" rows="2" required></textarea><label class="desk-label" for="request-help">Optional reviewer offer or public-source links</label><textarea id="request-help" name="help" maxlength="500" rows="2"></textarea><p class="desk-note">This saves a local request draft. You can then review it on GitHub and choose whether to submit it publicly. Nothing is sent automatically.</p><p id="request-error" class="desk-error" role="alert"></p><button type="submit">Save request locally</button></form>`
+          + `<h3 class="desk-subheading">Your local request drafts</h3>${state.apprenticeship.requests.length ? state.apprenticeship.requests.map((request) => `<article class="desk-card"><h4>${e(request.label)}</h4><p>${e(request.topic)}</p><p class="desk-note">${e(request.status)}</p><a class="desk-link" href="${e(requestIssueUrl(request))}" target="_blank" rel="noopener noreferrer">Review draft on GitHub ↗</a></article>`).join('') : note('No requests saved yet. A repeat request for the same jurisdiction reopens the existing local entry.')}`;
+        $('jurisdiction-form').addEventListener('submit', (event) => {
+          event.preventDefault();
+          try {
+            requestJurisdiction(state, $('request-label').value, $('request-topic').value, $('request-help').value);
+            save(); renderFirm(); notify('Jurisdiction request saved locally. Nothing has been sent.');
+          } catch (error) { $('request-error').textContent = error.message; }
+        });
+      }
+
+      function renderWardrobe() {
+        body.innerHTML = section('The wardrobe', 'An attorney with character.', 'Change your hair, face and clothes whenever you like. Identity options are free; earned accessories stay with this character run.')
+          + '<div id="wardrobe-appearance"></div>'
+          + `<h3 class="desk-subheading">Earned accessories</h3><div class="desk-card-grid">${COSMETICS.map((item) => {
+            const owned = state.apprenticeship.cosmetics.includes(item.id), equipped = state.apprenticeship.equipped.includes(item.id);
+            return `<article class="desk-card"><span class="desk-badge">${owned ? 'Owned' : `${item.price} gold`}</span><h3>${e(item.label)}</h3><p>${e(item.note)}</p>${button(owned ? equipped ? 'Unequip' : 'Equip' : 'Purchase & wear', owned ? 'equip' : 'buy', item.id, !owned && (state.gold < item.price || pendingAttempt(state)) ? 'disabled' : '')}</article>`;
+          }).join('')}</div>` + note('The earned gold tie overrides the base tie color while equipped. Selecting another tie color puts it away; it remains in your wardrobe.');
+        mountAppearanceEditor($('wardrobe-appearance'), {
+          prefix: 'wardrobe', read: () => state, equipped: () => state.apprenticeship.equipped,
+          onChange: (key, value) => {
+            state[key] = value;
+            if (key === 'tieColor') state.apprenticeship.equipped = state.apprenticeship.equipped.filter((id) => id !== 'tie-brass');
+            save(); onChange();
+            // Keep accessory button labels in sync without remounting the editor.
+            const tie = body.querySelector('[data-action="equip"][data-value="tie-brass"]');
+            if (tie) tie.textContent = state.apprenticeship.equipped.includes('tie-brass') ? 'Unequip' : 'Equip';
+          },
+        });
+      }
+
+      body.addEventListener('click', (event) => {
+        if (event.target.closest('a[href^="#source-"]')) {
+          const sources = body.querySelector('.desk-sources');
+          if (sources) sources.open = true;
+        }
+        const target = event.target.closest('button[data-action]');
+        if (!target) return;
+        const { action, value } = target.dataset;
+        if (['journal', 'writing', 'files', 'firm', 'wardrobe'].includes(action)) navigate(action);
+        else if (action === 'task') navigate('writing', value);
+        else if (action === 'file') navigate('files', value);
+        else if (action === 'legacy') { close(); onLegacy(); }
+        else if (action === 'request-prefill') { renderFirm(value); $('request-label').focus(); }
+        else if (action === 'revise') {
+          const previous = taskAttempts(state, value).at(-1);
+          saveDraft(state, value, { ...previous.submission }); save(); render();
+        } else if (action === 'review') {
+          try {
+            const selectedAnchors = [...body.querySelectorAll('input[name="finding"]:checked')].map((input) => input.value);
+            submitReview(state, value, selectedAnchors, $('review-notes').value); save(); render(); onChange();
+          } catch (error) { $('review-error').textContent = error.message; }
+        } else if (action === 'buy') {
+          try { buyCosmetic(state, value); save(); onChange(); render(); }
+          catch (error) { notify(error.message); }
+        } else if (action === 'equip' && state.apprenticeship.cosmetics.includes(value)) {
+          const worn = state.apprenticeship.equipped;
+          state.apprenticeship.equipped = worn.includes(value) ? worn.filter((id) => id !== value) : [...worn, value];
+          save(); onChange(); render();
+        }
+      });
+      document.querySelectorAll('[data-desk-tab]').forEach((tab) => tab.addEventListener('click', () => navigate(tab.dataset.deskTab)));
+      $('desk-close').addEventListener('click', close);
+      modal.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); }
+        if (event.key !== 'Tab') return;
+        const focusable = [...modal.querySelectorAll('button:not(:disabled), a[href], input:not(:disabled), textarea, select, summary, [tabindex="0"]')].filter((el) => el.getClientRects().length);
+        const first = focusable[0], last = focusable.at(-1);
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      });
+
+      function tick(now = Date.now()) {
+        if (now - lastTick < 500) return;
+        lastTick = now;
+        const delivered = settleReplies(state, now);
+        if (delivered.length) {
+          save(); onChange();
+          notify(`${taskById(delivered[0].taskId).partner} replied · +${delivered[0].result.gold} gold`);
+          if ((isOpen() || writingEmbedded) && (view === 'journal' || (view === 'writing' && (!selected || delivered.some((a) => a.taskId === selected))))) render();
+          // Re-enable dependent actions without discarding text entered while waiting.
+          body.querySelectorAll('[data-action="review"], #writing-form button[type="submit"]').forEach((el) => { el.disabled = false; });
+        }
+        const pending = pendingAttempt(state);
+        $('quest-status').textContent = pending ? 'Partner reviewing your reply…' : delivered.length ? 'Partner reply received · Open Journal' : `First firm day · ${returnedTasks(state).length}/6 replies · Open Journal`;
+      }
+      return { open, close, isOpen, tick, embedWriting, releaseWriting };
+    }
+    Object.assign(exports, { escapeHtml, createApprenticeshipUI });
+  },
+  "js/ui/appearance.js": (exports, require) => {
+    const { PAL } = require("js/engine/palette.js");
+    const { Actor } = require("js/entities/actor.js");
+    const { HAIR_STYLES, HAIR_COLORS, FACIAL_HAIR, EYE_COLORS, SKIN_COLORS, TIE_COLORS, SUIT_COLORS, SHIRT_COLORS, FACE_SHAPES, OUTFITS, appearanceLook, appearanceDescription, normalizeAppearance } = require("js/data/appearance.js");
+
+    // One editor for new attorneys and existing characters. No gender-specific limits.
+    function mountAppearanceEditor(container, { prefix, read, equipped = () => [], onChange }) {
+      const events = new AbortController();
+      let category = 'hair', pose = 'stand', facing = 0, frame = 0, disposed = false;
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const groups = {
+        hair: { label: 'Hair & grooming', description: 'Choose a silhouette, then make the color your own.', fields: [
+          { key: 'hairStyle', label: 'Hair style', choices: HAIR_STYLES },
+          { key: 'hair', label: 'Hair color', colors: PAL.hair, names: HAIR_COLORS },
+          { key: 'facialHair', label: 'Facial hair', choices: FACIAL_HAIR },
+        ] },
+        face: { label: 'Face & build', description: 'Human proportions, distinct features, and options open to everyone.', fields: [
+          { key: 'faceShape', label: 'Face shape', choices: FACE_SHAPES },
+          { key: 'skin', label: 'Skin tone', colors: PAL.skin, names: SKIN_COLORS },
+          { key: 'eye', label: 'Eye color', colors: PAL.eyes, names: EYE_COLORS },
+          { key: 'silhouette', label: 'Build', choices: ['Tailored', 'Relaxed', 'Slim'], values: ['tailored', 'relaxed', 'slim'] },
+          { key: 'glasses', label: 'Glasses', choices: ['Without glasses', 'With glasses'], values: [false, true] },
+        ] },
+        clothes: { label: 'Suit & colors', description: 'Trousers are the default. A skirt suit is available for any attorney.', fields: [
+          { key: 'outfit', label: 'Outfit', choices: OUTFITS.map((item) => item.label), values: OUTFITS.map((item) => item.id) },
+          { key: 'suitColor', label: 'Suit color', colors: PAL.suits, names: SUIT_COLORS, hex: true },
+          { key: 'shirtColor', label: 'Shirt color', colors: PAL.shirts, names: SHIRT_COLORS, hex: true },
+          { key: 'tieColor', label: 'Tie color', colors: PAL.ties, names: TIE_COLORS, hex: true },
+        ] },
+      };
+
+      container.innerHTML = `<div class="appearance-editor"><section class="avatar-stage" aria-label="Attorney preview"><p class="avatar-eyebrow">Your attorney</p><canvas class="avatar-portrait" width="300" height="360" role="img"></canvas><div class="avatar-facing" role="group" aria-label="Preview angle"><button type="button" data-facing="-1" aria-label="View attorney facing left">↶</button><button type="button" data-facing="0" aria-label="View attorney from the front" aria-pressed="true">Front</button><button type="button" data-facing="1" aria-label="View attorney facing right">↷</button></div><div class="avatar-poses" role="group" aria-label="Preview pose"><button type="button" data-pose="stand" aria-pressed="true">Stand</button><button type="button" data-pose="walk">Walk</button><button type="button" data-pose="sit">Sit</button></div><div class="avatar-world-scale"><canvas width="90" height="96" class="avatar-mini" role="img" aria-label="Attorney at game scale"></canvas><p>In-world size<br><span>Same character, every room.</span></p></div></section><section class="appearance-options"><div class="appearance-tabs" role="tablist" aria-label="Appearance categories">${Object.entries(groups).map(([id, group]) => `<button id="${prefix}-tab-${id}" type="button" role="tab" data-category="${id}" aria-controls="${prefix}-options" aria-selected="${id === category}" tabindex="${id === category ? 0 : -1}">${group.label}</button>`).join('')}</div><div id="${prefix}-options" class="appearance-fields" role="tabpanel" aria-labelledby="${prefix}-tab-hair"></div><p class="appearance-status" role="status" aria-live="polite"></p><p class="appearance-footnote">All identity, hair and clothing choices are free. They never change a grade.</p></section></div>`;
+      const fields = container.querySelector('.appearance-fields');
+      const portrait = container.querySelector('.avatar-portrait');
+      const mini = container.querySelector('.avatar-mini');
+
+      function renderFields() {
+        const group = groups[category];
+        fields.setAttribute('aria-labelledby', `${prefix}-tab-${category}`);
+        fields.innerHTML = `<p class="appearance-intro">${group.description}</p>` + group.fields.map((field) => {
+          if (field.choices) return `<div class="appearance-field"><label for="${prefix}-${field.key}">${field.label}</label><div class="appearance-cycle"><button type="button" data-step="-1" data-key="${field.key}" aria-label="Previous ${field.label.toLowerCase()}">‹</button><select id="${prefix}-${field.key}" data-key="${field.key}">${field.choices.map((label, i) => `<option value="${i}">${label}</option>`).join('')}</select><button type="button" data-step="1" data-key="${field.key}" aria-label="Next ${field.label.toLowerCase()}">›</button></div></div>`;
+          return `<fieldset class="appearance-field"><legend>${field.label} <span data-color-name="${field.key}"></span></legend><div class="appearance-colors" role="group" aria-label="${field.label}">${field.colors.map((color, i) => `<button type="button" class="appearance-swatch" style="--swatch:${color}" data-key="${field.key}" data-color="${i}" title="${field.names[i]}" aria-label="${field.label}: ${field.names[i]}" aria-pressed="false"><span aria-hidden="true">✓</span></button>`).join('')}</div></fieldset>`;
+        }).join('');
+        sync();
+      }
+
+      function sync() {
+        const value = normalizeAppearance(read());
+        for (const field of groups[category].fields) {
+          if (field.choices) {
+            const selected = field.values ? field.values.indexOf(value[field.key]) : value[field.key];
+            fields.querySelector(`select[data-key="${field.key}"]`).value = String(selected);
+          } else {
+            const selected = field.hex ? field.colors.indexOf(value[field.key]) : value[field.key];
+            fields.querySelector(`[data-color-name="${field.key}"]`).textContent = field.names[selected];
+            fields.querySelectorAll(`[data-key="${field.key}"]`).forEach((btn) => btn.setAttribute('aria-pressed', Number(btn.dataset.color) === selected ? 'true' : 'false'));
+          }
+        }
+        portrait.setAttribute('aria-label', appearanceDescription(value));
+        draw(performance.now());
+      }
+
+      function draw(now) {
+        const look = appearanceLook(read(), equipped());
+        const actor = new Actor(0, 0, look);
+        actor.facing = facing;
+        if (pose === 'sit') { actor.activity = 'sitting'; actor.look.previewSeat = true; }
+        if (pose === 'walk') actor.path = [{ x: 1, y: 0 }];
+        const time = reducedMotion ? 0.4 : now / 1000;
+        const ctx = portrait.getContext('2d');
+        ctx.clearRect(0, 0, portrait.width, portrait.height);
+        const gradient = ctx.createLinearGradient(0, 0, 0, 360);
+        gradient.addColorStop(0, '#233b3a'); gradient.addColorStop(1, '#3d5248');
+        ctx.fillStyle = gradient; ctx.fillRect(0, 0, 300, 360);
+        ctx.strokeStyle = 'rgba(216,192,138,.22)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.roundRect(30, 18, 240, 320, [110,110,5,5]); ctx.stroke();
+        ctx.fillStyle = '#657263'; ctx.beginPath(); ctx.ellipse(150, 327, 78, 18, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#7c8874'; ctx.beginPath(); ctx.ellipse(150, 319, 78, 17, 0, 0, Math.PI*2); ctx.fill();
+        ctx.save(); ctx.translate(150, 311); ctx.scale(3.6, 3.6);
+        actor.draw(ctx, 0, 0, time, true); ctx.restore();
+        const small = mini.getContext('2d'); small.clearRect(0, 0, mini.width, mini.height);
+        actor.draw(small, 40, 88, time, true);
+      }
+      function animate(now) {
+        if (disposed || !container.isConnected || container.closest('.hidden')) { frame = 0; return; }
+        draw(now);
+        frame = pose === 'walk' && !reducedMotion ? requestAnimationFrame(animate) : 0;
+      }
+      function changed(field, i) {
+        const value = field.choices ? (field.values ? field.values[i] : i) : field.hex ? field.colors[i] : i;
+        const label = field.choices ? field.choices[i] : field.names[i];
+        onChange(field.key, value);
+        container.querySelector('.appearance-status').textContent = `${field.label}: ${label}`;
+        sync();
+      }
+
+      container.addEventListener('change', (event) => {
+        if (!event.target.matches('select[data-key]')) return;
+        const field = groups[category].fields.find((item) => item.key === event.target.dataset.key);
+        if (field) changed(field, Number(event.target.value));
+      }, { signal: events.signal });
+      container.addEventListener('click', (event) => {
+        const btn = event.target.closest('button');
+        if (!btn) return;
+        if (btn.dataset.category) {
+          category = btn.dataset.category;
+          container.querySelectorAll('[data-category]').forEach((tab) => { tab.setAttribute('aria-selected', String(tab === btn)); tab.tabIndex = tab === btn ? 0 : -1; });
+          renderFields();
+        } else if (btn.dataset.facing !== undefined) {
+          facing = Number(btn.dataset.facing);
+          container.querySelectorAll('[data-facing]').forEach((b) => b.setAttribute('aria-pressed', String(b === btn)));
+          draw(performance.now());
+        } else if (btn.dataset.pose) {
+          pose = btn.dataset.pose;
+          container.querySelectorAll('[data-pose]').forEach((b) => b.setAttribute('aria-pressed', String(b === btn)));
+          draw(performance.now());
+          if (!frame && pose === 'walk' && !reducedMotion) frame = requestAnimationFrame(animate);
+        } else if (btn.dataset.key) {
+          const field = groups[category].fields.find((item) => item.key === btn.dataset.key);
+          if (!field) return;
+          if (btn.dataset.step) {
+            const current = Number(fields.querySelector(`select[data-key="${field.key}"]`).value);
+            changed(field, (current + Number(btn.dataset.step) + field.choices.length) % field.choices.length);
+          } else changed(field, Number(btn.dataset.color));
+        }
+      }, { signal: events.signal });
+      container.querySelector('[role="tablist"]').addEventListener('keydown', (event) => {
+        if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+        event.preventDefault(); event.stopPropagation();
+        const tabs = [...container.querySelectorAll('[data-category]')];
+        const index = tabs.findIndex((tab) => tab.dataset.category === category);
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length-1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+        tabs[next].click(); tabs[next].focus();
+      });
+      renderFields();
+      return { draw, destroy() { disposed = true; cancelAnimationFrame(frame); events.abort(); } };
+    }
+    Object.assign(exports, { mountAppearanceEditor });
+  },
+  "js/data/jurisdictions.js": (exports, require) => {
+    // Aggregate place names only, derived from the supplied July 1, 2026 member
+    // jurisdiction list. These are curriculum targets, not verified admissions.
+    const GLOBAL_CURRICULUM = {
+      asOf: '2026-07-01',
+      mission: 'Ethics questions from every jurisdiction where there is a LegalQuant.',
+      regions: [
+        { name: 'Americas', places: ['United States', 'Canada', 'Argentina', 'Uruguay'] },
+        { name: 'Europe', places: ['United Kingdom', 'Ireland', 'France', 'Germany', 'Netherlands', 'Belgium', 'Switzerland', 'Austria', 'Italy', 'Greece', 'Finland', 'Russia'] },
+        { name: 'Middle East & Africa', places: ['United Arab Emirates', 'Israel', 'Turkey'] },
+        { name: 'Asia-Pacific', places: ['Singapore', 'Hong Kong', 'China (mainland)', 'India', 'Malaysia', 'Thailand', 'Australia', 'New Zealand'] },
+      ],
+    };
+    Object.assign(exports, { GLOBAL_CURRICULUM });
+  },
+  "js/data/mail.js": (exports, require) => {
+    function canAccessBarMail(player) { return player.zone === 'office' || player.upgrades.includes('work_phone'); }
+    function scenarioMatchesPack(scenario, pack) {
+      if (pack === 'sqe') return scenario.sourceType === 'sqe-style';
+      if (pack === 'mpre') return scenario.sourceType === 'mpre-style';
+      if (pack === 'juris') return scenario.sourceType === 'lawscape';
+      return true;
+    }
+    function practiceInbox(player, scenarios) {
+      const difficulty = player.casesDone < 5 ? 1 : player.casesDone < 12 ? 2 : 3;
+      const pool = scenarios.filter((scenario) => scenarioMatchesPack(scenario, player.practicePack));
+      const tier = pool.filter((scenario) => scenario.difficulty === difficulty);
+      const eligible = tier.length ? tier : pool;
+      return { eligible, unread: eligible.filter((scenario) => !player.seen.includes(scenario.id)), difficulty, levelLabel: tier.length ? `Level ${difficulty}` : 'All levels' };
+    }
+    function billableMessageOpen({ inGame, visible, mailOpen, messageOpen }) {
+      return inGame && visible && mailOpen && messageOpen;
+    }
+    Object.assign(exports, { canAccessBarMail, scenarioMatchesPack, practiceInbox, billableMessageOpen });
+  },
+  "js/lounge.js": (exports, require) => {
+    const { WHISKEY_SLOW_MS } = require("js/data/work.js");
+
+    const BAR_DRINKS = [
+      { id: 'old-fashioned', name: 'The Reasonable Old Fashioned', cost: 5, note: 'Orange peel, a polished glass, and no pending deadlines.', slows: true },
+      { id: 'wine', name: 'House Red · Reserved Judgment', cost: 5, note: 'Served in stemware by a very precise robot.', slows: true },
+      { id: 'ale', name: 'After-Hours Ale', cost: 3, note: 'The office is closed. Your walking pace takes a short break.', slows: true },
+      { id: 'water', name: 'Sparkling water', cost: 0, note: 'Complimentary. No movement or Ethics effect.', slows: false },
+    ];
+
+    function orderBarDrink(player, id, now = Date.now()) {
+      const drink = BAR_DRINKS.find((item) => item.id === id);
+      if (!drink || player.zone !== 'sidebar' || player.runStatus === 'ended' || player.ethics <= 0) throw new Error('Drinks are served in The Sidebar during an active run.');
+      if (player.apprenticeship.attempts.some((a) => a.status === 'pending')) throw new Error('Wait for your partner reply before making purchases.');
+      if (player.gold < drink.cost) throw new Error(`You need ${drink.cost} gold for that drink.`);
+      player.gold -= drink.cost;
+      player.sidebarDrinks = (player.sidebarDrinks || 0) + 1;
+      // Each alcoholic drink refreshes the short effect; it never damages Ethics.
+      if (drink.slows) player.slowUntil = Math.max(player.slowUntil || 0, now + WHISKEY_SLOW_MS);
+      return { drink, ethicsDamage: 0, slowUntil: player.slowUntil || 0 };
+    }
+
+    function movementMultiplier(player, now = Date.now()) { return player.slowUntil > now ? 0.5 : 1; }
+
+    const BOARD_KEY = 'lawscape_billable_board_v1';
+    let sessionBoard = [];
+    let unsavedEntries = [];
+    function validEntry(entry) {
+      return entry && typeof entry.runId === 'string' && typeof entry.name === 'string'
+        && Number.isFinite(entry.billableMs) && entry.billableMs >= 0 && Number.isFinite(entry.endedAt);
+    }
+    function readBillableBoard() {
+      try {
+        const saved = localStorage.getItem(BOARD_KEY);
+        const raw = saved === null ? sessionBoard : JSON.parse(saved);
+        if (Array.isArray(raw)) sessionBoard = raw.filter(validEntry);
+      } catch { /* retain the session copy if storage is unavailable */ }
+      const unique = new Map([...sessionBoard,...unsavedEntries].map((entry) => [entry.runId,entry]));
+      return [...unique.values()].sort((a,b) => b.billableMs-a.billableMs || a.endedAt-b.endedAt).slice(0,10);
+    }
+    function archiveDisbarredRun(player, now = Date.now()) {
+      if (player.ethics > 0 && player.runStatus !== 'ended') return { recorded: false, persisted: false };
+      const entries = readBillableBoard();
+      if (entries.some((entry) => entry.runId === player.runId)) return { recorded: false, duplicate: true };
+      if (!player.runId || !Number.isFinite(player.billableStudyMs) || player.billableStudyMs < 0) return { recorded: false, persisted: false };
+      sessionBoard = [...entries, { runId: player.runId, name: String(player.name).slice(0,80), billableMs: Math.floor(player.billableStudyMs), endedAt: now }]
+        .sort((a,b) => b.billableMs-a.billableMs || a.endedAt-b.endedAt).slice(0,10);
+      try { localStorage.setItem(BOARD_KEY,JSON.stringify(sessionBoard)); unsavedEntries=[]; return { recorded: true, persisted: true }; }
+      catch { unsavedEntries=[...sessionBoard]; return { recorded: true, persisted: false }; }
+    }
+    Object.assign(exports, { BAR_DRINKS, orderBarDrink, movementMultiplier, readBillableBoard, archiveDisbarredRun });
+  },
+  "js/data/sidebar.js": (exports, require) => {
+    // Room/topic IDs are stable attachment points for the future room service.
+    // No networking, fabricated presence, agent execution or chat transport exists here.
+    const SIDEBAR_ROOM = { id: 'sidebar', title: 'The Sidebar', mode: 'local-preview', participantLimit: 10 };
+    const SIDEBAR_TOPICS = [
+      { id: 'commons', label: 'The commons', prompt: 'Meet the other attorneys and introduce the work you enjoy practicing.' },
+      { id: 'evidence', label: 'Evidence table', prompt: 'Compare how you checked a synthetic file. Mark spoilers and cite the exercise passage.' },
+      { id: 'writing', label: 'Writing table', prompt: 'Trade ideas for a clearer partner update and more useful next steps.' },
+      { id: 'agents', label: 'AI & agents table', prompt: 'Discuss checking AI work. In the future pilot, approved AI agents will be clearly labeled and controlled by their owners.' },
+    ];
+
+    function sidebarTopic(id) { return SIDEBAR_TOPICS.find((topic) => topic.id === id) || SIDEBAR_TOPICS[0]; }
+    function saveSidebarDraft(player, topicId, text) {
+      const topic = sidebarTopic(topicId);
+      player.sidebar.topic = topic.id;
+      player.sidebar.drafts[topic.id] = String(text).slice(0, 500);
+      return { status: 'local-draft', topic: topic.id, text: player.sidebar.drafts[topic.id] };
+    }
+    Object.assign(exports, { SIDEBAR_ROOM, SIDEBAR_TOPICS, sidebarTopic, saveSidebarDraft });
   },
   "js/data/ethics.js": (exports, require) => {
     // BarMail ethics scenarios — progressive professional-responsibility practice.
@@ -7239,8 +8631,8 @@
         desc: 'Maybe this will cheer Liz up. Adds greenery and slightly improves her mood.' },
       { id: 'paralegal', name: 'Paralegal Upgrade — Riley Readsalot', cost: 2000,
         desc: 'Riley halves Ethics damage from wrong answers. With the treatise shelf, Riley can research a relevant-rule hint for 100 gold.' },
-      { id: 'office_window', name: 'Office Upgrade', cost: 2000,
-        desc: 'You convince the partners to give you a window. It is a tiny porthole, but it is yours.' },
+      { id: 'work_phone', name: 'Work Phone', cost: 2000,
+        desc: 'Open the full BarMail inbox anywhere: ethics practice, writing assignments, and partner replies. Jim can now find you at the bar.' },
       { id: 'artwork', name: 'Artwork', cost: 2000,
         desc: 'A single black dot on a white canvas adds unmistakable warmth to the office.' },
     ];
@@ -7251,7 +8643,7 @@
       { id: 'coffee', name: 'Coffee Machine', cost: 500,
         desc: 'Drink a cup to restore 2 Ethics. Clarity in a cup.' },
       { id: 'wardrobe_rack', name: 'Wardrobe Rack', cost: 160,
-        desc: 'Unlocks suit color changes at the wardrobe.' },
+        desc: 'Adds a brass rail with displayed suits to your apartment wardrobe. All appearance colors are available without this upgrade.' },
       { id: 'homedesk', name: 'Clock', cost: 260,
         desc: 'Adds a wall clock. Keeping a healthy sleep schedule makes bed rest restore +10 more Ethics.' },
       { id: 'kitchen', name: 'Kitchen Upgrade', cost: 400,
@@ -8578,7 +9970,7 @@
     // PLAYER may choose to open (and can edit before submitting), preserving the
     // game's no-backend, no-tracking promise.
 
-    const GAME_VERSION = '0.1.0-beta';
+    const GAME_VERSION = '0.5.0-global-preview';
     const PROJECT_REPO_URL = 'https://github.com/joelakaufmann-lgtm/lawscape';
     const PROJECT_ISSUES_URL = `${PROJECT_REPO_URL}/issues`;
 

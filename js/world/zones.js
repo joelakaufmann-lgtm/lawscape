@@ -1,5 +1,5 @@
 // Zone definitions: floor tiles, props, portals, NPCs, and interaction nodes.
-// The world is an upgradeable office suite, apartment, and an empty courtroom.
+// The world is an office suite, apartment, courtroom and future social lounge.
 // Office portals lead to the partners' offices and conference room.
 //
 // Tile chars: 'w' wood  'r' rug  'x' void (never walkable)
@@ -24,6 +24,7 @@ export const ZONES = {
       { type: 'desk', x: 6, y: 1,
         tier: () => (hasUpgrade('subscription') ? 1 : 0),
         monitors: () => (hasUpgrade('monitor') ? 2 : 1),
+        phone: () => hasUpgrade('work_phone'),
         interact: { label: 'Your Computer — BarMail', action: 'email' } },
       { type: 'caseboard', x: 2, y: 1,
         interact: { label: 'Case Board — Your Record', action: 'record' } },
@@ -39,7 +40,6 @@ export const ZONES = {
       { type: 'officechair', x: 3, y: 8, visible: () => hasUpgrade('liz_chair') },
       { type: 'plant', x: 1, y: 6, visible: () => hasUpgrade('houseplants') },
       { type: 'plant', x: 4, y: 1, visible: () => hasUpgrade('houseplants') },
-      { type: 'porthole', x: 0, y: 6, visible: () => hasUpgrade('office_window') },
       { type: 'dotpainting', x: 8, y: 0, visible: () => hasUpgrade('artwork') },
     ],
     portals: [
@@ -153,7 +153,7 @@ export const ZONES = {
   // --------------------------------------------------------------- COURTROOM
   courtroom: {
     id: 'courtroom',
-    name: 'Courtroom — No Matters on Calendar',
+    name: 'Courtroom — Derek Balam on Duty',
     w: 13, h: 11,
     walls: 'marble',
     spawn: { x: 6, y: 9 },
@@ -162,7 +162,7 @@ export const ZONES = {
       return 'M';
     },
     props: [
-      { type: 'judgebench', x: 5, y: 1 },
+      { type: 'judgebench', x: 5, y: 1, interact: { label: 'Sleeping AI Judge — Court Not in Session', action: 'judge' } },
       { type: 'witnessstand', x: 2, y: 3 },
       { type: 'clerkcounter', x: 9, y: 3 },
       { type: 'counseltable', x: 3, y: 6 },
@@ -172,9 +172,51 @@ export const ZONES = {
       { type: 'bench', x: 8, y: 8 },
     ],
     portals: [
-      { x: 6, y: 10, label: 'Leave the Empty Courtroom', travel: true },
+      { x: 6, y: 10, label: 'Leave the Courtroom', travel: true },
     ],
-    npcs: [],
+    npcs: [
+      { id: 'derek_balam', name: 'Derek Balam, Bailiff', x: 10, y: 5,
+        look: { suit: '#1f3a5f', shirt: '#c8d8e6', tie: '#34363c', skin: 3, hair: 6, hairStyle: 6, eye: 0, facialHair: 2, faceShape: 1, silhouette: 'relaxed', outfit: 'trousers', badge: true },
+        icon: 'dot', talk: 'bailiff' },
+    ],
+  },
+
+  // --------------------------------------------------------------- THE SIDEBAR
+  sidebar: {
+    id: 'sidebar', name: 'The Sidebar — Local Lounge',
+    w: 14, h: 12, walls: 'green', spawn: { x: 7, y: 10 },
+    tile(x, y) {
+      if (inRect(x, y, 8, 4, 12, 10) || inRect(x, y, 1, 7, 5, 10)) return 'r';
+      return 'w';
+    },
+    props: [
+      { type: 'sidebarback', x: 2, y: 1 },
+      { type: 'sidebarcounter', x: 2, y: 3,
+        interact: { label: 'B.A.R.T. — Order a Drink', action: 'bartender' } },
+      { type: 'barstool', x: 2, y: 5, interact: { label: 'Bar Stool — Take a Seat', action: 'sidebar_sit' } },
+      { type: 'barstool', x: 4, y: 5, interact: { label: 'Bar Stool — Take a Seat', action: 'sidebar_sit' } },
+      { type: 'barstool', x: 6, y: 5, interact: { label: 'Bar Stool — Take a Seat', action: 'sidebar_sit' } },
+      { type: 'topictable', x: 9, y: 4, label: 'EVIDENCE', topic: 'evidence',
+        interact: { label: 'Evidence Table', action: 'sidebar_chat' } },
+      { type: 'clientchair', x: 12, y: 4 },
+      { type: 'topictable', x: 9, y: 8, label: 'AI & AGENTS', topic: 'agents',
+        interact: { label: 'AI & Agents Table', action: 'sidebar_chat' } },
+      { type: 'clientchair', x: 12, y: 8 },
+      { type: 'topictable', x: 2, y: 8, label: 'WRITING', topic: 'writing',
+        interact: { label: 'Writing Table', action: 'sidebar_chat' } },
+      { type: 'clientchair', x: 5, y: 8 },
+      { type: 'scoreboard', x: 10, y: 1,
+        interact: { label: 'Billable Hours — High Score Board', action: 'high_scores' } },
+      { type: 'plant', x: 1, y: 6 },
+      { type: 'plant', x: 12, y: 2 },
+      { type: 'lamppost', x: 1, y: 10 },
+    ],
+    portals: [{ x: 7, y: 11, label: 'Leave The Sidebar', travel: true }],
+    npcs: [
+      { id: 'sidebar_host', name: 'B.A.R.T., Robotic Butler & Bartender', x: 5, y: 2,
+        look: { robotButler: true },
+        icon: 'dot', talk: 'sidebar_host' },
+    ],
   },
 
   // ---------------------------------------------------------------- APARTMENT
@@ -198,7 +240,7 @@ export const ZONES = {
       { type: 'fridge', x: 7, y: 1, visible: () => hasUpgrade('kitchen') },
       { type: 'coffeemachine', x: 8, y: 2, owned: () => hasUpgrade('coffee'),
         interact: { label: 'Coffee Machine', action: 'flavor_coffee' } },
-      { type: 'wardrobe', x: 1, y: 5, interact: { label: 'Wardrobe', action: 'wardrobe' } },
+      { type: 'wardrobe', x: 1, y: 5, expanded: () => hasUpgrade('wardrobe_rack'), interact: { label: 'Wardrobe', action: 'wardrobe' } },
       { type: 'cabinet', x: 1, y: 4,
         interact: { label: 'Furniture Catalog', action: 'shop_apartment' } },
       { type: 'wallclock', x: 6, y: 0, visible: () => hasUpgrade('homedesk') },

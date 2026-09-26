@@ -21,9 +21,14 @@ export const PAL = {
   grassDark: '#5a7c49',
   water: '#5b87a6',
   skin: ['#f2d6b3', '#e8c39e', '#d4a373', '#c68e5f', '#a06a42', '#8d5a3b', '#5f3d28'],
-  hair: ['#2b2b33', '#6b4529', '#b8912f', '#9a958c', '#8c3b2e', '#e8e2d4'],
+  // Append shades so existing saved color indices retain their meaning.
+  hair: ['#2b2b33', '#6b4529', '#b8912f', '#9a958c', '#8c3b2e', '#e8e2d4',
+    '#3a261d', '#8a5434', '#c59b63', '#b96b3d', '#d0ab85', '#69645e',
+    '#4b4650', '#1d2c38', '#592d3b', '#334763', '#715278', '#ad7789'],
   eyes: ['#4a3728', '#3b6ea5', '#4a7c59', '#8c6b3f', '#7a8288', '#b3541e'],
   suits: ['#1f3a5f', '#3a3a42', '#6e2436', '#3f5d4b', '#8b5e3c'],
+  ties: ['#6e2436', '#253d65', '#3f6252', '#a68238', '#66537d', '#2f6670', '#b18672', '#34363c', '#bac3d2', '#ece1c5', '#944b3f', '#486886'],
+  shirts: ['#f3eee1', '#c8d8e6', '#d4c6d8', '#e2c9c1', '#d4d9d0', '#363b45'],
 };
 
 // Lighten (amt > 0) or darken (amt < 0) a hex color. Used to fake 3-tone flat shading.

@@ -18,6 +18,10 @@ const requiredIds = [
   'btn-mail', 'btn-record', 'btn-travel', 'btn-help', 'email', 'panel',
   'dialogue', 'gameover', 'work-status', 'email-hint', 'email-pack', 'email-hr-open',
   'stat-billable',
+  'apprenticeship', 'desk-body', 'desk-close', 'btn-journal', 'quest-status', 'email-writing',
+  'c-appearance', 'c-gender', 'c-name', 'room-action',
+  'email-inbox', 'email-inbox-open', 'email-writing-body', 'email-back',
+  'room-tools', 'room-service', 'room-board', 'movement-status',
 ];
 
 for (const id of requiredIds) {

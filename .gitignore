@@ -5,3 +5,9 @@ dist/
 Ethics Agents/
 node_modules/
 npm-debug.log*
+_to_delete/
+media/teaser/
+media/lawscape-teaser-15s.mp4
+media/lawscape-teaser-poster.jpg
+media/release-0.5/work/
+release/

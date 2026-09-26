@@ -5,19 +5,40 @@
 // damage it, two correct answers in a row heal it, and at 0 you are disbarred
 // and the save is wiped.
 
-const SAVE_KEY = 'lawscape_save_v2';
+import { freshApprenticeship } from './apprenticeship.js';
+import { normalizeAppearance } from './data/appearance.js';
+
+const SAVE_KEY = 'lawscape_save_v2'; // Preserve the legacy origin/key on migration.
+
+function newRunId() {
+  return globalThis.crypto?.randomUUID?.() || `run-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
 
 export const BASE_MAX_ETHICS = 100;
 export const MONEYBAGS_MAX_ETHICS = 50;
 
 export function freshState() {
   return {
+    schemaVersion: 5,
+    runId: newRunId(),
+    runStatus: 'active',
+    apprenticeship: freshApprenticeship(),
+    silhouette: 'tailored',
+    glasses: false,
+    facialHair: 0,
+    faceShape: 0,
+    outfit: 'trousers',
+    tieColor: '#6e2436',
+    shirtColor: '#f3eee1',
+    sidebar: { topic: 'commons', drafts: {} },
+    sidebarDrinks: 0,
+    slowUntil: 0,
     name: 'Alex Barrister',
     gender: 'nonbinary',   // 'male' | 'female' | 'nonbinary'
     suitColor: '#1f3a5f',
     skin: 0,
     hair: 0,               // hair color index (PAL.hair)
-    hairStyle: 0,          // 0 short, 1 long, 2 ponytail, 3 bun, 4 curly, 5 bald
+    hairStyle: 0,          // stable style index; see data/appearance.js
     eye: 0,                // eye color index (PAL.eyes)
     gold: 0,
     ethics: BASE_MAX_ETHICS,
@@ -70,13 +91,15 @@ export function healEthics(n) {
 // Returns true if the player just got disbarred.
 export function damageEthics(n) {
   state.ethics = Math.max(0, state.ethics - n);
+  if (state.ethics <= 0) state.runStatus = 'ended';
   return state.ethics <= 0;
 }
 
 export function save() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(state));
-  } catch { /* storage unavailable (private mode) — play session-only */ }
+    return true;
+  } catch { return false; /* storage unavailable — play session-only */ }
 }
 
 export function hasSave() {
@@ -88,8 +111,26 @@ export function load() {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return false;
     const data = JSON.parse(raw);
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+    if (data.schemaVersion > 5) return false;
     replaceState(Object.assign(freshState(), data));
+    state.schemaVersion = 5;
+    Object.assign(state, normalizeAppearance(state));
+    state.sidebar = data.sidebar && typeof data.sidebar === 'object' && !Array.isArray(data.sidebar) ? data.sidebar : { topic: 'commons', drafts: {} };
+    if (!state.sidebar.drafts || typeof state.sidebar.drafts !== 'object' || Array.isArray(state.sidebar.drafts)) state.sidebar.drafts = {};
+    state.apprenticeship = Object.assign(freshApprenticeship(), data.apprenticeship || {});
+    for (const key of ['attempts', 'requests', 'cosmetics', 'equipped']) {
+      if (!Array.isArray(state.apprenticeship[key])) state.apprenticeship[key] = [];
+    }
+    for (const key of ['drafts', 'reviews', 'reviewDrafts']) {
+      if (!state.apprenticeship[key] || typeof state.apprenticeship[key] !== 'object' || Array.isArray(state.apprenticeship[key])) state.apprenticeship[key] = {};
+    }
+    if (!Array.isArray(state.upgrades)) state.upgrades = [];
+    state.upgrades = [...new Set(state.upgrades.map((id) => id === 'office_window' ? 'work_phone' : id))];
+    if (!Number.isFinite(state.slowUntil) || state.slowUntil < 0) state.slowUntil = 0;
+    if (!Array.isArray(state.seen)) state.seen = [];
     state.ethics = Math.min(state.ethics, maxEthics());
+    if (state.ethics <= 0) state.runStatus = 'ended';
     return true;
   } catch { return false; }
 }

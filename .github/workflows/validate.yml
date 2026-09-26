@@ -2,7 +2,7 @@ name: Validate
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "codex/**"]
   pull_request:
   workflow_dispatch:
 
@@ -21,3 +21,7 @@ jobs:
           node-version: "22"
       - name: Run tests
         run: npm test
+      - name: Build portable site
+        run: npm run build
+      - name: Validate deployable package
+        run: npm run release:check

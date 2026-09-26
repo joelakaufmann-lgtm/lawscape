@@ -193,7 +193,7 @@ export class WorldRenderer {
   drawIndicator(def, s, t) {
     const { ctx } = this;
     if (!def.icon) return;
-    const y = s.y - 58 - Math.sin(t * 2.5) * 3;
+    const y = s.y - 91 - Math.sin(t * 2.5) * 3;
     if (def.icon === 'task') {
       ctx.fillStyle = PAL.brass;
       ctx.beginPath(); ctx.arc(s.x, y, 9, 0, Math.PI * 2); ctx.fill();
