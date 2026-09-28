@@ -2,24 +2,14 @@
 
 import { cp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { SITE_FILES, listFiles } from './site-files.mjs';
 
 const projectRoot = path.resolve(import.meta.dirname, '..');
 const output = path.join(projectRoot, 'dist');
 const staging = path.join(projectRoot, '.dist-staging');
-const files = [
-  'index.html',
-  'LICENSE',
-  'MPRE_Associate_Email_Scenarios.md',
-  'MPRE_Associate_Email_Scenarios_Additional_20.md',
-  'MPRE_Associate_Email_Scenarios_Additional_41.md',
-  'SQE_Ethics_Email_Scenarios_UK.md',
-  'California References',
-  'README.md',
-  '.nojekyll',
-  'css/style.css',
-  'js/lawscape.bundle.js',
-  'assets/og-lawscape.png',
-];
+const files = SITE_FILES;
 
 await rm(staging, { recursive: true, force: true });
 await mkdir(staging, { recursive: true });
@@ -44,6 +34,21 @@ if (owner && repository) {
 }
 await writeFile(indexPath, indexHtml);
 
+const { version } = JSON.parse(await readFile(path.join(projectRoot, 'package.json'), 'utf8'));
+let commit = process.env.GITHUB_SHA || null;
+if (!commit) {
+  try { commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: projectRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); }
+  catch { /* Source archives need no Git checkout to build. */ }
+}
+const inventory = [];
+for (const file of await listFiles(staging)) {
+  const bytes = await readFile(path.join(staging, file));
+  inventory.push({ path: file, bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') });
+}
+await writeFile(path.join(staging, 'release-manifest.json'), JSON.stringify({
+  version, commit, files: inventory,
+}, null, 2) + '\n');
+
 await rm(output, { recursive: true, force: true });
 await rename(staging, output);
-console.log(`Packaged ${files.length} browser files in dist/.`);
+console.log(`Packaged ${inventory.length} public files plus release-manifest.json in dist/ (v${version}).`);

@@ -11,14 +11,16 @@ jurisdiction where there is a LegalQuant**.
 and an original fictional firm apprenticeship. The [global curriculum list](docs/JURISDICTIONS.md)
 contains 27 geographic starting points; those are future targets, not 27 live packs.
 
-[Watch the new captioned demo](media/release-0.5/lawscape-global-demo.mp4) ·
-[Browse the screenshots and demo gallery](media/release-0.5/index.html) ·
+[Watch the 30-second demo](media/lawscape-demo-30s.mp4) ·
+[Browse the screenshots](https://github.com/joelakaufmann-lgtm/lawscape/tree/main/media/demo-30s/captures) ·
 [Build and test evidence](docs/BUILD.md) · [Deployment guide](docs/DEPLOYMENT.md)
 
-![The LawScape office, with detailed workstations and a customizable attorney](media/release-0.5/screenshots/03-office.png)
+![The LawScape office, with detailed workstations and a customizable attorney](media/demo-30s/captures/office-full.png)
 
-This branch is a release candidate. The new build has not been deployed to the
-public Pages site; publication requires the owner's final approval.
+**[Play LawScape on GitHub Pages](https://joelakaufmann-lgtm.github.io/lawscape/).**
+The title screen identifies the game version; the site's
+[release manifest](https://joelakaufmann-lgtm.github.io/lawscape/release-manifest.json)
+records the deployed commit and package checksums.
 
 ## Global curriculum preview · 0.5.0
 
@@ -90,7 +92,7 @@ mode with questions from around the world are on the [roadmap](ROADMAP.md).
 
 ## Play now
 
-[Existing public demo](https://joelakaufmann-lgtm.github.io/lawscape/) — may be an older version until this release is approved and deployed.
+[Play the public game](https://joelakaufmann-lgtm.github.io/lawscape/).
 
 Double-click [`index.html`](index.html). It launches directly in a modern
 browser—no installation or local server is required.
