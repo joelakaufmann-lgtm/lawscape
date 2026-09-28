@@ -1,3 +1,5 @@
+> Historical design/build record. This is not the current player guide. See [How to play](../PLAYING.md).
+
 # Lawscape local apprenticeship · Build notes
 
 

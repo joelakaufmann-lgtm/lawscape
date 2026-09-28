@@ -1,3 +1,5 @@
+> Historical design/build record. This is not the current player guide. See [How to play](../PLAYING.md).
+
 # LawScape Browser Game Plan
 
 ## 1. Concept

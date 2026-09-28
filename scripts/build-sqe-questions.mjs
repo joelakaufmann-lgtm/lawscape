@@ -4,7 +4,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const projectRoot = path.resolve(import.meta.dirname, '..');
-const sourceName = 'SQE_Ethics_Email_Scenarios_UK.md';
+const sourceName = 'content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md';
 const sourcePath = path.join(projectRoot, sourceName);
 const outputPath = path.join(projectRoot, 'js/data/sqe.js');
 

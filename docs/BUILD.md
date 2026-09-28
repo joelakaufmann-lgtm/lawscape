@@ -1,4 +1,4 @@
-# LawScape 0.5.0 package verification
+# LawScape 0.6.0 package verification
 
 Run from a checkout with Node.js 22 or later; no npm dependencies are required:
 
@@ -8,8 +8,8 @@ npm test
 npm run release:check
 ```
 
-The 42 game tests cover avatar rendering and migration, seven zones and their
-interactions, 118 scenarios, mail and study time, six writing assignments, two
+The game tests cover avatar rendering and migration, seven zones and their
+interactions, 171 scenarios, mail and study time, six writing assignments, two
 six-document synthetic matters, the capstone, persistence, rewards and resets.
 The static check verifies the browser entry point and generated bundle.
 
@@ -32,6 +32,8 @@ checkout: the build uses the committed rule snapshot when those sources are
 absent. This verifies software and package integrity, not the currentness of
 the educational legal content. Multiplayer, live AI grading and hearings remain
 planned; the current release saves progress in each player's browser.
+
+New pack tests also cover filtering, saved selections, generated answer keys and stable legacy content.
 
 Before publication, also exercise the packaged build in a fresh browser:
 create an attorney, visit all seven zones, answer BarMail, open the journal

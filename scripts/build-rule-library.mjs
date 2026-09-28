@@ -12,7 +12,7 @@ const arizonaPath = path.join(
   projectRoot,
   'Ethics Agents/ethics-check-az/references/rpc.md',
 );
-const californiaDir = path.join(projectRoot, 'California References');
+const californiaDir = path.join(projectRoot, 'content/references/california');
 const californiaPath = path.join(californiaDir, 'rpc.md');
 const outputPath = path.join(projectRoot, 'js/data/rules.js');
 
@@ -194,27 +194,27 @@ async function buildRuleLibrary() {
       {
         title: 'California Rules of Professional Conduct',
         description: 'Full 2023 rule text and cross-reference tables.',
-        href: 'California References/rpc.md',
+        href: 'content/references/california/rpc.md',
       },
       {
         title: 'COPRAC Formal Opinions Index',
         description: 'Searchable navigation index for the bundled California ethics opinions.',
-        href: 'California References/opinions-index.md',
+        href: 'content/references/california/opinions-index.md',
       },
       {
         title: 'COPRAC Formal Opinions — Full Text',
         description: 'Complete local opinion corpus from 1965 through Opinion 2024-209.',
-        href: 'California References/opinions-full.md',
+        href: 'content/references/california/opinions-full.md',
       },
       {
         title: 'Admissions, Discipline, Trust Accounts, IOLTA, and CLE',
         description: 'Reference pointer to the controlling California sources.',
-        href: 'California References/admission-discipline.md',
+        href: 'content/references/california/admission-discipline.md',
       },
       {
         title: 'State Bar Disciplinary Procedure',
         description: 'Reference pointer and procedural framework for State Bar Court matters.',
-        href: 'California References/disciplinary-procedure.md',
+        href: 'content/references/california/disciplinary-procedure.md',
       },
     ],
   },

@@ -5,6 +5,7 @@ import { Actor } from '../entities/actor.js';
 import { appearanceLook } from '../data/appearance.js';
 import { mountAppearanceEditor } from './appearance.js';
 import { GLOBAL_CURRICULUM } from '../data/jurisdictions.js';
+import { PRACTICE_PACKS } from '../data/practice-packs.js';
 
 const $ = (id) => document.getElementById(id);
 export function escapeHtml(value) {
@@ -18,7 +19,7 @@ function linkedEvidence(text, sources) {
 const button = (text, action, value = '', extra = '') => `<button type="button" data-action="${action}" data-value="${e(value)}" ${extra}>${e(text)}</button>`;
 const note = (text) => `<p class="desk-note">${e(text)}</p>`;
 
-export function createApprenticeshipUI({ beforeOpen, onChange, onLegacy, onWriting, onWritingExit, notify }) {
+export function createApprenticeshipUI({ beforeOpen, onChange, onPractice, onWriting, onWritingExit, notify }) {
   const modal = $('apprenticeship'), body = $('desk-body');
   const home = body.parentElement;
   let writingEmbedded = false;
@@ -190,10 +191,11 @@ export function createApprenticeshipUI({ beforeOpen, onChange, onLegacy, onWriti
   }
 
   function renderFirm(prefill = '') {
-    body.innerHTML = section('Your firm · Jurisdictions', 'Where will your firm practice?', 'Start in the fictional State of Juris. Request a real jurisdiction for a future reviewed firm pack.')
-      + `<section class="global-curriculum" aria-labelledby="global-mission"><span class="desk-kicker">A worldwide ambition · future curriculum</span><h3 id="global-mission">${e(GLOBAL_CURRICULUM.mission)}</h3><p>A new way to learn legal ethics: inhabit the firm, face a dilemma, and discover how the answer depends on the jurisdiction.</p><div class="global-regions">${GLOBAL_CURRICULUM.regions.map((region) => `<article><h4>${e(region.name)}</h4><p>${region.places.map(e).join(' · ')}</p></article>`).join('')}</div><p class="desk-note">27 geographic entries from the supplied LegalQuants community list (${GLOBAL_CURRICULUM.asOf}). A starting point, not a complete or current membership census. These are future curriculum targets, not 27 playable packs. Legal systems within a country need separate review.</p><p class="global-available"><strong>Play today:</strong> US MPRE-style and England &amp; Wales SQE-style questions, plus the fictional State of Juris apprenticeship. Future packs need local source review and authored questions.</p></section>`
-      + `<div class="desk-card-grid">${FIRM_PACKS.map((pack) => `<article class="desk-card"><span class="desk-badge">${e(pack.status)}</span><h3>${e(pack.label)}</h3><p>${e(pack.note)}</p>${pack.id === 'juris' ? '<p class="desk-active">✓ Your active office</p>' : button('Request this jurisdiction', 'request-prefill', pack.label)}</article>`).join('')}</div>`
-      + button('Open legacy exam-style BarMail', 'legacy')
+    body.innerHTML = section('Your firm · Jurisdictions', 'Choose your practice', 'Open a question pack in BarMail. Without a Work Phone, this takes you to your office computer.')
+      + `<div class="desk-card-grid">${PRACTICE_PACKS.map(pack => `<article class="desk-card"><span class="desk-badge">${pack.count} questions · Playable</span><h3>${e(pack.label)}</h3><p>${e(pack.note)}</p>${button('Play ' + pack.label, 'practice-pack', pack.id)}</article>`).join('')}</div>`
+      + note('Unofficial educational questions with authored feedback. California and New York source checks: September 27, 2026. These question packs are separate from a full jurisdiction-specific firm curriculum.')
+      + `<h3 class="desk-subheading">Your fictional firm apprenticeship</h3><p>State of Juris office policies govern six writing assignments, two synthetic files and one capstone. No real jurisdiction is implied.</p>${button('Open your journal', 'journal')}`
+      + `<details class="desk-disclosure"><summary>Future firm curricula and worldwide expansion</summary><p>${e(GLOBAL_CURRICULUM.mission)}</p><div class="global-regions">${GLOBAL_CURRICULUM.regions.map(region => `<article><h4>${e(region.name)}</h4><p>${region.places.map(e).join(' · ')}</p></article>`).join('')}</div><p>These are future targets. Canada is planned with province-specific review. A country may contain several legal systems.</p><div class="desk-card-grid">${FIRM_PACKS.filter(pack => pack.id !== 'juris').map(pack => `<article class="desk-card"><h4>${e(pack.label)} firm curriculum</h4><p>${e(pack.status)} · ${e(pack.note)}</p>${button('Request this curriculum', 'request-prefill', pack.label)}</article>`).join('')}</div></details>`
       + `<form id="jurisdiction-form" class="request-form"><h3>Put a jurisdiction on the wish list</h3><p>Use an exact legal system, such as a U.S. state, England & Wales, Scotland or Northern Ireland. No real client facts or private documents.</p><label class="desk-label" for="request-label">Jurisdiction</label><input id="request-label" name="label" maxlength="80" required value="${e(prefill)}"><label class="desk-label" for="request-topic">What would you like to practice?</label><textarea id="request-topic" name="topic" maxlength="500" rows="2" required></textarea><label class="desk-label" for="request-help">Optional reviewer offer or public-source links</label><textarea id="request-help" name="help" maxlength="500" rows="2"></textarea><p class="desk-note">This saves a local request draft. You can then review it on GitHub and choose whether to submit it publicly. Nothing is sent automatically.</p><p id="request-error" class="desk-error" role="alert"></p><button type="submit">Save request locally</button></form>`
       + `<h3 class="desk-subheading">Your local request drafts</h3>${state.apprenticeship.requests.length ? state.apprenticeship.requests.map((request) => `<article class="desk-card"><h4>${e(request.label)}</h4><p>${e(request.topic)}</p><p class="desk-note">${e(request.status)}</p><a class="desk-link" href="${e(requestIssueUrl(request))}" target="_blank" rel="noopener noreferrer">Review draft on GitHub ↗</a></article>`).join('') : note('No requests saved yet. A repeat request for the same jurisdiction reopens the existing local entry.')}`;
     $('jurisdiction-form').addEventListener('submit', (event) => {
@@ -236,7 +238,7 @@ export function createApprenticeshipUI({ beforeOpen, onChange, onLegacy, onWriti
     if (['journal', 'writing', 'files', 'firm', 'wardrobe'].includes(action)) navigate(action);
     else if (action === 'task') navigate('writing', value);
     else if (action === 'file') navigate('files', value);
-    else if (action === 'legacy') { close(); onLegacy(); }
+    else if (action === 'practice-pack' && PRACTICE_PACKS.some(pack => pack.id === value)) { close(); onPractice(value); }
     else if (action === 'request-prefill') { renderFirm(value); $('request-label').focus(); }
     else if (action === 'revise') {
       const previous = taskAttempts(state, value).at(-1);

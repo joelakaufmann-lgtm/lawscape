@@ -33,6 +33,7 @@
     const { SCENARIOS, STREAK_HEAL } = require("js/data/ethics.js");
     const { OFFICE_UPGRADES, APARTMENT_UPGRADES, bonuses } = require("js/data/upgrades.js");
     const { RULE_LIBRARY } = require("js/data/rules.js");
+    const { PRACTICE_PACKS } = require("js/data/practice-packs.js");
     const { COFFEE_ETHICS_RESTORE, APARTMENT_FOOD_COST, RAMEN_ETHICS_RESTORE, COOKED_MEAL_ETHICS_RESTORE, DOC_REVIEW_CYCLE_MS, DOC_REVIEW_REWARD, LINDA_TIP_COST, RILEY_HINT_COST, WHISKEY_ETHICS_DAMAGE, WHISKEY_SLOW_MS, MONEYBAGS_SAFE_GOLD, MONEYBAGS_ETHICS_DAMAGE, MONEYBAGS_GRACE_PURCHASES, LAWYER_ASSISTANCE_PHONE, LAWYER_ASSISTANCE_URL, formatBillableTime, moneybagsAuditTriggered, rileyHintEligible, wrongAnswerDamage, } = require("js/data/work.js");
     const { GAME_VERSION, HR_CATEGORIES, findHrCategory, hrIssueUrl, hrReportText, } = require("js/data/feedback.js");
 
@@ -58,7 +59,12 @@
     const desk = createApprenticeshipUI({
       beforeOpen: () => { closeEmail(); $('panel').classList.add('hidden'); hideDialogue(); stopDocumentReview(false); player?.stop(); },
       onChange: () => { if (player) player.look = playerLook(); updateHUD(); if (mailMode === 'inbox' && !$('email').classList.contains('hidden')) renderInbox(); },
-      onLegacy: () => { if (inGame) openEmail(); },
+      onPractice: (pack) => {
+        if (!inGame) return;
+        state.practicePack = pack;
+        if (!canAccessBarMail(state)) enterZone('office');
+        save(); openEmail('practice');
+      },
       onWriting: (id) => openEmail('writing', id),
       onWritingExit: (next,id) => { closeEmail(); desk.open(next,id); },
       notify: toast,
@@ -231,7 +237,7 @@
       mail.title = hasUpgrade('work_phone') ? 'Open BarMail on your work phone (B)' : access ? 'Open BarMail on your office computer (B)' : 'Buy the Work Phone to use BarMail outside the office';
       const room = $('room-action');
       room.classList.toggle('hidden', !['sidebar', 'courtroom'].includes(state.zone));
-      room.textContent = state.zone === 'sidebar' ? 'The Sidebar · Room & chat' : 'Talk to Derek Balam';
+      room.textContent = state.zone === 'sidebar' ? 'The Sidebar · Table notes' : 'Talk to Derek Balam';
       $('room-service').classList.toggle('hidden', !['sidebar','courtroom'].includes(state.zone));
       $('room-service').textContent = state.zone === 'sidebar' ? 'Order a drink' : 'Sleeping AI judge';
       $('room-board').classList.toggle('hidden', state.zone !== 'sidebar');
@@ -470,7 +476,7 @@
       return 3;
     }
 
-    const PRACTICE_PACKS = new Set(['mixed', 'sqe', 'mpre', 'juris']);
+    const VALID_PACKS = new Set(PRACTICE_PACKS.map(pack => pack.id));
 
     let mailMode = 'inbox', mailFolder = 'all', writingTaskId = null, questionAnswered = false;
 
@@ -489,7 +495,7 @@
       mailMode = taskId ? 'writing' : 'inbox';
       writingTaskId = taskId;
       currentScenario = null;
-      $('email-pack').value = PRACTICE_PACKS.has(state.practicePack) ? state.practicePack : 'mixed';
+      $('email-pack').value = VALID_PACKS.has(state.practicePack) ? state.practicePack : 'mixed';
       for (const id of ['email-difficulty','email-source','email-hint','email-rule','email-body','email-writing-body']) $(id).classList.add('hidden');
       $('email-inbox').classList.toggle('hidden', !!taskId);
       if (taskId) {
@@ -511,7 +517,7 @@
           const status = locked ? 'Complete six replies and two files' : latest?.status === 'pending' ? 'Sent · awaiting partner' : latest ? 'Partner replied' : state.apprenticeship.drafts[task.id] ? 'Draft saved' : 'New assignment';
           return `<button type="button" class="mail-row" data-writing="${task.id}" ${locked ? 'disabled' : ''}><span class="mail-sender">${e(task.partner)}</span><span class="mail-subject">${e(task.title)}<small>${e(task.skill)} · ${e(task.prompt.slice(0,105))}…</small></span><span class="mail-status">${status}</span></button>`;
         }).join('')}</div>` : '')
-        + (showPractice ? `<h3 class="mail-group-title">Ethics practice · ${pool.levelLabel} · ${pool.unread.length} unanswered</h3><div class="mail-list">${pool.unread.map((s) => `<button type="button" class="mail-row" data-scenario="${e(s.id)}"><span class="mail-sender">${e(s.from)}<small>${e(s.role)}</small></span><span class="mail-subject">${e(s.subject)}<small>${e(s.body.slice(0,95))}…</small></span><span class="mail-status">${s.sourceType === 'mpre-style' ? 'MPRE-style' : s.sourceType === 'sqe-style' ? 'SQE-style' : 'State of Juris'}</span></button>`).join('')}</div>${!pool.unread.length ? '<p class="mail-notice">You have answered this tier’s mail for this practice pack.</p><button type="button" id="mail-new-round">Start another study round</button>' : ''}` : '');
+        + (showPractice ? `<h3 class="mail-group-title">Ethics practice · ${pool.levelLabel} · ${pool.unread.length} unanswered</h3><div class="mail-list">${pool.unread.map((s) => `<button type="button" class="mail-row" data-scenario="${e(s.id)}"><span class="mail-sender">${e(s.from)}<small>${e(s.role)}</small></span><span class="mail-subject">${e(s.subject)}<small>${e(s.body.slice(0,95))}…</small></span><span class="mail-status">${s.jurisdiction || (s.sourceType === 'mpre-style' ? 'MPRE-style' : s.sourceType === 'sqe-style' ? 'SQE-style' : 'LawScape original')}</span></button>`).join('')}</div>${!pool.unread.length ? '<p class="mail-notice">You have answered this tier’s mail for this practice pack.</p><button type="button" id="mail-new-round">Start another study round</button>' : ''}` : '');
       $('email-inbox').querySelectorAll('[data-writing]').forEach((row) => row.onclick = () => openEmail('writing',row.dataset.writing));
       $('email-inbox').querySelectorAll('[data-scenario]').forEach((row) => row.onclick = () => openScenario(row.dataset.scenario));
       if ($('mail-new-round')) $('mail-new-round').onclick = () => {
@@ -534,10 +540,10 @@
       const s = currentScenario;
 
       $('email-subject').textContent = s.subject;
-      const jurisdiction = s.sourceType === 'sqe-style' ? 'England & Wales · legacy SQE-style study' : s.sourceType === 'mpre-style' ? 'US MPRE-style · model-rule study' : 'State of Juris · legacy mixed-source fiction';
+      const jurisdiction = s.jurisdiction ? `${s.jurisdiction} · unofficial ethics practice` : s.sourceType === 'sqe-style' ? 'England & Wales · SQE-style study' : s.sourceType === 'mpre-style' ? 'US MPRE-style · model-rule study' : 'LawScape original · mixed Arizona/Nevada sources';
       $('email-from').textContent = `From: ${s.from} — ${s.role} · ${jurisdiction}`;
       $('email-text').textContent = s.body;
-      $('email-pack').value = PRACTICE_PACKS.has(state.practicePack) ? state.practicePack : 'mixed';
+      $('email-pack').value = VALID_PACKS.has(state.practicePack) ? state.practicePack : 'mixed';
       const advancedLabel = s.sourceType === 'sqe-style'
         ? 'SQE+'
         : s.sourceType === 'mpre-style' ? 'MPRE+' : 'EXPERT';
@@ -545,8 +551,8 @@
       $('email-difficulty').textContent = `LEVEL ${s.difficulty} · ${levelNames[s.difficulty]}`;
 
       const sourceEl = $('email-source');
-      if (s.sourceType === 'mpre-style' || s.sourceType === 'sqe-style') {
-        sourceEl.textContent = s.sourceType === 'sqe-style' ? 'ENGLAND & WALES · SQE-STYLE' : 'MPRE-STYLE';
+      if (s.sourceUrl) {
+        sourceEl.textContent = s.jurisdiction || (s.sourceType === 'sqe-style' ? 'ENGLAND & WALES · SQE-STYLE' : 'MPRE-STYLE');
         sourceEl.title = s.sourceNote;
         sourceEl.classList.remove('hidden');
         sourceEl.classList.toggle('sqe-source', s.sourceType === 'sqe-style');
@@ -641,7 +647,7 @@
             + 'court, money, and compliance duties is how practising certificates stay safe.'
           : 'That is the defensible course — engagement decisions, trust money, and candor calls '
             + 'like this one are exactly where licenses are won and lost.';
-        explainEl.textContent = `${s.rule}. ${successContext}`;
+        explainEl.textContent = `${s.rule}. ${s.explanation || successContext}`;
         deltaEl.innerHTML = `<span class="gain">+${earned} gold</span>`
           + (healed > 0 ? ` &nbsp; <span class="gain">+${healed} Ethics (streak x${state.streak}!)</span>`
                         : ` &nbsp; <span class="muted">streak x${state.streak} — one more for an Ethics heal</span>`);
@@ -660,7 +666,7 @@
           + `<span class="muted">wrong-answer streak x${state.wrongStreak}${rileyNote}</span>`;
       }
 
-      if (s.sourceType === 'mpre-style' || s.sourceType === 'sqe-style') {
+      if (s.sourceUrl) {
         appendScenarioSource(explainEl, s);
       }
 
@@ -685,17 +691,16 @@
       source.append('Source note: ');
       const local = document.createElement('a');
       local.href = scenario.localSourceFile
-        || (isSqe ? 'SQE_Ethics_Email_Scenarios_UK.md' : 'MPRE_Associate_Email_Scenarios.md');
+        || (isSqe ? 'content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md' : 'content/questions/mpre/MPRE_Associate_Email_Scenarios.md');
       local.target = '_blank';
       local.rel = 'noopener';
-      local.textContent = scenario.localSourceFile
-        || (isSqe ? 'England & Wales SQE Ethics Email Pack' : 'MPRE Associate Email Scenarios');
+      local.textContent = scenario.sourceLabel || (isSqe ? 'SQE questions and answer key' : 'MPRE questions and answer key');
       source.append(local, ' · ');
       const official = document.createElement('a');
       official.href = scenario.sourceUrl;
       official.target = '_blank';
       official.rel = 'noopener';
-      official.textContent = isSqe ? 'SRA SQE1 sample questions' : 'NCBE preparation page';
+      official.textContent = scenario.officialSourceLabel || (isSqe ? 'SRA SQE1 sample questions' : 'NCBE preparation page');
       source.append(official);
       if (scenario.studyGuideUrl) {
         const guide = document.createElement('a');
@@ -718,7 +723,7 @@
     }
     $('email-close').addEventListener('click', closeEmail);
     $('email-pack').addEventListener('change', (event) => {
-      state.practicePack = PRACTICE_PACKS.has(event.target.value) ? event.target.value : 'mixed';
+      state.practicePack = VALID_PACKS.has(event.target.value) ? event.target.value : 'mixed';
       save();
       openEmail('practice');
     });
@@ -779,7 +784,7 @@
       const topic = sidebarTopic(topicId);
       state.sidebar.topic = topic.id;
       save();
-      const body = openPanel(`${SIDEBAR_ROOM.title} — Room & Chat`);
+      const body = openPanel(`${SIDEBAR_ROOM.title} — Table notes`);
       $('panel-inner').classList.add('sidebar-panel');
       body.innerHTML = `
         <div class="sidebar-banner"><span class="sidebar-mode">LOCAL PREVIEW</span><h2>A place to talk shop.</h2><p>A quiet corner of the firm. Pull up a chair and choose a table.</p></div>
@@ -1285,48 +1290,15 @@
     }
 
     function openHelp() {
-      const body = openPanel('How LawScape Works');
+      const body = openPanel('How to play');
       body.innerHTML = `
-        <div class="help-lede">Open <b>Journal</b> (J) to begin your first firm day: inspect a synthetic file, write a partner reply, and earn a visible reward.</div>
-        <div class="row-item"><div class="grow"><h4>💻 BarMail</h4>
-          <p>Click your office computer or use BarMail. Open an email subject to answer an ethics question or write a partner reply inside the same window. Choose a practice pack in the toolbar. Buy the 2,000-gold Work Phone from the office upgrades cabinet to open all your mail anywhere.</p></div></div>
-        <div class="row-item"><div class="grow"><h4>⏱ Billable Hours</h4>
-          <p>The clock records visible time inside an open question, writing assignment or feedback. It pauses in the inbox list, other activities and hidden tabs. At disbarment, that run is recorded on The Sidebar’s local top-10 board. Scores survive resets; character possessions do not.</p></div></div>
-        <div class="row-item"><div class="grow"><h4>🗄 Document Review</h4>
-          <p>Use the filing cabinet or your journal to open the evidence room. Flag exact passages, explain your findings, then commit a file review for up to 75 study gold. Each file pays once per run.</p></div></div>
-        <div class="row-item"><div class="grow"><h4>📚 Ethics Treatises</h4>
-          <p>Buy the Ethics Treatise Shelf upgrade, then use the bookshelf to search the bundled
-          Nevada, Arizona, and California references.</p></div></div>
-        <div class="row-item"><div class="grow"><h4>🖱 Movement</h4>
-          <p>Click or tap a floor tile to walk. You can also use WASD or the arrow keys. Select
-          a highlighted person or object to walk over and interact.</p></div></div>
-        <div class="row-item"><div class="grow"><h4>🪙 Gold</h4>
-          <p>Ethics answers, writing checklists and supported file reviews earn gold. Spend it on wardrobe accessories and office or apartment upgrades. New prose is saved for self-comparison, not AI graded.</p></div></div>
-        <div class="row-item"><div class="grow"><h4>⚖ Ethics Bar</h4>
-          <p>Wrong answers damage your Ethics — the game explains the violated rule every time.
-          Damage rises from 30 to 45 and then 60 as wrong answers pile up; Riley halves it.
-          Three straight mistakes can end a brand-new attorney, so read before you reply.
-          Two correct answers in a row start healing Ethics. Resting in your bed helps too.</p></div></div>
-        <div class="row-item"><div class="grow"><h4>🥃 Professional Wellbeing</h4>
-          <p>Jim’s office bar cart demonstrates how alcohol can impair judgment and movement.
-          Returning for another drink provides a confidential lawyer-assistance resource.</p></div></div>
-        <div class="row-item"><div class="grow"><h4>☠ Disbarment</h4>
-          <p>Ethics at zero = YOU GOT DISBARRED — GAME OVER. You restart from nothing: no gold,
-          no items, no upgrades.</p></div></div>
-        <div class="row-item"><div class="grow"><h4>🏛 Court</h4>
-          <p>Derek Balam keeps watch while a robot judge sleeps in the judicial chair. Court is not in session. Different AI judge agents and reviewed hearing exercises are planned; no live judge is connected.</p></div></div>
-        <div class="row-item"><div class="grow"><h4>🍵 The Sidebar</h4>
-          <p>Use Travel to visit the lounge. B.A.R.T., a robot in butler dress, serves drinks: Sidebar alcohol costs no Ethics but slows walking for 40 seconds. Water has no effect. The board ranks billable time in completed runs. Room &amp; Chat saves local drafts; shared communication awaits multiplayer.</p></div></div>
-        <div class="row-item"><div class="grow"><h4>✂ Your attorney</h4>
-          <p>Open Journal → Wardrobe to change hair, facial hair, face shape, eyes, skin, suit, shirt, tie, and glasses. Everyone starts in trousers; a skirt suit is optional for every gender. Preview standing, walking, or seated.</p></div></div>
-        <div class="row-item"><div class="grow"><h4>✍ Email HR</h4>
-          <p>Found a bug, or ready to complain about the working conditions at Hardsell &amp;
-          Firestone? Open BarMail and press <b>Email HR</b>. HR will not read it — but your
-          message becomes a prefilled report you can file with the developers on GitHub.</p></div></div>
-        <div class="row-item"><div class="grow"><h4>🌍 Why LawScape Exists</h4>
-          <p>The thesis: legal learning should be fun — and it should be fun to learn how
-          lawyers in other countries answer the same questions. The practice-pack selector
-          (England & Wales SQE, US MPRE, State of Juris) is the first step; the Firm Jurisdictions desk collects local requests for future reviewed packs. Requests are not sent until you choose to submit them through GitHub.</p></div></div>`;
+        <div class="row-item"><div class="grow"><h4>Your first five minutes</h4><p>Open <b>Journal</b> for a guided firm assignment, or <b>BarMail</b> in your office for a quick ethics question. Open a subject line, read the facts, choose a response and read the explanation.</p></div></div>
+        <div class="row-item"><div class="grow"><h4>Choose your practice</h4><p>Use <b>Journal → Firm jurisdictions</b> or BarMail’s practice selector: California, New York, US MPRE-style, England &amp; Wales SQE-style, or LawScape original dilemmas. Mixed practice includes all five. The inbox shows your current difficulty tier.</p></div></div>
+        <div class="row-item"><div class="grow"><h4>Move, explore, customize</h4><p>Click or tap to walk and interact; WASD and arrow keys also move. Use <b>Travel</b> for locations and <b>Journal → Wardrobe</b> to change your attorney. The Work Phone unlocks BarMail outside your office.</p></div></div>
+        <div class="row-item"><div class="grow"><h4>Gold and Ethics</h4><p>Correct ethics answers earn gold. Repeated wrong answers cause increasing Ethics damage. Correct streaks and resting in your apartment help restore Ethics. At zero Ethics the character run ends: gold, upgrades and drafts are reset. Read feedback before the next reply.</p></div></div>
+        <div class="row-item"><div class="grow"><h4>Your first firm day</h4><p>Read the two synthetic files, flag evidence and complete six writing assignments to unlock the capstone. Committing locks each reply until the partner responds. Checklist choices receive authored feedback and study gold without Ethics damage; your prose is saved for self-comparison, not graded by live AI.</p></div></div>
+        <div class="row-item"><div class="grow"><h4>Research and local play</h4><p>The Ethics Treatise Shelf upgrade opens Nevada, Arizona and California reference material. Progress and Sidebar table notes stay in this browser, with no account or cross-device sync. The Sidebar has scripted characters; shared chat and live courtroom hearings are planned.</p></div></div>
+        <div class="row-item"><div class="grow"><h4>Need help?</h4><p><a href="docs/PLAYING.html" target="_blank" rel="noopener">Player guide</a> · <a href="docs/JURISDICTIONS.html" target="_blank" rel="noopener">Jurisdictions and sources</a>. <b>Email HR · Report a bug</b> prepares a GitHub report for you to review and submit. Nothing is sent automatically. This is unofficial educational practice, not legal advice.</p></div></div>`;
     }
 
     // ---------------------------------------------------------------------------
@@ -1802,7 +1774,7 @@
         moneybagsStolen: false,    // client gold taken from Jim Hardsell's safe
         moneybagsPurchases: 0,     // upgrade purchases made after taking the gold
         seen: [],              // scenario ids already served this cycle
-        practicePack: 'mixed', // 'mixed' | 'sqe' | 'mpre' | 'juris'
+        practicePack: 'mixed', // 'mixed' | 'sqe' | 'mpre' | 'juris' | 'ca' | 'ny'
         upgrades: [],
         zone: 'office',
         pos: { x: 6, y: 10 },
@@ -2027,8 +1999,8 @@
     const FIRM_PACKS = [
       { id: 'juris', label: 'State of Juris', status: 'Local practice', note: 'Two synthetic matters. Practice evidence handling and communication under supplied fictional office policies.' },
       { id: 'us-nv', label: 'Nevada', status: 'Needs source review', note: 'Existing reference material; a reviewed firm curriculum is not yet available.' },
-      { id: 'gb-ew', label: 'England & Wales', status: 'Needs source review', note: 'Legacy SQE-style study is in BarMail. A reviewed firm curriculum is not yet available.' },
-      { id: 'us-ca', label: 'California', status: 'Not yet available', note: 'A reference shelf is not a complete training pack.' },
+      { id: 'gb-ew', label: 'England & Wales', status: 'Needs source review', note: 'SQE-style questions are available in BarMail. A reviewed firm curriculum is not yet available.' },
+      { id: 'us-ca', label: 'California', status: 'Not yet available', note: '20 California questions are available in BarMail; a full firm curriculum is still planned.' },
       { id: 'us-az', label: 'Arizona', status: 'Not yet available', note: 'Source coverage and authored tasks still need review.' },
     ];
 
@@ -2231,7 +2203,7 @@
     Object.assign(exports, { HAIR_STYLES, HAIR_COLORS, FACIAL_HAIR, EYE_COLORS, SKIN_COLORS, TIE_COLORS, SUIT_COLORS, SHIRT_COLORS, FACE_SHAPES, OUTFITS, normalizeAppearance, appearanceLook, appearanceDescription });
   },
   "js/engine/palette.js": (exports, require) => {
-    // Single source of truth for every color in the game world (see VISUAL_DESIGN.md §2).
+    // Single source of truth for every color in the game world (see docs/archive/VISUAL_DESIGN.md §2).
     const PAL = {
       marble: '#e8e4da',
       marbleDark: '#d6d0c2',
@@ -4228,6 +4200,7 @@
     const { appearanceLook } = require("js/data/appearance.js");
     const { mountAppearanceEditor } = require("js/ui/appearance.js");
     const { GLOBAL_CURRICULUM } = require("js/data/jurisdictions.js");
+    const { PRACTICE_PACKS } = require("js/data/practice-packs.js");
 
     const $ = (id) => document.getElementById(id);
     function escapeHtml(value) {
@@ -4241,7 +4214,7 @@
     const button = (text, action, value = '', extra = '') => `<button type="button" data-action="${action}" data-value="${e(value)}" ${extra}>${e(text)}</button>`;
     const note = (text) => `<p class="desk-note">${e(text)}</p>`;
 
-    function createApprenticeshipUI({ beforeOpen, onChange, onLegacy, onWriting, onWritingExit, notify }) {
+    function createApprenticeshipUI({ beforeOpen, onChange, onPractice, onWriting, onWritingExit, notify }) {
       const modal = $('apprenticeship'), body = $('desk-body');
       const home = body.parentElement;
       let writingEmbedded = false;
@@ -4413,10 +4386,11 @@
       }
 
       function renderFirm(prefill = '') {
-        body.innerHTML = section('Your firm · Jurisdictions', 'Where will your firm practice?', 'Start in the fictional State of Juris. Request a real jurisdiction for a future reviewed firm pack.')
-          + `<section class="global-curriculum" aria-labelledby="global-mission"><span class="desk-kicker">A worldwide ambition · future curriculum</span><h3 id="global-mission">${e(GLOBAL_CURRICULUM.mission)}</h3><p>A new way to learn legal ethics: inhabit the firm, face a dilemma, and discover how the answer depends on the jurisdiction.</p><div class="global-regions">${GLOBAL_CURRICULUM.regions.map((region) => `<article><h4>${e(region.name)}</h4><p>${region.places.map(e).join(' · ')}</p></article>`).join('')}</div><p class="desk-note">27 geographic entries from the supplied LegalQuants community list (${GLOBAL_CURRICULUM.asOf}). A starting point, not a complete or current membership census. These are future curriculum targets, not 27 playable packs. Legal systems within a country need separate review.</p><p class="global-available"><strong>Play today:</strong> US MPRE-style and England &amp; Wales SQE-style questions, plus the fictional State of Juris apprenticeship. Future packs need local source review and authored questions.</p></section>`
-          + `<div class="desk-card-grid">${FIRM_PACKS.map((pack) => `<article class="desk-card"><span class="desk-badge">${e(pack.status)}</span><h3>${e(pack.label)}</h3><p>${e(pack.note)}</p>${pack.id === 'juris' ? '<p class="desk-active">✓ Your active office</p>' : button('Request this jurisdiction', 'request-prefill', pack.label)}</article>`).join('')}</div>`
-          + button('Open legacy exam-style BarMail', 'legacy')
+        body.innerHTML = section('Your firm · Jurisdictions', 'Choose your practice', 'Open a question pack in BarMail. Without a Work Phone, this takes you to your office computer.')
+          + `<div class="desk-card-grid">${PRACTICE_PACKS.map(pack => `<article class="desk-card"><span class="desk-badge">${pack.count} questions · Playable</span><h3>${e(pack.label)}</h3><p>${e(pack.note)}</p>${button('Play ' + pack.label, 'practice-pack', pack.id)}</article>`).join('')}</div>`
+          + note('Unofficial educational questions with authored feedback. California and New York source checks: September 27, 2026. These question packs are separate from a full jurisdiction-specific firm curriculum.')
+          + `<h3 class="desk-subheading">Your fictional firm apprenticeship</h3><p>State of Juris office policies govern six writing assignments, two synthetic files and one capstone. No real jurisdiction is implied.</p>${button('Open your journal', 'journal')}`
+          + `<details class="desk-disclosure"><summary>Future firm curricula and worldwide expansion</summary><p>${e(GLOBAL_CURRICULUM.mission)}</p><div class="global-regions">${GLOBAL_CURRICULUM.regions.map(region => `<article><h4>${e(region.name)}</h4><p>${region.places.map(e).join(' · ')}</p></article>`).join('')}</div><p>These are future targets. Canada is planned with province-specific review. A country may contain several legal systems.</p><div class="desk-card-grid">${FIRM_PACKS.filter(pack => pack.id !== 'juris').map(pack => `<article class="desk-card"><h4>${e(pack.label)} firm curriculum</h4><p>${e(pack.status)} · ${e(pack.note)}</p>${button('Request this curriculum', 'request-prefill', pack.label)}</article>`).join('')}</div></details>`
           + `<form id="jurisdiction-form" class="request-form"><h3>Put a jurisdiction on the wish list</h3><p>Use an exact legal system, such as a U.S. state, England & Wales, Scotland or Northern Ireland. No real client facts or private documents.</p><label class="desk-label" for="request-label">Jurisdiction</label><input id="request-label" name="label" maxlength="80" required value="${e(prefill)}"><label class="desk-label" for="request-topic">What would you like to practice?</label><textarea id="request-topic" name="topic" maxlength="500" rows="2" required></textarea><label class="desk-label" for="request-help">Optional reviewer offer or public-source links</label><textarea id="request-help" name="help" maxlength="500" rows="2"></textarea><p class="desk-note">This saves a local request draft. You can then review it on GitHub and choose whether to submit it publicly. Nothing is sent automatically.</p><p id="request-error" class="desk-error" role="alert"></p><button type="submit">Save request locally</button></form>`
           + `<h3 class="desk-subheading">Your local request drafts</h3>${state.apprenticeship.requests.length ? state.apprenticeship.requests.map((request) => `<article class="desk-card"><h4>${e(request.label)}</h4><p>${e(request.topic)}</p><p class="desk-note">${e(request.status)}</p><a class="desk-link" href="${e(requestIssueUrl(request))}" target="_blank" rel="noopener noreferrer">Review draft on GitHub ↗</a></article>`).join('') : note('No requests saved yet. A repeat request for the same jurisdiction reopens the existing local entry.')}`;
         $('jurisdiction-form').addEventListener('submit', (event) => {
@@ -4459,7 +4433,7 @@
         if (['journal', 'writing', 'files', 'firm', 'wardrobe'].includes(action)) navigate(action);
         else if (action === 'task') navigate('writing', value);
         else if (action === 'file') navigate('files', value);
-        else if (action === 'legacy') { close(); onLegacy(); }
+        else if (action === 'practice-pack' && PRACTICE_PACKS.some(pack => pack.id === value)) { close(); onPractice(value); }
         else if (action === 'request-prefill') { renderFirm(value); $('request-label').focus(); }
         else if (action === 'revise') {
           const previous = taskAttempts(state, value).at(-1);
@@ -4661,97 +4635,21 @@
     };
     Object.assign(exports, { GLOBAL_CURRICULUM });
   },
-  "js/data/mail.js": (exports, require) => {
-    function canAccessBarMail(player) { return player.zone === 'office' || player.upgrades.includes('work_phone'); }
-    function scenarioMatchesPack(scenario, pack) {
-      if (pack === 'sqe') return scenario.sourceType === 'sqe-style';
-      if (pack === 'mpre') return scenario.sourceType === 'mpre-style';
-      if (pack === 'juris') return scenario.sourceType === 'lawscape';
-      return true;
-    }
-    function practiceInbox(player, scenarios) {
-      const difficulty = player.casesDone < 5 ? 1 : player.casesDone < 12 ? 2 : 3;
-      const pool = scenarios.filter((scenario) => scenarioMatchesPack(scenario, player.practicePack));
-      const tier = pool.filter((scenario) => scenario.difficulty === difficulty);
-      const eligible = tier.length ? tier : pool;
-      return { eligible, unread: eligible.filter((scenario) => !player.seen.includes(scenario.id)), difficulty, levelLabel: tier.length ? `Level ${difficulty}` : 'All levels' };
-    }
-    function billableMessageOpen({ inGame, visible, mailOpen, messageOpen }) {
-      return inGame && visible && mailOpen && messageOpen;
-    }
-    Object.assign(exports, { canAccessBarMail, scenarioMatchesPack, practiceInbox, billableMessageOpen });
-  },
-  "js/lounge.js": (exports, require) => {
-    const { WHISKEY_SLOW_MS } = require("js/data/work.js");
+  "js/data/practice-packs.js": (exports, require) => {
+    const { SCENARIOS } = require("js/data/ethics.js");
 
-    const BAR_DRINKS = [
-      { id: 'old-fashioned', name: 'The Reasonable Old Fashioned', cost: 5, note: 'Orange peel, a polished glass, and no pending deadlines.', slows: true },
-      { id: 'wine', name: 'House Red · Reserved Judgment', cost: 5, note: 'Served in stemware by a very precise robot.', slows: true },
-      { id: 'ale', name: 'After-Hours Ale', cost: 3, note: 'The office is closed. Your walking pace takes a short break.', slows: true },
-      { id: 'water', name: 'Sparkling water', cost: 0, note: 'Complimentary. No movement or Ethics effect.', slows: false },
-    ];
+    // Keep the desk, BarMail and question totals aligned with the actual pool.
+    const PRACTICE_PACKS = [
+      { id: 'mixed', label: 'Mixed practice', sourceType: null, note: 'All five question packs; read the jurisdiction on each email.' },
+      { id: 'ca', label: 'California', sourceType: 'california-style', note: 'Original California professional-responsibility questions.' },
+      { id: 'ny', label: 'New York', sourceType: 'new-york-style', note: '28 workplace emails and five short New York dilemmas.' },
+      { id: 'mpre', label: 'US MPRE-style', sourceType: 'mpre-style', note: 'Model-rule and exam-style study, not a state-specific pack.' },
+      { id: 'sqe', label: 'England & Wales SQE-style', sourceType: 'sqe-style', note: 'Original ethics questions for England and Wales.' },
+      { id: 'juris', label: 'LawScape original dilemmas', sourceType: 'lawscape', note: 'Fictional office dilemmas with their original mixed Arizona/Nevada rule labels.' },
+    ].map(pack => ({ ...pack, count: SCENARIOS.filter(s => !pack.sourceType || s.sourceType === pack.sourceType).length }));
 
-    function orderBarDrink(player, id, now = Date.now()) {
-      const drink = BAR_DRINKS.find((item) => item.id === id);
-      if (!drink || player.zone !== 'sidebar' || player.runStatus === 'ended' || player.ethics <= 0) throw new Error('Drinks are served in The Sidebar during an active run.');
-      if (player.apprenticeship.attempts.some((a) => a.status === 'pending')) throw new Error('Wait for your partner reply before making purchases.');
-      if (player.gold < drink.cost) throw new Error(`You need ${drink.cost} gold for that drink.`);
-      player.gold -= drink.cost;
-      player.sidebarDrinks = (player.sidebarDrinks || 0) + 1;
-      // Each alcoholic drink refreshes the short effect; it never damages Ethics.
-      if (drink.slows) player.slowUntil = Math.max(player.slowUntil || 0, now + WHISKEY_SLOW_MS);
-      return { drink, ethicsDamage: 0, slowUntil: player.slowUntil || 0 };
-    }
-
-    function movementMultiplier(player, now = Date.now()) { return player.slowUntil > now ? 0.5 : 1; }
-
-    const BOARD_KEY = 'lawscape_billable_board_v1';
-    let sessionBoard = [];
-    let unsavedEntries = [];
-    function validEntry(entry) {
-      return entry && typeof entry.runId === 'string' && typeof entry.name === 'string'
-        && Number.isFinite(entry.billableMs) && entry.billableMs >= 0 && Number.isFinite(entry.endedAt);
-    }
-    function readBillableBoard() {
-      try {
-        const saved = localStorage.getItem(BOARD_KEY);
-        const raw = saved === null ? sessionBoard : JSON.parse(saved);
-        if (Array.isArray(raw)) sessionBoard = raw.filter(validEntry);
-      } catch { /* retain the session copy if storage is unavailable */ }
-      const unique = new Map([...sessionBoard,...unsavedEntries].map((entry) => [entry.runId,entry]));
-      return [...unique.values()].sort((a,b) => b.billableMs-a.billableMs || a.endedAt-b.endedAt).slice(0,10);
-    }
-    function archiveDisbarredRun(player, now = Date.now()) {
-      if (player.ethics > 0 && player.runStatus !== 'ended') return { recorded: false, persisted: false };
-      const entries = readBillableBoard();
-      if (entries.some((entry) => entry.runId === player.runId)) return { recorded: false, duplicate: true };
-      if (!player.runId || !Number.isFinite(player.billableStudyMs) || player.billableStudyMs < 0) return { recorded: false, persisted: false };
-      sessionBoard = [...entries, { runId: player.runId, name: String(player.name).slice(0,80), billableMs: Math.floor(player.billableStudyMs), endedAt: now }]
-        .sort((a,b) => b.billableMs-a.billableMs || a.endedAt-b.endedAt).slice(0,10);
-      try { localStorage.setItem(BOARD_KEY,JSON.stringify(sessionBoard)); unsavedEntries=[]; return { recorded: true, persisted: true }; }
-      catch { unsavedEntries=[...sessionBoard]; return { recorded: true, persisted: false }; }
-    }
-    Object.assign(exports, { BAR_DRINKS, orderBarDrink, movementMultiplier, readBillableBoard, archiveDisbarredRun });
-  },
-  "js/data/sidebar.js": (exports, require) => {
-    // Room/topic IDs are stable attachment points for the future room service.
-    // No networking, fabricated presence, agent execution or chat transport exists here.
-    const SIDEBAR_ROOM = { id: 'sidebar', title: 'The Sidebar', mode: 'local-preview', participantLimit: 10 };
-    const SIDEBAR_TOPICS = [
-      { id: 'commons', label: 'The commons', prompt: 'Meet the other attorneys and introduce the work you enjoy practicing.' },
-      { id: 'evidence', label: 'Evidence table', prompt: 'Compare how you checked a synthetic file. Mark spoilers and cite the exercise passage.' },
-      { id: 'writing', label: 'Writing table', prompt: 'Trade ideas for a clearer partner update and more useful next steps.' },
-      { id: 'agents', label: 'AI & agents table', prompt: 'Discuss checking AI work. In the future pilot, approved AI agents will be clearly labeled and controlled by their owners.' },
-    ];
-
-    function sidebarTopic(id) { return SIDEBAR_TOPICS.find((topic) => topic.id === id) || SIDEBAR_TOPICS[0]; }
-    function saveSidebarDraft(player, topicId, text) {
-      const topic = sidebarTopic(topicId);
-      player.sidebar.topic = topic.id;
-      player.sidebar.drafts[topic.id] = String(text).slice(0, 500);
-      return { status: 'local-draft', topic: topic.id, text: player.sidebar.drafts[topic.id] };
-    }
-    Object.assign(exports, { SIDEBAR_ROOM, SIDEBAR_TOPICS, sidebarTopic, saveSidebarDraft });
+    const practicePack = id => PRACTICE_PACKS.find(pack => pack.id === id) || PRACTICE_PACKS[0];
+    Object.assign(exports, { PRACTICE_PACKS, practicePack });
   },
   "js/data/ethics.js": (exports, require) => {
     // BarMail ethics scenarios — progressive professional-responsibility practice.
@@ -4773,6 +4671,7 @@
     const { MPRE_SCENARIOS } = require("js/data/mpre.js");
     const { ADDITIONAL_MPRE_SCENARIOS } = require("js/data/mpre-additional.js");
     const { SQE_SCENARIOS } = require("js/data/sqe.js");
+    const { CALIFORNIA_SCENARIOS, NEW_YORK_SCENARIOS } = require("js/data/state-questions.js");
 
     const STREAK_HEAL = 10;
 
@@ -5217,6 +5116,8 @@
       ...MPRE_SCENARIOS,
       ...ADDITIONAL_MPRE_SCENARIOS,
       ...SQE_SCENARIOS,
+      ...CALIFORNIA_SCENARIOS,
+      ...NEW_YORK_SCENARIOS,
     ];
     Object.assign(exports, { STREAK_HEAL, SCENARIOS });
   },
@@ -5457,7 +5358,7 @@
     Object.assign(exports, { MPRE_SCENARIOS });
   },
   "js/data/mpre-additional.js": (exports, require) => {
-    // Generated from MPRE_Associate_Email_Scenarios_Additional_20.md and MPRE_Associate_Email_Scenarios_Additional_41.md.
+    // Generated from content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_20.md and content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md.
     // Run npm run mpre:build after editing either source file.
 
     const ADDITIONAL_MPRE_SCENARIOS = [
@@ -5467,7 +5368,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_20.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_20.md",
         "from": "Maya Franklin",
         "role": "Partner",
         "subject": "Equity purchase from NovaGrid",
@@ -5502,7 +5403,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_20.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_20.md",
         "from": "Leo Martinez",
         "role": "Client",
         "subject": "My father will pay the bill",
@@ -5537,7 +5438,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_20.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_20.md",
         "from": "Olivia Chen",
         "role": "Partner",
         "subject": "Global settlement for the apartment-fire cases",
@@ -5572,7 +5473,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_20.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_20.md",
         "from": "Samuel Price",
         "role": "Conflicts Partner",
         "subject": "Former client conflict - HarborTech agreement",
@@ -5607,7 +5508,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_20.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_20.md",
         "from": "Aisha Raman",
         "role": "Intake Partner",
         "subject": "Screen after declined consultation",
@@ -5642,7 +5543,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_20.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_20.md",
         "from": "Ethan Wallace",
         "role": "Partner",
         "subject": "Referral fee arrangement",
@@ -5677,7 +5578,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_20.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_20.md",
         "from": "Carmen Diaz",
         "role": "Partner",
         "subject": "Distribution of settlement funds",
@@ -5712,7 +5613,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_20.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_20.md",
         "from": "Jordan Wells",
         "role": "Managing Partner",
         "subject": "Hospital outreach plan",
@@ -5747,7 +5648,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_20.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_20.md",
         "from": "Blake Morgan",
         "role": "Partner",
         "subject": "Interview request to represented company employee",
@@ -5782,7 +5683,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_20.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_20.md",
         "from": "Nina Patel",
         "role": "Partner",
         "subject": "Former client's disciplinary complaint",
@@ -5817,7 +5718,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_20.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_20.md",
         "from": "Victor Huang",
         "role": "Trial Partner",
         "subject": "Client admitted his testimony was false",
@@ -5852,7 +5753,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_20.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_20.md",
         "from": "Claire Bennett",
         "role": "Client",
         "subject": "Old laptop from the contract dispute",
@@ -5887,7 +5788,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_20.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_20.md",
         "from": "Robert King",
         "role": "Partner",
         "subject": "Client insists on counterclaim",
@@ -5922,7 +5823,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_20.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_20.md",
         "from": "Danielle Ross",
         "role": "Associate",
         "subject": "Partner directed investigator to call plaintiff",
@@ -5957,7 +5858,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_20.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_20.md",
         "from": "Lucas Grant",
         "role": "Junior Associate",
         "subject": "Adverse case omitted from brief",
@@ -5992,7 +5893,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_20.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_20.md",
         "from": "Harper Cole",
         "role": "Partner",
         "subject": "Short-term representation across state lines",
@@ -6027,7 +5928,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_20.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_20.md",
         "from": "Imani Foster",
         "role": "Conflicts Partner",
         "subject": "Screening former government counsel",
@@ -6062,7 +5963,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_20.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_20.md",
         "from": "Evelyn Shaw",
         "role": "Trusts and Estates Partner",
         "subject": "Client wants to leave me $75,000",
@@ -6097,7 +5998,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_20.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_20.md",
         "from": "Hon. Teresa Alvarez",
         "role": "Judge",
         "subject": "Emergency ex parte scheduling call",
@@ -6132,7 +6033,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_20.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_20.md",
         "from": "Hon. Martin Ellis",
         "role": "Judge",
         "subject": "Spouse's ownership in corporate party",
@@ -6167,7 +6068,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Morgan Li",
         "role": "Litigation Partner",
         "subject": "Can we run the document production ourselves?",
@@ -6202,7 +6103,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Sophia Reed",
         "role": "Client",
         "subject": "Did the firm have authority to settle?",
@@ -6237,7 +6138,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Amelia Grant",
         "role": "Partner",
         "subject": "Limited-scope landlord matter",
@@ -6272,7 +6173,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Daniel Cho",
         "role": "Partner",
         "subject": "Advice about a proposed payment system",
@@ -6307,7 +6208,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Eric Nolan",
         "role": "Criminal Defense Partner",
         "subject": "Plea offer I intend to reject",
@@ -6342,7 +6243,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Lena Brooks",
         "role": "Partner",
         "subject": "Error in ongoing patent matter",
@@ -6377,7 +6278,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Admissions Committee Counsel",
         "role": "Firm Correspondent",
         "subject": "Applicant's incomplete disclosure",
@@ -6412,7 +6313,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Cameron Price",
         "role": "Client",
         "subject": "Fee based on winning the criminal case",
@@ -6447,7 +6348,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Marisol Vega",
         "role": "Family-Law Partner",
         "subject": "Contingent fee for unpaid support judgment",
@@ -6482,7 +6383,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Managing Committee",
         "role": "Firm Correspondent",
         "subject": "Partner's conduct outside the firm",
@@ -6517,7 +6418,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Rachel Singh",
         "role": "Partner",
         "subject": "Court order requiring client records",
@@ -6552,7 +6453,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Alex Moreno",
         "role": "Partner",
         "subject": "Reporting a former lawyer",
@@ -6587,7 +6488,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Priya Nair",
         "role": "General Counsel",
         "subject": "Lawyer used our confidential expansion plans",
@@ -6622,7 +6523,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "James Porter",
         "role": "Conflicts Partner",
         "subject": "Direct adversity to Alpha Foods",
@@ -6657,7 +6558,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Dana Cole",
         "role": "Partner",
         "subject": "Driver and passenger both want our firm",
@@ -6692,7 +6593,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Teresa Wu",
         "role": "Conflicts Partner",
         "subject": "Scope of advance conflict waiver",
@@ -6727,7 +6628,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Celeste Martin",
         "role": "Managing Partner",
         "subject": "Is this personal conflict firm-wide?",
@@ -6762,7 +6663,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Omar Fields",
         "role": "Conflicts Counsel",
         "subject": "New associate's former firm",
@@ -6797,7 +6698,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Anthony Mills",
         "role": "Criminal Defense Partner",
         "subject": "Documentary producer's fee proposal",
@@ -6832,7 +6733,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Hannah Bell",
         "role": "Pro Bono Partner",
         "subject": "Emergency grocery assistance",
@@ -6867,7 +6768,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Benjamin Clark",
         "role": "Partner",
         "subject": "Representation after mediation",
@@ -6902,7 +6803,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Ingrid Park",
         "role": "Partner",
         "subject": "Upjohn warning for accounting interview",
@@ -6937,7 +6838,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Erin Matthews",
         "role": "Partner",
         "subject": "Elderly client facing immediate exploitation",
@@ -6972,7 +6873,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Firm General Counsel",
         "role": "Firm Correspondent",
         "subject": "Partner can no longer manage cases",
@@ -7007,7 +6908,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Felicia Adams",
         "role": "Litigation Partner",
         "subject": "Client fired me; judge denied withdrawal",
@@ -7042,7 +6943,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Judith Evans",
         "role": "Retiring Partner",
         "subject": "Sale of immigration practice",
@@ -7077,7 +6978,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Theo Grant",
         "role": "Client",
         "subject": "Advice about closing our only rural plant",
@@ -7112,7 +7013,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Patrick Ross",
         "role": "Client",
         "subject": "Keep delaying until they run out of money",
@@ -7147,7 +7048,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Gabrielle Stone",
         "role": "Trial Partner",
         "subject": "Witness I distrust",
@@ -7182,7 +7083,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Kelly Monroe",
         "role": "Partner",
         "subject": "Expert wants payment only if we win",
@@ -7217,7 +7118,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Nathan Cole",
         "role": "Partner",
         "subject": "Request to company employee",
@@ -7252,7 +7153,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Simone Taylor",
         "role": "Trial Partner",
         "subject": "Juror social-media research",
@@ -7287,7 +7188,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Marcus Hall",
         "role": "Partner",
         "subject": "Responding to false accusations in the press",
@@ -7322,7 +7223,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Andrea Bell",
         "role": "Chief Prosecutor",
         "subject": "Lawyer as grand-jury witness",
@@ -7357,7 +7258,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Deputy District Attorney",
         "role": "Firm Correspondent",
         "subject": "Surveillance footage not yet disclosed",
@@ -7392,7 +7293,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Devon Wright",
         "role": "Partner",
         "subject": "Statement made during settlement talks",
@@ -7427,7 +7328,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Elisa Moore",
         "role": "Transactions Partner",
         "subject": "Founder misunderstands our role",
@@ -7462,7 +7363,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Aaron Patel",
         "role": "Partner",
         "subject": "Opposing counsel accidentally copied us",
@@ -7497,7 +7398,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Firm Marketing Director",
         "role": "Firm Correspondent",
         "subject": "Performance compensation proposal",
@@ -7532,7 +7433,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "William Scott",
         "role": "Managing Partner",
         "subject": "Two-year practice restriction",
@@ -7567,7 +7468,7 @@
         "sourceType": "mpre-style",
         "sourceNote": "Original educational hypothetical; not an official NCBE question. State rules may differ from the ABA models.",
         "sourceUrl": "https://www.ncbex.org/sites/default/files/2023-01/MPRE_Subject_Matter_Outline.pdf",
-        "localSourceFile": "MPRE_Associate_Email_Scenarios_Additional_41.md",
+        "localSourceFile": "content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md",
         "from": "Judicial Campaign Committee",
         "role": "Firm Correspondent",
         "subject": "Proposed statement about rent-withholding cases",
@@ -7600,7 +7501,7 @@
     Object.assign(exports, { ADDITIONAL_MPRE_SCENARIOS });
   },
   "js/data/sqe.js": (exports, require) => {
-    // Generated from SQE_Ethics_Email_Scenarios_UK.md.
+    // Generated from content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md.
     // Run npm run sqe:build after editing the source file.
 
     const SQE_SCENARIOS = [
@@ -7611,7 +7512,7 @@
         "sourceNote": "Original LawScape educational hypothetical informed by public SQE study materials; not an official SRA or Kaplan SQE question. Check the law-and-practice cut-off date for your assessment.",
         "sourceUrl": "https://sqe.sra.org.uk/assessments/sqe1-assessments/sqe1-sample-questions",
         "studyGuideUrl": "https://sqe1prep.co.uk/blog/sqe1-ethics-professional-conduct-revision-guide",
-        "localSourceFile": "SQE_Ethics_Email_Scenarios_UK.md",
+        "localSourceFile": "content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md",
         "from": "Imogen Fairweather",
         "role": "London Office Partner",
         "subject": "Black cab collision - one question too far?",
@@ -7647,7 +7548,7 @@
         "sourceNote": "Original LawScape educational hypothetical informed by public SQE study materials; not an official SRA or Kaplan SQE question. Check the law-and-practice cut-off date for your assessment.",
         "sourceUrl": "https://sqe.sra.org.uk/assessments/sqe1-assessments/sqe1-sample-questions",
         "studyGuideUrl": "https://sqe1prep.co.uk/blog/sqe1-ethics-professional-conduct-revision-guide",
-        "localSourceFile": "SQE_Ethics_Email_Scenarios_UK.md",
+        "localSourceFile": "content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md",
         "from": "Oliver Wren",
         "role": "London Crime Partner",
         "subject": "Sentencing list - a rather important omission",
@@ -7683,7 +7584,7 @@
         "sourceNote": "Original LawScape educational hypothetical informed by public SQE study materials; not an official SRA or Kaplan SQE question. Check the law-and-practice cut-off date for your assessment.",
         "sourceUrl": "https://sqe.sra.org.uk/assessments/sqe1-assessments/sqe1-sample-questions",
         "studyGuideUrl": "https://sqe1prep.co.uk/blog/sqe1-ethics-professional-conduct-revision-guide",
-        "localSourceFile": "SQE_Ethics_Email_Scenarios_UK.md",
+        "localSourceFile": "content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md",
         "from": "Poppy Ashdown",
         "role": "Birmingham Office Partner",
         "subject": "Witness from the cricket pavilion",
@@ -7719,7 +7620,7 @@
         "sourceNote": "Original LawScape educational hypothetical informed by public SQE study materials; not an official SRA or Kaplan SQE question. Check the law-and-practice cut-off date for your assessment.",
         "sourceUrl": "https://sqe.sra.org.uk/assessments/sqe1-assessments/sqe1-sample-questions",
         "studyGuideUrl": "https://sqe1prep.co.uk/blog/sqe1-ethics-professional-conduct-revision-guide",
-        "localSourceFile": "SQE_Ethics_Email_Scenarios_UK.md",
+        "localSourceFile": "content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md",
         "from": "Harriet Cole",
         "role": "London Disputes Partner",
         "subject": "Bad case discovered under the biscuit tin",
@@ -7755,7 +7656,7 @@
         "sourceNote": "Original LawScape educational hypothetical informed by public SQE study materials; not an official SRA or Kaplan SQE question. Check the law-and-practice cut-off date for your assessment.",
         "sourceUrl": "https://sqe.sra.org.uk/assessments/sqe1-assessments/sqe1-sample-questions",
         "studyGuideUrl": "https://sqe1prep.co.uk/blog/sqe1-ethics-professional-conduct-revision-guide",
-        "localSourceFile": "SQE_Ethics_Email_Scenarios_UK.md",
+        "localSourceFile": "content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md",
         "from": "Imogen Fairweather",
         "role": "London Office Partner",
         "subject": "Due diligence on the automatic tea trolley",
@@ -7791,7 +7692,7 @@
         "sourceNote": "Original LawScape educational hypothetical informed by public SQE study materials; not an official SRA or Kaplan SQE question. Check the law-and-practice cut-off date for your assessment.",
         "sourceUrl": "https://sqe.sra.org.uk/assessments/sqe1-assessments/sqe1-sample-questions",
         "studyGuideUrl": "https://sqe1prep.co.uk/blog/sqe1-ethics-professional-conduct-revision-guide",
-        "localSourceFile": "SQE_Ethics_Email_Scenarios_UK.md",
+        "localSourceFile": "content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md",
         "from": "Rhys Morgan",
         "role": "Cardiff Office Partner",
         "subject": "Two founders, one narrowboat business",
@@ -7827,7 +7728,7 @@
         "sourceNote": "Original LawScape educational hypothetical informed by public SQE study materials; not an official SRA or Kaplan SQE question. Check the law-and-practice cut-off date for your assessment.",
         "sourceUrl": "https://sqe.sra.org.uk/assessments/sqe1-assessments/sqe1-sample-questions",
         "studyGuideUrl": "https://sqe1prep.co.uk/blog/sqe1-ethics-professional-conduct-revision-guide",
-        "localSourceFile": "SQE_Ethics_Email_Scenarios_UK.md",
+        "localSourceFile": "content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md",
         "from": "Beatrice Bell",
         "role": "Bristol Office Partner",
         "subject": "Father, daughter and the Cotswold cottage",
@@ -7863,7 +7764,7 @@
         "sourceNote": "Original LawScape educational hypothetical informed by public SQE study materials; not an official SRA or Kaplan SQE question. Check the law-and-practice cut-off date for your assessment.",
         "sourceUrl": "https://sqe.sra.org.uk/assessments/sqe1-assessments/sqe1-sample-questions",
         "studyGuideUrl": "https://sqe1prep.co.uk/blog/sqe1-ethics-professional-conduct-revision-guide",
-        "localSourceFile": "SQE_Ethics_Email_Scenarios_UK.md",
+        "localSourceFile": "content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md",
         "from": "Sanjay Patel",
         "role": "London Conflicts Partner",
         "subject": "Former Mayfair client and the locked-room team",
@@ -7899,7 +7800,7 @@
         "sourceNote": "Original LawScape educational hypothetical informed by public SQE study materials; not an official SRA or Kaplan SQE question. Check the law-and-practice cut-off date for your assessment.",
         "sourceUrl": "https://sqe.sra.org.uk/assessments/sqe1-assessments/sqe1-sample-questions",
         "studyGuideUrl": "https://sqe1prep.co.uk/blog/sqe1-ethics-professional-conduct-revision-guide",
-        "localSourceFile": "SQE_Ethics_Email_Scenarios_UK.md",
+        "localSourceFile": "content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md",
         "from": "Beatrice Bell",
         "role": "Bristol Office Partner",
         "subject": "Buyer, lender and two different prices",
@@ -7935,7 +7836,7 @@
         "sourceNote": "Original LawScape educational hypothetical informed by public SQE study materials; not an official SRA or Kaplan SQE question. Check the law-and-practice cut-off date for your assessment.",
         "sourceUrl": "https://sqe.sra.org.uk/assessments/sqe1-assessments/sqe1-sample-questions",
         "studyGuideUrl": "https://sqe1prep.co.uk/blog/sqe1-ethics-professional-conduct-revision-guide",
-        "localSourceFile": "SQE_Ethics_Email_Scenarios_UK.md",
+        "localSourceFile": "content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md",
         "from": "Alfie Grant",
         "role": "Manchester Office Partner",
         "subject": "A referral fee arrived with the post",
@@ -7971,7 +7872,7 @@
         "sourceNote": "Original LawScape educational hypothetical informed by public SQE study materials; not an official SRA or Kaplan SQE question. Check the law-and-practice cut-off date for your assessment.",
         "sourceUrl": "https://sqe.sra.org.uk/assessments/sqe1-assessments/sqe1-sample-questions",
         "studyGuideUrl": "https://sqe1prep.co.uk/blog/sqe1-ethics-professional-conduct-revision-guide",
-        "localSourceFile": "SQE_Ethics_Email_Scenarios_UK.md",
+        "localSourceFile": "content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md",
         "from": "Imogen Fairweather",
         "role": "London Office Partner",
         "subject": "\"Promise\" made before the kettle boiled",
@@ -8007,7 +7908,7 @@
         "sourceNote": "Original LawScape educational hypothetical informed by public SQE study materials; not an official SRA or Kaplan SQE question. Check the law-and-practice cut-off date for your assessment.",
         "sourceUrl": "https://sqe.sra.org.uk/assessments/sqe1-assessments/sqe1-sample-questions",
         "studyGuideUrl": "https://sqe1prep.co.uk/blog/sqe1-ethics-professional-conduct-revision-guide",
-        "localSourceFile": "SQE_Ethics_Email_Scenarios_UK.md",
+        "localSourceFile": "content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md",
         "from": "Beatrice Bell",
         "role": "Bristol Office Partner",
         "subject": "Repairs promised; seller now in Cornwall",
@@ -8043,7 +7944,7 @@
         "sourceNote": "Original LawScape educational hypothetical informed by public SQE study materials; not an official SRA or Kaplan SQE question. Check the law-and-practice cut-off date for your assessment.",
         "sourceUrl": "https://sqe.sra.org.uk/assessments/sqe1-assessments/sqe1-sample-questions",
         "studyGuideUrl": "https://sqe1prep.co.uk/blog/sqe1-ethics-professional-conduct-revision-guide",
-        "localSourceFile": "SQE_Ethics_Email_Scenarios_UK.md",
+        "localSourceFile": "content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md",
         "from": "Imogen Fairweather",
         "role": "London Office Partner",
         "subject": "Complaints information - said, but not sent",
@@ -8079,7 +7980,7 @@
         "sourceNote": "Original LawScape educational hypothetical informed by public SQE study materials; not an official SRA or Kaplan SQE question. Check the law-and-practice cut-off date for your assessment.",
         "sourceUrl": "https://sqe.sra.org.uk/assessments/sqe1-assessments/sqe1-sample-questions",
         "studyGuideUrl": "https://sqe1prep.co.uk/blog/sqe1-ethics-professional-conduct-revision-guide",
-        "localSourceFile": "SQE_Ethics_Email_Scenarios_UK.md",
+        "localSourceFile": "content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md",
         "from": "Eleanor Finch",
         "role": "London Managing Partner",
         "subject": "Six-week-old complaint and a crowded diary",
@@ -8115,7 +8016,7 @@
         "sourceNote": "Original LawScape educational hypothetical informed by public SQE study materials; not an official SRA or Kaplan SQE question. Check the law-and-practice cut-off date for your assessment.",
         "sourceUrl": "https://sqe.sra.org.uk/assessments/sqe1-assessments/sqe1-sample-questions",
         "studyGuideUrl": "https://sqe1prep.co.uk/blog/sqe1-ethics-professional-conduct-revision-guide",
-        "localSourceFile": "SQE_Ethics_Email_Scenarios_UK.md",
+        "localSourceFile": "content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md",
         "from": "Poppy Ashdown",
         "role": "Birmingham Office Partner",
         "subject": "Care-home talk, leaflets and instant wills",
@@ -8151,7 +8052,7 @@
         "sourceNote": "Original LawScape educational hypothetical informed by public SQE study materials; not an official SRA or Kaplan SQE question. Check the law-and-practice cut-off date for your assessment.",
         "sourceUrl": "https://sqe.sra.org.uk/assessments/sqe1-assessments/sqe1-sample-questions",
         "studyGuideUrl": "https://sqe1prep.co.uk/blog/sqe1-ethics-professional-conduct-revision-guide",
-        "localSourceFile": "SQE_Ethics_Email_Scenarios_UK.md",
+        "localSourceFile": "content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md",
         "from": "Imogen Fairweather",
         "role": "London Office Partner",
         "subject": "A legacy rather larger than a biscuit tin",
@@ -8187,7 +8088,7 @@
         "sourceNote": "Original LawScape educational hypothetical informed by public SQE study materials; not an official SRA or Kaplan SQE question. Check the law-and-practice cut-off date for your assessment.",
         "sourceUrl": "https://sqe.sra.org.uk/assessments/sqe1-assessments/sqe1-sample-questions",
         "studyGuideUrl": "https://sqe1prep.co.uk/blog/sqe1-ethics-professional-conduct-revision-guide",
-        "localSourceFile": "SQE_Ethics_Email_Scenarios_UK.md",
+        "localSourceFile": "content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md",
         "from": "Sanjay Patel",
         "role": "London Office Partner",
         "subject": "First week, £12 million purchase, no supervision",
@@ -8223,7 +8124,7 @@
         "sourceNote": "Original LawScape educational hypothetical informed by public SQE study materials; not an official SRA or Kaplan SQE question. Check the law-and-practice cut-off date for your assessment.",
         "sourceUrl": "https://sqe.sra.org.uk/assessments/sqe1-assessments/sqe1-sample-questions",
         "studyGuideUrl": "https://sqe1prep.co.uk/blog/sqe1-ethics-professional-conduct-revision-guide",
-        "localSourceFile": "SQE_Ethics_Email_Scenarios_UK.md",
+        "localSourceFile": "content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md",
         "from": "Harriet Cole",
         "role": "London Disputes Partner",
         "subject": "We missed limitation - what do we tell the client?",
@@ -8259,7 +8160,7 @@
         "sourceNote": "Original LawScape educational hypothetical informed by public SQE study materials; not an official SRA or Kaplan SQE question. Check the law-and-practice cut-off date for your assessment.",
         "sourceUrl": "https://sqe.sra.org.uk/assessments/sqe1-assessments/sqe1-sample-questions",
         "studyGuideUrl": "https://sqe1prep.co.uk/blog/sqe1-ethics-professional-conduct-revision-guide",
-        "localSourceFile": "SQE_Ethics_Email_Scenarios_UK.md",
+        "localSourceFile": "content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md",
         "from": "Eleanor Finch",
         "role": "London Managing Partner",
         "subject": "Partner's \"rail expenses\" were weekends away",
@@ -8295,7 +8196,7 @@
         "sourceNote": "Original LawScape educational hypothetical informed by public SQE study materials; not an official SRA or Kaplan SQE question. Check the law-and-practice cut-off date for your assessment.",
         "sourceUrl": "https://sqe.sra.org.uk/assessments/sqe1-assessments/sqe1-sample-questions",
         "studyGuideUrl": "https://sqe1prep.co.uk/blog/sqe1-ethics-professional-conduct-revision-guide",
-        "localSourceFile": "SQE_Ethics_Email_Scenarios_UK.md",
+        "localSourceFile": "content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md",
         "from": "Alfie Grant",
         "role": "Manchester Office Partner",
         "subject": "£9,000 arrived in the wrong client ledger",
@@ -8331,7 +8232,7 @@
         "sourceNote": "Original LawScape educational hypothetical informed by public SQE study materials; not an official SRA or Kaplan SQE question. Check the law-and-practice cut-off date for your assessment.",
         "sourceUrl": "https://sqe.sra.org.uk/assessments/sqe1-assessments/sqe1-sample-questions",
         "studyGuideUrl": "https://sqe1prep.co.uk/blog/sqe1-ethics-professional-conduct-revision-guide",
-        "localSourceFile": "SQE_Ethics_Email_Scenarios_UK.md",
+        "localSourceFile": "content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md",
         "from": "Rhys Morgan",
         "role": "Cardiff Office Partner",
         "subject": "Move our costs before the bank closes?",
@@ -8367,7 +8268,7 @@
         "sourceNote": "Original LawScape educational hypothetical informed by public SQE study materials; not an official SRA or Kaplan SQE question. Check the law-and-practice cut-off date for your assessment.",
         "sourceUrl": "https://sqe.sra.org.uk/assessments/sqe1-assessments/sqe1-sample-questions",
         "studyGuideUrl": "https://sqe1prep.co.uk/blog/sqe1-ethics-professional-conduct-revision-guide",
-        "localSourceFile": "SQE_Ethics_Email_Scenarios_UK.md",
+        "localSourceFile": "content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md",
         "from": "Beatrice Bell",
         "role": "Bristol Office Partner",
         "subject": "Can we park the cousin's house money?",
@@ -8403,7 +8304,7 @@
         "sourceNote": "Original LawScape educational hypothetical informed by public SQE study materials; not an official SRA or Kaplan SQE question. Check the law-and-practice cut-off date for your assessment.",
         "sourceUrl": "https://sqe.sra.org.uk/assessments/sqe1-assessments/sqe1-sample-questions",
         "studyGuideUrl": "https://sqe1prep.co.uk/blog/sqe1-ethics-professional-conduct-revision-guide",
-        "localSourceFile": "SQE_Ethics_Email_Scenarios_UK.md",
+        "localSourceFile": "content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md",
         "from": "Imogen Fairweather",
         "role": "London Office Partner",
         "subject": "Source of funds - the non-league club with millions",
@@ -8439,7 +8340,7 @@
         "sourceNote": "Original LawScape educational hypothetical informed by public SQE study materials; not an official SRA or Kaplan SQE question. Check the law-and-practice cut-off date for your assessment.",
         "sourceUrl": "https://sqe.sra.org.uk/assessments/sqe1-assessments/sqe1-sample-questions",
         "studyGuideUrl": "https://sqe1prep.co.uk/blog/sqe1-ethics-professional-conduct-revision-guide",
-        "localSourceFile": "SQE_Ethics_Email_Scenarios_UK.md",
+        "localSourceFile": "content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md",
         "from": "Sanjay Patel",
         "role": "London Office Partner",
         "subject": "Can we tell the client why completion paused?",
@@ -8475,7 +8376,7 @@
         "sourceNote": "Original LawScape educational hypothetical informed by public SQE study materials; not an official SRA or Kaplan SQE question. Check the law-and-practice cut-off date for your assessment.",
         "sourceUrl": "https://sqe.sra.org.uk/assessments/sqe1-assessments/sqe1-sample-questions",
         "studyGuideUrl": "https://sqe1prep.co.uk/blog/sqe1-ethics-professional-conduct-revision-guide",
-        "localSourceFile": "SQE_Ethics_Email_Scenarios_UK.md",
+        "localSourceFile": "content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md",
         "from": "Harriet Cole",
         "role": "London Risk Partner",
         "subject": "Overseas minister, Chelsea townhouse",
@@ -8511,7 +8412,7 @@
         "sourceNote": "Original LawScape educational hypothetical informed by public SQE study materials; not an official SRA or Kaplan SQE question. Check the law-and-practice cut-off date for your assessment.",
         "sourceUrl": "https://sqe.sra.org.uk/assessments/sqe1-assessments/sqe1-sample-questions",
         "studyGuideUrl": "https://sqe1prep.co.uk/blog/sqe1-ethics-professional-conduct-revision-guide",
-        "localSourceFile": "SQE_Ethics_Email_Scenarios_UK.md",
+        "localSourceFile": "content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md",
         "from": "Eleanor Finch",
         "role": "London Managing Partner",
         "subject": "Comments to the new paralegal",
@@ -8547,7 +8448,7 @@
         "sourceNote": "Original LawScape educational hypothetical informed by public SQE study materials; not an official SRA or Kaplan SQE question. Check the law-and-practice cut-off date for your assessment.",
         "sourceUrl": "https://sqe.sra.org.uk/assessments/sqe1-assessments/sqe1-sample-questions",
         "studyGuideUrl": "https://sqe1prep.co.uk/blog/sqe1-ethics-professional-conduct-revision-guide",
-        "localSourceFile": "SQE_Ethics_Email_Scenarios_UK.md",
+        "localSourceFile": "content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md",
         "from": "Imogen Fairweather",
         "role": "London Office Partner",
         "subject": "Client wants yesterday's date on today's deed",
@@ -8583,7 +8484,7 @@
         "sourceNote": "Original LawScape educational hypothetical informed by public SQE study materials; not an official SRA or Kaplan SQE question. Check the law-and-practice cut-off date for your assessment.",
         "sourceUrl": "https://sqe.sra.org.uk/assessments/sqe1-assessments/sqe1-sample-questions",
         "studyGuideUrl": "https://sqe1prep.co.uk/blog/sqe1-ethics-professional-conduct-revision-guide",
-        "localSourceFile": "SQE_Ethics_Email_Scenarios_UK.md",
+        "localSourceFile": "content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md",
         "from": "Daisy Pembroke",
         "role": "London Office COFA",
         "subject": "Shortfall discovered before the bank holiday",
@@ -8614,6 +8515,2204 @@
       }
     ];
     Object.assign(exports, { SQE_SCENARIOS });
+  },
+  "js/data/state-questions.js": (exports, require) => {
+    // Generated by npm run states:build. Edit content/questions sources.
+    const CALIFORNIA_SCENARIOS = [
+      {
+        "id": "ca_01_sunset_settlement",
+        "difficulty": 1,
+        "from": "Maya Chen",
+        "role": "San Francisco Partner",
+        "subject": "Sunset bakery — an offer beneath our dignity",
+        "body": "The other side emailed a written $12,000 settlement offer in the bakery lease dispute. I think it is ridiculous. The client has not seen it and has given us no settlement instructions. Can we leave it in the inbox until something respectable arrives?",
+        "rule": "Cal. R. Prof. Conduct 1.4.1(a)(2)",
+        "explanation": "Promptly communicate every amount, term and condition of the written settlement offer. Your assessment of its value does not excuse withholding it.",
+        "jurisdiction": "California",
+        "sourceType": "california-style",
+        "sourceNote": "Unofficial California educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/california/QUESTIONS.md",
+        "sourceUrl": "https://www.calbar.ca.gov/legal-professionals/rules/rules-professional-conduct/current-rules-professional-conduct",
+        "sourceLabel": "California questions and answer key",
+        "officialSourceLabel": "California rules and amendments",
+        "gold": 35,
+        "choices": [
+          {
+            "text": "Promptly give the client all the offer terms and explain our assessment.",
+            "grade": "correct"
+          },
+          {
+            "text": "Wait until the offer reaches our internal target.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.4.1(a)(2): Promptly communicate every amount, term and condition of the written settlement offer. Your assessment of its value does not excuse withholding it."
+          },
+          {
+            "text": "Reject it without telling the client because we know the case best.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.4.1(a)(2): Promptly communicate every amount, term and condition of the written settlement offer. Your assessment of its value does not excuse withholding it."
+          },
+          {
+            "text": "Forward only the dollar amount; the release terms can wait.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.4.1(a)(2): Promptly communicate every amount, term and condition of the written settlement offer. Your assessment of its value does not excuse withholding it."
+          }
+        ]
+      },
+      {
+        "id": "ca_02_oakland_insurance",
+        "difficulty": 1,
+        "from": "Elena Ruiz",
+        "role": "Oakland Partner",
+        "subject": "New engagement, no insurance, excellent stationery",
+        "body": "Our private firm has no professional liability insurance. A new client is retaining us for a 40-hour contract matter, with no emergency. We have never disclosed the lack of insurance to her. Is an oral mention at the coffee machine enough?",
+        "rule": "Cal. R. Prof. Conduct 1.4.2(a), (c)",
+        "explanation": "The uninsured lawyer must inform the client in writing at engagement. None of the listed exceptions applies to this ordinary 40-hour private engagement.",
+        "jurisdiction": "California",
+        "sourceType": "california-style",
+        "sourceNote": "Unofficial California educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/california/QUESTIONS.md",
+        "sourceUrl": "https://www.calbar.ca.gov/legal-professionals/rules/rules-professional-conduct/current-rules-professional-conduct",
+        "sourceLabel": "California questions and answer key",
+        "officialSourceLabel": "California rules and amendments",
+        "gold": 35,
+        "choices": [
+          {
+            "text": "Yes, if the client nods.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.4.2(a), (c): The uninsured lawyer must inform the client in writing at engagement. None of the listed exceptions applies to this ordinary 40-hour private engagement."
+          },
+          {
+            "text": "No. Disclose the lack of insurance in writing at engagement.",
+            "grade": "correct"
+          },
+          {
+            "text": "No disclosure is needed unless the client asks.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.4.2(a), (c): The uninsured lawyer must inform the client in writing at engagement. None of the listed exceptions applies to this ordinary 40-hour private engagement."
+          },
+          {
+            "text": "Disclose it only if a claim is filed.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.4.2(a), (c): The uninsured lawyer must inform the client in writing at engagement. None of the listed exceptions applies to this ordinary 40-hour private engagement."
+          }
+        ]
+      },
+      {
+        "id": "ca_03_pasadena_flat_fee",
+        "difficulty": 1,
+        "from": "Noah Patel",
+        "role": "Pasadena Partner",
+        "subject": "Calling the fee nonrefundable should solve everything",
+        "body": "We will charge $4,000 in advance to prepare a small business contract. The money pays for the drafting work, not solely for our availability. Can we label it a nonrefundable true retainer so we keep all of it if the client cancels before any work?",
+        "rule": "Cal. R. Prof. Conduct 1.5(d)-(e), 1.16(e)(2)",
+        "explanation": "A payment for specified services is not a true availability retainer. The nonrefundable label cannot change that; unearned advance fees must be refunded on termination.",
+        "jurisdiction": "California",
+        "sourceType": "california-style",
+        "sourceNote": "Unofficial California educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/california/QUESTIONS.md",
+        "sourceUrl": "https://www.calbar.ca.gov/legal-professionals/rules/rules-professional-conduct/current-rules-professional-conduct",
+        "sourceLabel": "California questions and answer key",
+        "officialSourceLabel": "California rules and amendments",
+        "gold": 35,
+        "choices": [
+          {
+            "text": "Yes, if the client is a sophisticated business owner.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.5(d)-(e), 1.16(e)(2): A payment for specified services is not a true availability retainer. The nonrefundable label cannot change that; unearned advance fees must be refunded on termination."
+          },
+          {
+            "text": "Yes, if the invoice uses capital letters.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.5(d)-(e), 1.16(e)(2): A payment for specified services is not a true availability retainer. The nonrefundable label cannot change that; unearned advance fees must be refunded on termination."
+          },
+          {
+            "text": "No. Treat it as a fee for services and refund any unearned portion on termination.",
+            "grade": "correct"
+          },
+          {
+            "text": "Yes, because every flat fee is earned on receipt.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.5(d)-(e), 1.16(e)(2): A payment for specified services is not a true availability retainer. The nonrefundable label cannot change that; unearned advance fees must be refunded on termination."
+          }
+        ]
+      },
+      {
+        "id": "ca_04_sacramento_referral",
+        "difficulty": 1,
+        "from": "Inez Brooks",
+        "role": "Sacramento Partner",
+        "subject": "Referral arrangement over tacos",
+        "body": "An outside lawyer referred a contract case and we propose a fee division. There is no court order. We shook hands, but neither the lawyers' agreement nor the client's consent is in writing. May we divide the fee now?",
+        "rule": "Cal. R. Prof. Conduct 1.5.1(a)",
+        "explanation": "The lawyers need a written fee-division agreement. The client must consent in writing after full written disclosure of the division, participants and terms, at the agreement or as soon thereafter as reasonably practicable. The division alone cannot increase the total fee.",
+        "jurisdiction": "California",
+        "sourceType": "california-style",
+        "sourceNote": "Unofficial California educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/california/QUESTIONS.md",
+        "sourceUrl": "https://www.calbar.ca.gov/legal-professionals/rules/rules-professional-conduct/current-rules-professional-conduct",
+        "sourceLabel": "California questions and answer key",
+        "officialSourceLabel": "California rules and amendments",
+        "gold": 35,
+        "choices": [
+          {
+            "text": "Yes; referrals are an internal accounting matter.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.5.1(a): The lawyers need a written fee-division agreement. The client must consent in writing after full written disclosure of the division, participants and terms, at the agreement or as soon thereafter as reasonably practicable. The division alone cannot increase the total fee."
+          },
+          {
+            "text": "Yes; tell the client only if the bill increases.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.5.1(a): The lawyers need a written fee-division agreement. The client must consent in writing after full written disclosure of the division, participants and terms, at the agreement or as soon thereafter as reasonably practicable. The division alone cannot increase the total fee."
+          },
+          {
+            "text": "Yes; a handshake binds both lawyers.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.5.1(a): The lawyers need a written fee-division agreement. The client must consent in writing after full written disclosure of the division, participants and terms, at the agreement or as soon thereafter as reasonably practicable. The division alone cannot increase the total fee."
+          },
+          {
+            "text": "No. Satisfy the written agreement, disclosure and client-consent requirements, without increasing the fee solely for the split.",
+            "grade": "correct"
+          }
+        ]
+      },
+      {
+        "id": "ca_05_san_diego_adverse_client",
+        "difficulty": 2,
+        "from": "Maya Chen",
+        "role": "San Diego Partner",
+        "subject": "Same client, entirely different file",
+        "body": "We currently advise Harbor Solar on employment contracts. A new client wants us to sue Harbor Solar in an unrelated supply dispute. Neither client has given informed written consent. Can unrelated subject matter alone clear the conflict?",
+        "rule": "Cal. R. Prof. Conduct 1.7(a), (d)",
+        "explanation": "Direct adversity to a current client requires informed written consent from each client even in separate matters, plus satisfaction of the consentability conditions in paragraph (d). Unrelated subject matter alone is insufficient.",
+        "jurisdiction": "California",
+        "sourceType": "california-style",
+        "sourceNote": "Unofficial California educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/california/QUESTIONS.md",
+        "sourceUrl": "https://www.calbar.ca.gov/legal-professionals/rules/rules-professional-conduct/current-rules-professional-conduct",
+        "sourceLabel": "California questions and answer key",
+        "officialSourceLabel": "California rules and amendments",
+        "gold": 45,
+        "choices": [
+          {
+            "text": "No. Assess consentability and obtain the required informed written consents before accepting.",
+            "grade": "correct"
+          },
+          {
+            "text": "Yes; only same-matter conflicts count.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.7(a), (d): Direct adversity to a current client requires informed written consent from each client even in separate matters, plus satisfaction of the consentability conditions in paragraph (d). Unrelated subject matter alone is insufficient."
+          },
+          {
+            "text": "Yes; open a different billing number.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.7(a), (d): Direct adversity to a current client requires informed written consent from each client even in separate matters, plus satisfaction of the consentability conditions in paragraph (d). Unrelated subject matter alone is insufficient."
+          },
+          {
+            "text": "Yes; consent from the new client alone is enough.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.7(a), (d): Direct adversity to a current client requires informed written consent from each client even in separate matters, plus satisfaction of the consentability conditions in paragraph (d). Unrelated subject matter alone is insufficient."
+          }
+        ]
+      },
+      {
+        "id": "ca_06_fresno_business_deal",
+        "difficulty": 2,
+        "from": "Elena Ruiz",
+        "role": "Fresno Partner",
+        "subject": "Buying into the client's almond business",
+        "body": "I want to purchase an ownership stake directly from our existing almond-grower client. This is a negotiated investment, not a standard purchase of goods. The terms and my role have not been disclosed in writing, and she has no independent lawyer. She says she trusts me. Enough?",
+        "rule": "Cal. R. Prof. Conduct 1.8.1(a)-(c)",
+        "explanation": "The transaction must be fair and reasonable, with written disclosure of terms and the lawyer's role. An unrepresented client must receive written advice to seek an independent lawyer and a reasonable opportunity to do so, followed by informed written consent.",
+        "jurisdiction": "California",
+        "sourceType": "california-style",
+        "sourceNote": "Unofficial California educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/california/QUESTIONS.md",
+        "sourceUrl": "https://www.calbar.ca.gov/legal-professionals/rules/rules-professional-conduct/current-rules-professional-conduct",
+        "sourceLabel": "California questions and answer key",
+        "officialSourceLabel": "California rules and amendments",
+        "gold": 45,
+        "choices": [
+          {
+            "text": "Yes; trust substitutes for disclosure.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.8.1(a)-(c): The transaction must be fair and reasonable, with written disclosure of terms and the lawyer's role. An unrepresented client must receive written advice to seek an independent lawyer and a reasonable opportunity to do so, followed by informed written consent."
+          },
+          {
+            "text": "No. Complete the fairness, written disclosure, independent-advice and informed-written-consent safeguards.",
+            "grade": "correct"
+          },
+          {
+            "text": "Yes; give her oral notice after closing.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.8.1(a)-(c): The transaction must be fair and reasonable, with written disclosure of terms and the lawyer's role. An unrepresented client must receive written advice to seek an independent lawyer and a reasonable opportunity to do so, followed by informed written consent."
+          },
+          {
+            "text": "No lawyer may ever transact with a client.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.8.1(a)-(c): The transaction must be fair and reasonable, with written disclosure of terms and the lawyer's role. An unrepresented client must receive written advice to seek an independent lawyer and a reasonable opportunity to do so, followed by informed written consent."
+          }
+        ]
+      },
+      {
+        "id": "ca_07_monterey_gift",
+        "difficulty": 2,
+        "from": "Noah Patel",
+        "role": "Monterey Partner",
+        "subject": "A thank-you cottage in the will",
+        "body": "An unrelated estate-planning client asks me to draft a will giving me her $900,000 cottage. No independent lawyer has advised her or provided a certificate of independent review. She insists the gift was her idea. May I draft it on these facts?",
+        "rule": "Cal. R. Prof. Conduct 1.8.3(a)(2)",
+        "explanation": "The substantial-gift instrument is prohibited on these facts. The rule has exceptions for a related recipient or independent advice with a certificate meeting Probate Code section 21384; neither is present. An unsolicited request alone is insufficient.",
+        "jurisdiction": "California",
+        "sourceType": "california-style",
+        "sourceNote": "Unofficial California educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/california/QUESTIONS.md",
+        "sourceUrl": "https://www.calbar.ca.gov/legal-professionals/rules/rules-professional-conduct/current-rules-professional-conduct",
+        "sourceLabel": "California questions and answer key",
+        "officialSourceLabel": "California rules and amendments",
+        "gold": 45,
+        "choices": [
+          {
+            "text": "Yes; she suggested it first.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.8.3(a)(2): The substantial-gift instrument is prohibited on these facts. The rule has exceptions for a related recipient or independent advice with a certificate meeting Probate Code section 21384; neither is present. An unsolicited request alone is insufficient."
+          },
+          {
+            "text": "Yes; she can sign a generic conflict waiver.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.8.3(a)(2): The substantial-gift instrument is prohibited on these facts. The rule has exceptions for a related recipient or independent advice with a certificate meeting Probate Code section 21384; neither is present. An unsolicited request alone is insufficient."
+          },
+          {
+            "text": "No. Neither the related-person nor qualifying independent-review exception is satisfied.",
+            "grade": "correct"
+          },
+          {
+            "text": "Yes; wills are exempt from the gift rule.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.8.3(a)(2): The substantial-gift instrument is prohibited on these facts. The rule has exceptions for a related recipient or independent advice with a certificate meeting Probate Code section 21384; neither is present. An unsolicited request alone is insufficient."
+          }
+        ]
+      },
+      {
+        "id": "ca_08_irvine_third_party_payer",
+        "difficulty": 2,
+        "from": "Inez Brooks",
+        "role": "Irvine Partner",
+        "subject": "Dad pays, Dad gets the file?",
+        "body": "An adult client's father offers to pay her legal fees if we send him every confidential update and let him decide strategy. The client has not consented. No law, court order or other exception applies. Can we accept those terms?",
+        "rule": "Cal. R. Prof. Conduct 1.8.6(a)-(c)",
+        "explanation": "Third-party payment cannot interfere with independent judgment or the client relationship. Confidential information must remain protected, and the client's informed written consent to the payment arrangement is required here. Paying does not make the father the client.",
+        "jurisdiction": "California",
+        "sourceType": "california-style",
+        "sourceNote": "Unofficial California educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/california/QUESTIONS.md",
+        "sourceUrl": "https://www.calbar.ca.gov/legal-professionals/rules/rules-professional-conduct/current-rules-professional-conduct",
+        "sourceLabel": "California questions and answer key",
+        "officialSourceLabel": "California rules and amendments",
+        "gold": 45,
+        "choices": [
+          {
+            "text": "Yes; the payer controls the engagement.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.8.6(a)-(c): Third-party payment cannot interfere with independent judgment or the client relationship. Confidential information must remain protected, and the client's informed written consent to the payment arrangement is required here. Paying does not make the father the client."
+          },
+          {
+            "text": "Yes; send only the most interesting updates.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.8.6(a)-(c): Third-party payment cannot interfere with independent judgment or the client relationship. Confidential information must remain protected, and the client's informed written consent to the payment arrangement is required here. Paying does not make the father the client."
+          },
+          {
+            "text": "Yes; obtain the father's written consent.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.8.6(a)-(c): Third-party payment cannot interfere with independent judgment or the client relationship. Confidential information must remain protected, and the client's informed written consent to the payment arrangement is required here. Paying does not make the father the client."
+          },
+          {
+            "text": "No. Preserve the client's control and confidentiality and obtain her required informed written consent to an appropriate arrangement.",
+            "grade": "correct"
+          }
+        ]
+      },
+      {
+        "id": "ca_09_santa_rosa_former_client",
+        "difficulty": 2,
+        "from": "Maya Chen",
+        "role": "Santa Rosa Partner",
+        "subject": "That winery agreement we drafted",
+        "body": "I drafted a winery's distribution agreement last year; that engagement ended. The distributor now wants me to attack that same agreement against the winery. The winery has not given informed written consent. Does closing the old file make us clear?",
+        "rule": "Cal. R. Prof. Conduct 1.9(a)",
+        "explanation": "A former representation still bars materially adverse representation in the same or a substantially related matter without the former client's informed written consent. Archiving the file does not end that duty.",
+        "jurisdiction": "California",
+        "sourceType": "california-style",
+        "sourceNote": "Unofficial California educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/california/QUESTIONS.md",
+        "sourceUrl": "https://www.calbar.ca.gov/legal-professionals/rules/rules-professional-conduct/current-rules-professional-conduct",
+        "sourceLabel": "California questions and answer key",
+        "officialSourceLabel": "California rules and amendments",
+        "gold": 45,
+        "choices": [
+          {
+            "text": "No. The same-matter adversity requires the former client's informed written consent.",
+            "grade": "correct"
+          },
+          {
+            "text": "Yes; the engagement ended.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.9(a): A former representation still bars materially adverse representation in the same or a substantially related matter without the former client's informed written consent. Archiving the file does not end that duty."
+          },
+          {
+            "text": "Yes; ask only the distributor to consent.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.9(a): A former representation still bars materially adverse representation in the same or a substantially related matter without the former client's informed written consent. Archiving the file does not end that duty."
+          },
+          {
+            "text": "Yes; promise not to open the archive.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.9(a): A former representation still bars materially adverse representation in the same or a substantially related matter without the former client's informed written consent. Archiving the file does not end that duty."
+          }
+        ]
+      },
+      {
+        "id": "ca_10_berkeley_advance_fee",
+        "difficulty": 2,
+        "from": "Elena Ruiz",
+        "role": "Berkeley Partner",
+        "subject": "Advance flat fee — operating account?",
+        "body": "A client pays a $3,000 flat fee in advance for a lease review. We want to deposit it in operating. No work has been done and we have given no written disclosure about trust-account or refund rights. She has signed nothing. Is the flat-fee label enough?",
+        "rule": "Cal. R. Prof. Conduct 1.15(a)-(b)",
+        "explanation": "Advance fees generally belong in trust. For the flat-fee operating-account exception, disclose in writing the client's right to require trust deposit until earned and to an unearned-fee refund. Because this fee exceeds $1,000, the client's agreement to operating deposit and those disclosures must be in a writing signed by the client.",
+        "jurisdiction": "California",
+        "sourceType": "california-style",
+        "sourceNote": "Unofficial California educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/california/QUESTIONS.md",
+        "sourceUrl": "https://www.calbar.ca.gov/legal-professionals/rules/rules-professional-conduct/current-rules-professional-conduct",
+        "sourceLabel": "California questions and answer key",
+        "officialSourceLabel": "California rules and amendments",
+        "gold": 45,
+        "choices": [
+          {
+            "text": "Yes; every flat fee belongs in operating immediately.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.15(a)-(b): Advance fees generally belong in trust. For the flat-fee operating-account exception, disclose in writing the client's right to require trust deposit until earned and to an unearned-fee refund. Because this fee exceeds $1,000, the client's agreement to operating deposit and those disclosures must be in a writing signed by the client."
+          },
+          {
+            "text": "No. Use trust unless the required disclosures and signed agreement for this exception are obtained.",
+            "grade": "correct"
+          },
+          {
+            "text": "Yes; a bookkeeping note is enough.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.15(a)-(b): Advance fees generally belong in trust. For the flat-fee operating-account exception, disclose in writing the client's right to require trust deposit until earned and to an unearned-fee refund. Because this fee exceeds $1,000, the client's agreement to operating deposit and those disclosures must be in a writing signed by the client."
+          },
+          {
+            "text": "No; flat fees can never be paid in advance.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.15(a)-(b): Advance fees generally belong in trust. For the flat-fee operating-account exception, disclose in writing the client's right to require trust deposit until earned and to an unearned-fee refund. Because this fee exceeds $1,000, the client's agreement to operating deposit and those disclosures must be in a writing signed by the client."
+          }
+        ]
+      },
+      {
+        "id": "ca_11_long_beach_disputed_fee",
+        "difficulty": 2,
+        "from": "Noah Patel",
+        "role": "Long Beach Partner",
+        "subject": "A disputed fee and an undisputed recovery",
+        "body": "Settlement funds have cleared trust. The client is entitled to an undisputed $30,000 but contests our claimed $5,000 fee. There are no other claims or impediments. Can we transfer the disputed fee to operating and hold the rest until she stops arguing?",
+        "rule": "Cal. R. Prof. Conduct 1.15(c)(2), (d)(7)",
+        "explanation": "Keep the disputed fee in trust until the dispute is finally resolved, and promptly distribute the undisputed funds the client is entitled to receive. Neither moving the disputed portion nor withholding the client's undisputed portion is justified.",
+        "jurisdiction": "California",
+        "sourceType": "california-style",
+        "sourceNote": "Unofficial California educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/california/QUESTIONS.md",
+        "sourceUrl": "https://www.calbar.ca.gov/legal-professionals/rules/rules-professional-conduct/current-rules-professional-conduct",
+        "sourceLabel": "California questions and answer key",
+        "officialSourceLabel": "California rules and amendments",
+        "gold": 45,
+        "choices": [
+          {
+            "text": "Yes; we control the trust account.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.15(c)(2), (d)(7): Keep the disputed fee in trust until the dispute is finally resolved, and promptly distribute the undisputed funds the client is entitled to receive. Neither moving the disputed portion nor withholding the client's undisputed portion is justified."
+          },
+          {
+            "text": "Move all funds to operating pending mediation.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.15(c)(2), (d)(7): Keep the disputed fee in trust until the dispute is finally resolved, and promptly distribute the undisputed funds the client is entitled to receive. Neither moving the disputed portion nor withholding the client's undisputed portion is justified."
+          },
+          {
+            "text": "No. Retain the disputed portion in trust and promptly release the undisputed client funds.",
+            "grade": "correct"
+          },
+          {
+            "text": "Keep everything indefinitely because any dispute freezes all funds.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.15(c)(2), (d)(7): Keep the disputed fee in trust until the dispute is finally resolved, and promptly distribute the undisputed funds the client is entitled to receive. Neither moving the disputed portion nor withholding the client's undisputed portion is justified."
+          }
+        ]
+      },
+      {
+        "id": "ca_12_riverside_return_file",
+        "difficulty": 2,
+        "from": "Inez Brooks",
+        "role": "Riverside Partner",
+        "subject": "File release held hostage by an invoice",
+        "body": "Our representation has ended and the client requests her pleadings, correspondence and expert reports for new counsel. No protective order, nondisclosure agreement, statute or regulation prevents release. She still owes fees. May we hold these client materials until payment?",
+        "rule": "Cal. R. Prof. Conduct 1.16(e)(1)",
+        "explanation": "On termination, promptly release requested client materials and property, subject to the rule's stated legal restrictions. The duty applies whether the client paid for them or not.",
+        "jurisdiction": "California",
+        "sourceType": "california-style",
+        "sourceNote": "Unofficial California educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/california/QUESTIONS.md",
+        "sourceUrl": "https://www.calbar.ca.gov/legal-professionals/rules/rules-professional-conduct/current-rules-professional-conduct",
+        "sourceLabel": "California questions and answer key",
+        "officialSourceLabel": "California rules and amendments",
+        "gold": 45,
+        "choices": [
+          {
+            "text": "Yes; unpaid files are firm property.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.16(e)(1): On termination, promptly release requested client materials and property, subject to the rule's stated legal restrictions. The duty applies whether the client paid for them or not."
+          },
+          {
+            "text": "Yes; offer only a one-page summary.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.16(e)(1): On termination, promptly release requested client materials and property, subject to the rule's stated legal restrictions. The duty applies whether the client paid for them or not."
+          },
+          {
+            "text": "Wait until the fee dispute is resolved.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.16(e)(1): On termination, promptly release requested client materials and property, subject to the rule's stated legal restrictions. The duty applies whether the client paid for them or not."
+          },
+          {
+            "text": "No. Promptly release the requested client materials despite the unpaid bill.",
+            "grade": "correct"
+          }
+        ]
+      },
+      {
+        "id": "ca_13_los_angeles_adverse_authority",
+        "difficulty": 3,
+        "from": "Maya Chen",
+        "role": "Los Angeles Partner",
+        "subject": "The case nobody wants in the brief",
+        "body": "We found controlling California authority directly adverse to our position. Opposing counsel has not disclosed it. It contains no client secrets. The partner wants it omitted because the other side can do its own research. What should we do?",
+        "rule": "Cal. R. Prof. Conduct 3.3(a)(2)",
+        "explanation": "Disclose known, directly adverse legal authority in the controlling jurisdiction that opposing counsel has not disclosed. You may explain a good-faith distinction; silence is not an acceptable research strategy.",
+        "jurisdiction": "California",
+        "sourceType": "california-style",
+        "sourceNote": "Unofficial California educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/california/QUESTIONS.md",
+        "sourceUrl": "https://www.calbar.ca.gov/legal-professionals/rules/rules-professional-conduct/current-rules-professional-conduct",
+        "sourceLabel": "California questions and answer key",
+        "officialSourceLabel": "California rules and amendments",
+        "gold": 60,
+        "choices": [
+          {
+            "text": "Disclose it and explain any good-faith distinction.",
+            "grade": "correct"
+          },
+          {
+            "text": "Omit it because opposing counsel bears the research burden.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 3.3(a)(2): Disclose known, directly adverse legal authority in the controlling jurisdiction that opposing counsel has not disclosed. You may explain a good-faith distinction; silence is not an acceptable research strategy."
+          },
+          {
+            "text": "Quote only its favorable sentence and hide the holding.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 3.3(a)(2): Disclose known, directly adverse legal authority in the controlling jurisdiction that opposing counsel has not disclosed. You may explain a good-faith distinction; silence is not an acceptable research strategy."
+          },
+          {
+            "text": "Ask the client to waive the court's right to know.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 3.3(a)(2): Disclose known, directly adverse legal authority in the controlling jurisdiction that opposing counsel has not disclosed. You may explain a good-faith distinction; silence is not an acceptable research strategy."
+          }
+        ]
+      },
+      {
+        "id": "ca_14_san_jose_evidence",
+        "difficulty": 3,
+        "from": "Elena Ruiz",
+        "role": "San Jose Partner",
+        "subject": "Discovery hold versus the cleanup button",
+        "body": "Our technology client has emails covered by an existing legal preservation obligation. The founder wants us to help permanently delete the damaging ones before discovery. The messages are embarrassing, not privileged. Can we call it routine housekeeping?",
+        "rule": "Cal. R. Prof. Conduct 3.4(a)-(b)",
+        "explanation": "A lawyer cannot unlawfully destroy or conceal evidence, assist another in doing so, or suppress evidence subject to a legal production obligation. Calling deliberate destruction housekeeping does not change the conduct.",
+        "jurisdiction": "California",
+        "sourceType": "california-style",
+        "sourceNote": "Unofficial California educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/california/QUESTIONS.md",
+        "sourceUrl": "https://www.calbar.ca.gov/legal-professionals/rules/rules-professional-conduct/current-rules-professional-conduct",
+        "sourceLabel": "California questions and answer key",
+        "officialSourceLabel": "California rules and amendments",
+        "gold": 60,
+        "choices": [
+          {
+            "text": "Yes, if deletion is automatic.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 3.4(a)-(b): A lawyer cannot unlawfully destroy or conceal evidence, assist another in doing so, or suppress evidence subject to a legal production obligation. Calling deliberate destruction housekeeping does not change the conduct."
+          },
+          {
+            "text": "No. Preserve the evidence and refuse to assist its unlawful destruction.",
+            "grade": "correct"
+          },
+          {
+            "text": "Yes; only filed exhibits count as evidence.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 3.4(a)-(b): A lawyer cannot unlawfully destroy or conceal evidence, assist another in doing so, or suppress evidence subject to a legal production obligation. Calling deliberate destruction housekeeping does not change the conduct."
+          },
+          {
+            "text": "Yes, if the founder clicks the button.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 3.4(a)-(b): A lawyer cannot unlawfully destroy or conceal evidence, assist another in doing so, or suppress evidence subject to a legal production obligation. Calling deliberate destruction housekeeping does not change the conduct."
+          }
+        ]
+      },
+      {
+        "id": "ca_15_santa_barbara_threat",
+        "difficulty": 3,
+        "from": "Noah Patel",
+        "role": "Santa Barbara Partner",
+        "subject": "Pay the civil demand or face a licensing complaint",
+        "body": "In a private fee dispute with a licensed contractor, the client wants our letter to threaten a complaint that could suspend the contractor's license unless he pays. The complaint is not a legal prerequisite to a civil action. Can we use that threat to secure payment?",
+        "rule": "Cal. R. Prof. Conduct 3.10(a)-(c)",
+        "explanation": "California prohibits threats of criminal, administrative or disciplinary charges to obtain an advantage in a civil dispute. This license-sanction complaint fits the administrative definition and is not within the prerequisite-filing exclusion.",
+        "jurisdiction": "California",
+        "sourceType": "california-style",
+        "sourceNote": "Unofficial California educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/california/QUESTIONS.md",
+        "sourceUrl": "https://www.calbar.ca.gov/legal-professionals/rules/rules-professional-conduct/current-rules-professional-conduct",
+        "sourceLabel": "California questions and answer key",
+        "officialSourceLabel": "California rules and amendments",
+        "gold": 60,
+        "choices": [
+          {
+            "text": "Yes; only threats of criminal charges are prohibited.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 3.10(a)-(c): California prohibits threats of criminal, administrative or disciplinary charges to obtain an advantage in a civil dispute. This license-sanction complaint fits the administrative definition and is not within the prerequisite-filing exclusion."
+          },
+          {
+            "text": "Yes; no lawsuit has been filed yet.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 3.10(a)-(c): California prohibits threats of criminal, administrative or disciplinary charges to obtain an advantage in a civil dispute. This license-sanction complaint fits the administrative definition and is not within the prerequisite-filing exclusion."
+          },
+          {
+            "text": "No. Remove the administrative-charge threat from the civil demand.",
+            "grade": "correct"
+          },
+          {
+            "text": "Yes; truthful allegations always permit a threat.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 3.10(a)-(c): California prohibits threats of criminal, administrative or disciplinary charges to obtain an advantage in a civil dispute. This license-sanction complaint fits the administrative definition and is not within the prerequisite-filing exclusion."
+          }
+        ]
+      },
+      {
+        "id": "ca_16_ventura_represented_person",
+        "difficulty": 3,
+        "from": "Inez Brooks",
+        "role": "Ventura Partner",
+        "subject": "The represented owner says call me directly",
+        "body": "We know the adverse owner has counsel in the dispute. She invites us to call her directly to negotiate. Her lawyer has not consented, and no law or court order authorizes the communication. Is her invitation enough?",
+        "rule": "Cal. R. Prof. Conduct 4.2(a), (c)",
+        "explanation": "For this communication about the representation, consent must come from the other lawyer. The represented person's invitation alone does not satisfy Rule 4.2, and the authorization exceptions are excluded by the facts.",
+        "jurisdiction": "California",
+        "sourceType": "california-style",
+        "sourceNote": "Unofficial California educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/california/QUESTIONS.md",
+        "sourceUrl": "https://www.calbar.ca.gov/legal-professionals/rules/rules-professional-conduct/current-rules-professional-conduct",
+        "sourceLabel": "California questions and answer key",
+        "officialSourceLabel": "California rules and amendments",
+        "gold": 60,
+        "choices": [
+          {
+            "text": "Yes; the person can always waive the rule herself.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 4.2(a), (c): For this communication about the representation, consent must come from the other lawyer. The represented person's invitation alone does not satisfy Rule 4.2, and the authorization exceptions are excluded by the facts."
+          },
+          {
+            "text": "Yes; copy her lawyer afterward.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 4.2(a), (c): For this communication about the representation, consent must come from the other lawyer. The represented person's invitation alone does not satisfy Rule 4.2, and the authorization exceptions are excluded by the facts."
+          },
+          {
+            "text": "Yes; label the call off the record.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 4.2(a), (c): For this communication about the representation, consent must come from the other lawyer. The represented person's invitation alone does not satisfy Rule 4.2, and the authorization exceptions are excluded by the facts."
+          },
+          {
+            "text": "No. Obtain her lawyer's consent before discussing the matter directly.",
+            "grade": "correct"
+          }
+        ]
+      },
+      {
+        "id": "ca_17_san_luis_obispo_wrong_attachment",
+        "difficulty": 3,
+        "from": "Maya Chen",
+        "role": "San Luis Obispo Partner",
+        "subject": "The attachment marked privileged",
+        "body": "Opposing counsel accidentally sends us a privileged strategy memo. The mistake and privilege are reasonably apparent from the first paragraph. May we finish reading the useful parts before notifying the sender?",
+        "rule": "Cal. R. Prof. Conduct 4.4(a)-(b)",
+        "explanation": "Refrain from examining the writing beyond what is necessary to determine that it is privileged or work product, and promptly notify the sender. California's rule requires both steps in these circumstances.",
+        "jurisdiction": "California",
+        "sourceType": "california-style",
+        "sourceNote": "Unofficial California educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/california/QUESTIONS.md",
+        "sourceUrl": "https://www.calbar.ca.gov/legal-professionals/rules/rules-professional-conduct/current-rules-professional-conduct",
+        "sourceLabel": "California questions and answer key",
+        "officialSourceLabel": "California rules and amendments",
+        "gold": 60,
+        "choices": [
+          {
+            "text": "No. Stop unnecessary review and promptly notify the sender.",
+            "grade": "correct"
+          },
+          {
+            "text": "Yes; notice alone permits unlimited reading first.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 4.4(a)-(b): Refrain from examining the writing beyond what is necessary to determine that it is privileged or work product, and promptly notify the sender. California's rule requires both steps in these circumstances."
+          },
+          {
+            "text": "Yes; forward it to the client before notifying counsel.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 4.4(a)-(b): Refrain from examining the writing beyond what is necessary to determine that it is privileged or work product, and promptly notify the sender. California's rule requires both steps in these circumstances."
+          },
+          {
+            "text": "Delete it silently and never mention it.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 4.4(a)-(b): Refrain from examining the writing beyond what is necessary to determine that it is privileged or work product, and promptly notify the sender. California's rule requires both steps in these circumstances."
+          }
+        ]
+      },
+      {
+        "id": "ca_18_palm_springs_supervisor",
+        "difficulty": 3,
+        "from": "Elena Ruiz",
+        "role": "Palm Springs Associate",
+        "subject": "The partner ordered the false statement",
+        "body": "A partner directs me to knowingly tell the judge a fabricated fact. There is no arguable question of professional duty; we both know it is false. Does following the partner's order protect me?",
+        "rule": "Cal. R. Prof. Conduct 5.2(a)-(b), 3.3(a)(1)",
+        "explanation": "Subordinates remain bound by professional duties. The reasonable-resolution protection applies only to an arguable duty question, not a knowingly fabricated statement to a tribunal.",
+        "jurisdiction": "California",
+        "sourceType": "california-style",
+        "sourceNote": "Unofficial California educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/california/QUESTIONS.md",
+        "sourceUrl": "https://www.calbar.ca.gov/legal-professionals/rules/rules-professional-conduct/current-rules-professional-conduct",
+        "sourceLabel": "California questions and answer key",
+        "officialSourceLabel": "California rules and amendments",
+        "gold": 60,
+        "choices": [
+          {
+            "text": "Yes; all responsibility moves to the supervisor.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 5.2(a)-(b), 3.3(a)(1): Subordinates remain bound by professional duties. The reasonable-resolution protection applies only to an arguable duty question, not a knowingly fabricated statement to a tribunal."
+          },
+          {
+            "text": "No. Refuse the false statement; the supervisor exception does not apply.",
+            "grade": "correct"
+          },
+          {
+            "text": "Yes; get the instruction in writing.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 5.2(a)-(b), 3.3(a)(1): Subordinates remain bound by professional duties. The reasonable-resolution protection applies only to an arguable duty question, not a knowingly fabricated statement to a tribunal."
+          },
+          {
+            "text": "Yes; junior lawyers cannot be disciplined.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 5.2(a)-(b), 3.3(a)(1): Subordinates remain bound by professional duties. The reasonable-resolution protection applies only to an arguable duty question, not a knowingly fabricated statement to a tribunal."
+          }
+        ]
+      },
+      {
+        "id": "ca_19_sacramento_crime_confidence",
+        "difficulty": 3,
+        "from": "Noah Patel",
+        "role": "Sacramento Partner",
+        "subject": "Importing a crime exception from another state",
+        "body": "A client privately reveals a planned financial crime involving no threat of death or substantial bodily harm. The information is protected client information; the client refuses consent and no other disclosure authority applies. A colleague says every planned crime permits disclosure under California Rule 1.6. Correct?",
+        "rule": "Cal. R. Prof. Conduct 1.6(a)-(d)",
+        "explanation": "California Rule 1.6's criminal-act exception concerns prevention of death or substantial bodily harm and includes additional safeguards. It is not a general financial-crime exception. These facts do not permit disclosure under that rule; this does not authorize assisting the crime.",
+        "jurisdiction": "California",
+        "sourceType": "california-style",
+        "sourceNote": "Unofficial California educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/california/QUESTIONS.md",
+        "sourceUrl": "https://www.calbar.ca.gov/legal-professionals/rules/rules-professional-conduct/current-rules-professional-conduct",
+        "sourceLabel": "California questions and answer key",
+        "officialSourceLabel": "California rules and amendments",
+        "gold": 60,
+        "choices": [
+          {
+            "text": "Yes; any financial crime automatically waives confidentiality.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.6(a)-(d): California Rule 1.6's criminal-act exception concerns prevention of death or substantial bodily harm and includes additional safeguards. It is not a general financial-crime exception. These facts do not permit disclosure under that rule; this does not authorize assisting the crime."
+          },
+          {
+            "text": "Yes; disclose only if the amount exceeds $10,000.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.6(a)-(d): California Rule 1.6's criminal-act exception concerns prevention of death or substantial bodily harm and includes additional safeguards. It is not a general financial-crime exception. These facts do not permit disclosure under that rule; this does not authorize assisting the crime."
+          },
+          {
+            "text": "No. This rule does not authorize disclosure of this protected information on these facts.",
+            "grade": "correct"
+          },
+          {
+            "text": "Yes; another state's broader rule controls our California exercise.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 1.6(a)-(d): California Rule 1.6's criminal-act exception concerns prevention of death or substantial bodily harm and includes additional safeguards. It is not a general financial-crime exception. These facts do not permit disclosure under that rule; this does not authorize assisting the crime."
+          }
+        ]
+      },
+      {
+        "id": "ca_20_eureka_reporting",
+        "difficulty": 3,
+        "from": "Inez Brooks",
+        "role": "Eureka Partner",
+        "subject": "Credible evidence of another lawyer's theft",
+        "body": "We know of credible evidence that another lawyer deliberately stole entrusted funds, raising a substantial question about honesty. The evidence is public, not protected by client confidentiality, privilege, mediation or assistance-program confidentiality, or another nondisclosure rule. Can we simply ignore it?",
+        "rule": "Cal. R. Prof. Conduct 8.3(a), (d)",
+        "explanation": "With knowledge of credible evidence of qualifying misconduct raising a substantial fitness or honesty question, report without undue delay to the State Bar or a tribunal with authority to investigate or act. The disclosure protections in paragraph (d) remain important, but these facts exclude them.",
+        "jurisdiction": "California",
+        "sourceType": "california-style",
+        "sourceNote": "Unofficial California educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/california/QUESTIONS.md",
+        "sourceUrl": "https://www.calbar.ca.gov/legal-professionals/rules/rules-professional-conduct/current-rules-professional-conduct",
+        "sourceLabel": "California questions and answer key",
+        "officialSourceLabel": "California rules and amendments",
+        "gold": 60,
+        "choices": [
+          {
+            "text": "Yes; reporting another lawyer is always optional.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 8.3(a), (d): With knowledge of credible evidence of qualifying misconduct raising a substantial fitness or honesty question, report without undue delay to the State Bar or a tribunal with authority to investigate or act. The disclosure protections in paragraph (d) remain important, but these facts exclude them."
+          },
+          {
+            "text": "Wait until the lawyer is convicted.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 8.3(a), (d): With knowledge of credible evidence of qualifying misconduct raising a substantial fitness or honesty question, report without undue delay to the State Bar or a tribunal with authority to investigate or act. The disclosure protections in paragraph (d) remain important, but these facts exclude them."
+          },
+          {
+            "text": "Post accusations on social media instead of reporting to an authorized body.",
+            "grade": "wrong",
+            "why": "Cal. R. Prof. Conduct 8.3(a), (d): With knowledge of credible evidence of qualifying misconduct raising a substantial fitness or honesty question, report without undue delay to the State Bar or a tribunal with authority to investigate or act. The disclosure protections in paragraph (d) remain important, but these facts exclude them."
+          },
+          {
+            "text": "No. Report without undue delay to the State Bar or an authorized tribunal.",
+            "grade": "correct"
+          }
+        ]
+      }
+    ];
+
+    const NEW_YORK_SCENARIOS = [
+      {
+        "id": "ny_email_1_the_brownstone_down_payment",
+        "jurisdiction": "New York",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/NY_Ethics_Email_Scenarios.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments",
+        "difficulty": 1,
+        "gold": 35,
+        "from": "Chidi Okafor",
+        "role": "Brooklyn Office Partner",
+        "subject": "Park Slope brownstone - where does the deposit go?",
+        "body": "Good morning from the Fourth Avenue F train, which is running local again. We represent the seller of a Park Slope brownstone. The buyer's ten percent contract deposit, $215,000, arrives by wire this afternoon and we hold it as escrowee until closing in sixty days.\n\nOur bookkeeper says the operating account has the best interest rate and closing is only two months out, so she proposes to park the deposit there and move it at closing. The buyer's counsel also mentioned a bank in New Jersey the buyer prefers. Which account do we use?",
+        "rule": "N.Y. R. Prof. Conduct 1.15(a), 1.15(b)(1)-(2)",
+        "explanation": "Funds held incident to practice must be kept in a separately titled special account at a New York banking institution complying with Part 1300 dishonored-check and overdraft reporting under Part 1300, with no overdraft protection; an out-of-state bank is permitted only if the bank complies with Part 1300 and the owner gives prior written approval specifying the branch name and address.",
+        "choices": [
+          {
+            "text": "The operating account is acceptable for a short escrow period as long as the firm keeps a ledger showing the buyer's share.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.15(a), 1.15(b)(1)-(2): Funds held incident to practice must be kept in a separately titled special account at a New York banking institution complying with Part 1300 dishonored-check and overdraft reporting under Part 1300, with no overdraft protection; an out-of-state bank is permitted only if the bank complies with Part 1300 and the owner gives prior written approval specifying the branch name and address."
+          },
+          {
+            "text": "Any bank the buyer prefers will do, in or out of New York, because the funds belong to the buyer.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.15(a), 1.15(b)(1)-(2): Funds held incident to practice must be kept in a separately titled special account at a New York banking institution complying with Part 1300 dishonored-check and overdraft reporting under Part 1300, with no overdraft protection; an out-of-state bank is permitted only if the bank complies with Part 1300 and the owner gives prior written approval specifying the branch name and address."
+          },
+          {
+            "text": "Deposit it into the firm's Attorney Escrow Account at a New York banking institution complying with Part 1300 dishonored-check and overdraft reporting; the account may not have overdraft protection, and it may be moved to an out-of-state bank only if that bank also complies with Part 1300 and the owner gives prior written approval specifying the branch's name and address.",
+            "grade": "correct"
+          },
+          {
+            "text": "Open a personal savings account in the associate's name earning interest for the buyer, since the associate is not a party to the sale.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.15(a), 1.15(b)(1)-(2): Funds held incident to practice must be kept in a separately titled special account at a New York banking institution complying with Part 1300 dishonored-check and overdraft reporting under Part 1300, with no overdraft protection; an out-of-state bank is permitted only if the bank complies with Part 1300 and the owner gives prior written approval specifying the branch name and address."
+          }
+        ]
+      },
+      {
+        "id": "ny_email_2_the_court_of_appeals_case_on_the_ferry",
+        "jurisdiction": "New York",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/NY_Ethics_Email_Scenarios.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments",
+        "difficulty": 1,
+        "gold": 35,
+        "from": "Luis Ortega",
+        "role": "Staten Island Office Partner",
+        "subject": "Found a bad case on the 7:20 ferry",
+        "body": "Reading advance sheets on the ferry this morning, I found a Court of Appeals decision squarely against our position on the motion to dismiss in the St. George warehouse case. It is directly on point and it is controlling. Opposing counsel's papers do not cite it and their reply is already filed.\n\nThe client says the other side had every chance to find it and we should say nothing. I think we can distinguish it on the lease language. What goes in our sur-reply?",
+        "rule": "N.Y. R. Prof. Conduct 3.3(a)(2)",
+        "explanation": "A lawyer shall not knowingly fail to disclose to the tribunal controlling legal authority known to be directly adverse to the client's position and not disclosed by opposing counsel; the lawyer may then argue that it is distinguishable.",
+        "choices": [
+          {
+            "text": "Omit the decision because the duty to disclose adverse authority applies only to statutes, not case law.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 3.3(a)(2): A lawyer shall not knowingly fail to disclose to the tribunal controlling legal authority known to be directly adverse to the client's position and not disclosed by opposing counsel; the lawyer may then argue that it is distinguishable."
+          },
+          {
+            "text": "Disclose the decision to the court and argue that it is distinguishable on the lease language.",
+            "grade": "correct"
+          },
+          {
+            "text": "Omit the decision because it is opposing counsel's burden to find its own authority and the client has instructed silence.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 3.3(a)(2): A lawyer shall not knowingly fail to disclose to the tribunal controlling legal authority known to be directly adverse to the client's position and not disclosed by opposing counsel; the lawyer may then argue that it is distinguishable."
+          },
+          {
+            "text": "Withdraw from the motion rather than cite a case against the client.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 3.3(a)(2): A lawyer shall not knowingly fail to disclose to the tribunal controlling legal authority known to be directly adverse to the client's position and not disclosed by opposing counsel; the lawyer may then argue that it is distinguishable."
+          }
+        ]
+      },
+      {
+        "id": "ny_email_3_the_winery_owner_s_text_message",
+        "jurisdiction": "New York",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/NY_Ethics_Email_Scenarios.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments",
+        "difficulty": 1,
+        "gold": 35,
+        "from": "Yuki Tanabe",
+        "role": "Ithaca Office Partner",
+        "subject": "Seneca Lake winery dispute - can I text her directly?",
+        "body": "We represent one co-owner of a Seneca Lake winery in a buyout dispute. The other co-owner has retained counsel in Rochester. Our client is frustrated that the lawyers are slowing everything down and says the two owners could settle this over a glass of Riesling in an afternoon.\n\nThe other owner texted our client last night suggesting the same thing. Can I text her a term sheet myself, and can our client sit down with her?",
+        "rule": "N.Y. R. Prof. Conduct 4.2(a)-(b)",
+        "explanation": "A lawyer may not communicate with a represented party about the matter without the other lawyer's prior consent, but may cause and counsel the client's own communication with that party after giving reasonable advance notice to the party's counsel.",
+        "choices": [
+          {
+            "text": "You may text her a term sheet as long as you copy her lawyer afterward.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 4.2(a)-(b): A lawyer may not communicate with a represented party about the matter without the other lawyer's prior consent, but may cause and counsel the client's own communication with that party after giving reasonable advance notice to the party's counsel."
+          },
+          {
+            "text": "Neither you nor the client may communicate with her about the dispute while she is represented.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 4.2(a)-(b): A lawyer may not communicate with a represented party about the matter without the other lawyer's prior consent, but may cause and counsel the client's own communication with that party after giving reasonable advance notice to the party's counsel."
+          },
+          {
+            "text": "You may communicate with her directly because she initiated contact with our client.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 4.2(a)-(b): A lawyer may not communicate with a represented party about the matter without the other lawyer's prior consent, but may cause and counsel the client's own communication with that party after giving reasonable advance notice to the party's counsel."
+          },
+          {
+            "text": "You may not communicate with her without her lawyer's prior consent, but the client may meet her and you may counsel him about that meeting, provided you give her lawyer reasonable advance notice that the conversation will take place.",
+            "grade": "correct"
+          }
+        ]
+      },
+      {
+        "id": "ny_email_4_the_great_camp_in_the_will",
+        "jurisdiction": "New York",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/NY_Ethics_Email_Scenarios.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments",
+        "difficulty": 1,
+        "gold": 35,
+        "from": "Bea Underhill",
+        "role": "Lake Placid Office Partner",
+        "subject": "Mrs. Halvorsen wants to leave me the camp on Upper Saranac",
+        "body": "Mrs. Halvorsen, our longtime estate-planning client, came in after her swim and told me she wants to update her will to leave me the family's Great Camp on Upper Saranac Lake. She has no children and says I am the only person who has ever cared about the boathouse. I did not suggest it. We are not related.\n\nShe asked me to draft the codicil this week. Can I?",
+        "rule": "N.Y. R. Prof. Conduct 1.8(c)(2)",
+        "explanation": "A lawyer shall not prepare an instrument giving the lawyer a gift unless the lawyer is related to the client and a reasonable lawyer would conclude the transaction is fair and reasonable; a partner drafting it for the lawyer does not cure the problem.",
+        "choices": [
+          {
+            "text": "No. You may not prepare an instrument giving yourself a gift because you are not related to her; she should be referred to independent counsel if she wishes to proceed.",
+            "grade": "correct"
+          },
+          {
+            "text": "Yes, because she raised the gift on her own and the Rules prohibit only solicited gifts.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.8(c)(2): A lawyer shall not prepare an instrument giving the lawyer a gift unless the lawyer is related to the client and a reasonable lawyer would conclude the transaction is fair and reasonable; a partner drafting it for the lawyer does not cure the problem."
+          },
+          {
+            "text": "Yes, provided another partner in the firm drafts the codicil instead of you.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.8(c)(2): A lawyer shall not prepare an instrument giving the lawyer a gift unless the lawyer is related to the client and a reasonable lawyer would conclude the transaction is fair and reasonable; a partner drafting it for the lawyer does not cure the problem."
+          },
+          {
+            "text": "Yes, provided the gift is disclosed to the Surrogate's Court when the will is probated.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.8(c)(2): A lawyer shall not prepare an instrument giving the lawyer a gift unless the lawyer is related to the client and a reasonable lawyer would conclude the transaction is fair and reasonable; a partner drafting it for the lawyer does not cure the problem."
+          }
+        ]
+      },
+      {
+        "id": "ny_email_5_the_orchard_s_nonrefundable_retainer",
+        "jurisdiction": "New York",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/NY_Ethics_Email_Scenarios.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments",
+        "difficulty": 2,
+        "gold": 45,
+        "from": "Nadia Petrov",
+        "role": "Hudson Valley Office Partner",
+        "subject": "New Paltz orchard - retainer language",
+        "body": "A Hudson Valley apple orchard wants to retain us for a water-rights dispute with the neighboring cidery. Cash flow is seasonal for them, so the owner offered a $20,000 \"nonrefundable retainer, earned upon receipt\" as advance payment for our work on the dispute before the harvest, not solely for availability.\n\nI like the certainty. Can the engagement letter say that?",
+        "rule": "N.Y. R. Prof. Conduct 1.5(d)(4)",
+        "explanation": "A lawyer shall not charge a nonrefundable retainer fee, but may include a reasonable minimum fee clause that defines in plain language the circumstances under which the fee is incurred and how it is calculated.",
+        "choices": [
+          {
+            "text": "Yes. A nonrefundable retainer is permitted whenever the client proposes it and is sophisticated.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.5(d)(4): A lawyer shall not charge a nonrefundable retainer fee, but may include a reasonable minimum fee clause that defines in plain language the circumstances under which the fee is incurred and how it is calculated."
+          },
+          {
+            "text": "No. New York prohibits nonrefundable retainer fees, but the letter may include a reasonable minimum fee clause if it defines in plain language the circumstances under which the minimum is incurred and how it is calculated.",
+            "grade": "correct"
+          },
+          {
+            "text": "Yes, provided the retainer is deposited in the escrow account rather than the operating account.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.5(d)(4): A lawyer shall not charge a nonrefundable retainer fee, but may include a reasonable minimum fee clause that defines in plain language the circumstances under which the fee is incurred and how it is calculated."
+          },
+          {
+            "text": "No. New York prohibits any advance payment of fees before services are rendered.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.5(d)(4): A lawyer shall not charge a nonrefundable retainer fee, but may include a reasonable minimum fee clause that defines in plain language the circumstances under which the fee is incurred and how it is calculated."
+          }
+        ]
+      },
+      {
+        "id": "ny_email_6_the_rochester_referral",
+        "jurisdiction": "New York",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/NY_Ethics_Email_Scenarios.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments",
+        "difficulty": 2,
+        "gold": 45,
+        "from": "Hannah Weisz",
+        "role": "Rochester Office Partner",
+        "subject": "Garbage plate lunch and a referral fee",
+        "body": "A solo practitioner I know from the Monroe County bar sent us a product-liability case over lunch at the diner across from the Public Market. She will do no work on the file but wants one-third of our contingent fee as a referral fee.\n\nThe client has not been told about any of this. Can we agree to it?",
+        "rule": "N.Y. R. Prof. Conduct 1.5(g)",
+        "explanation": "A fee may be divided with an outside lawyer only if the division is proportional to services or each lawyer assumes joint responsibility in a writing given to the client, the client agrees after full disclosure including each share and the agreement is confirmed in writing, and the total fee is not excessive.",
+        "choices": [
+          {
+            "text": "Yes. A pure referral fee to another lawyer is permitted without client involvement.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.5(g): A fee may be divided with an outside lawyer only if the division is proportional to services or each lawyer assumes joint responsibility in a writing given to the client, the client agrees after full disclosure including each share and the agreement is confirmed in writing, and the total fee is not excessive."
+          },
+          {
+            "text": "No. New York prohibits any division of a fee with a lawyer outside the firm.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.5(g): A fee may be divided with an outside lawyer only if the division is proportional to services or each lawyer assumes joint responsibility in a writing given to the client, the client agrees after full disclosure including each share and the agreement is confirmed in writing, and the total fee is not excessive."
+          },
+          {
+            "text": "Yes, provided the referring lawyer is paid from the firm's operating account rather than from the client's recovery.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.5(g): A fee may be divided with an outside lawyer only if the division is proportional to services or each lawyer assumes joint responsibility in a writing given to the client, the client agrees after full disclosure including each share and the agreement is confirmed in writing, and the total fee is not excessive."
+          },
+          {
+            "text": "Only if the division is in proportion to services performed or, by a writing given to the client, she assumes joint responsibility; the client agrees after full disclosure including each lawyer's share, confirmed in writing; and the total fee is not excessive.",
+            "grade": "correct"
+          }
+        ]
+      },
+      {
+        "id": "ny_email_7_the_saratoga_syndicate",
+        "jurisdiction": "New York",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/NY_Ethics_Email_Scenarios.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments",
+        "difficulty": 2,
+        "gold": 45,
+        "from": "Colette Abernathy",
+        "role": "Saratoga Springs Office Partner",
+        "subject": "Two partners, one racehorse, one lawyer?",
+        "body": "Two friends who co-own a thoroughbred stabled at Saratoga want us to represent both of them in negotiating a sale of the horse to a Kentucky buyer. Their interests mostly align, but they have different views on how the proceeds should be split and one of them has a side arrangement with the trainer that the other does not know about.\n\nThey are both fine with us doing the deal and told me so over coffee at the track. Can we proceed on that basis?",
+        "rule": "N.Y. R. Prof. Conduct 1.7(a)(2), 1.7(b)",
+        "explanation": "A concurrent conflict may be waived only where the lawyer reasonably believes competent and diligent representation of each client is possible, the representation is not prohibited by law and is not a claim by one represented client against another in the same tribunal proceeding, and each affected client gives informed consent confirmed in writing.",
+        "choices": [
+          {
+            "text": "Yes. Their oral agreement at the track is sufficient because the representation is transactional rather than litigation.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.7(a)(2), 1.7(b): A concurrent conflict may be waived only where the lawyer reasonably believes competent and diligent representation of each client is possible, the representation is not prohibited by law and is not a claim by one represented client against another in the same tribunal proceeding, and each affected client gives informed consent confirmed in writing."
+          },
+          {
+            "text": "No. A lawyer may never represent two clients on the same side of a transaction.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.7(a)(2), 1.7(b): A concurrent conflict may be waived only where the lawyer reasonably believes competent and diligent representation of each client is possible, the representation is not prohibited by law and is not a claim by one represented client against another in the same tribunal proceeding, and each affected client gives informed consent confirmed in writing."
+          },
+          {
+            "text": "Only if you reasonably believe you can represent each competently and diligently, the representation is not prohibited by law, and each client gives informed consent confirmed in writing; on these facts the undisclosed side arrangement may make the conflict nonconsentable.",
+            "grade": "correct"
+          },
+          {
+            "text": "Yes, provided the firm charges each owner a separate fee.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.7(a)(2), 1.7(b): A concurrent conflict may be waived only where the lawyer reasonably believes competent and diligent representation of each client is possible, the representation is not prohibited by law and is not a claim by one represented client against another in the same tribunal proceeding, and each affected client gives informed consent confirmed in writing."
+          }
+        ]
+      },
+      {
+        "id": "ny_email_8_the_stadium_vendor_comes_back_around",
+        "jurisdiction": "New York",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/NY_Ethics_Email_Scenarios.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments",
+        "difficulty": 2,
+        "gold": 45,
+        "from": "Sal Petracca",
+        "role": "Bronx Office Partner",
+        "subject": "Former client on the other side of the concession contract",
+        "body": "Three years ago we represented a Bronx food vendor in negotiating a concession contract near the stadium on River Avenue. The engagement ended after the deal closed. The concession operator has now asked us to represent it in terminating that same contract for breach.\n\nThe handling lawyer has retired, but I have accessed confidential information in the old file material to this dispute. Are we clear?",
+        "rule": "N.Y. R. Prof. Conduct 1.9(a), 1.10(b)",
+        "explanation": "A lawyer may not represent another person in the same or a substantially related matter materially adverse to a former client unless the former client gives informed consent, confirmed in writing; the remaining lawyer's access to material protected information also prevents the departure of the handling lawyer from clearing the conflict under Rule 1.10(b).",
+        "choices": [
+          {
+            "text": "No. This is the same matter and the operator's interests are materially adverse to the former client, so the firm may proceed only if the former client gives informed consent, confirmed in writing.",
+            "grade": "correct"
+          },
+          {
+            "text": "Yes. The duty to a former client ends when the engagement ends and the file goes to storage.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.9(a), 1.10(b): A lawyer may not represent another person in the same or a substantially related matter materially adverse to a former client unless the former client gives informed consent, confirmed in writing; the remaining lawyer's access to material protected information also prevents the departure of the handling lawyer from clearing the conflict under Rule 1.10(b)."
+          },
+          {
+            "text": "Yes, provided the retired lawyer does not consult on the new matter.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.9(a), 1.10(b): A lawyer may not represent another person in the same or a substantially related matter materially adverse to a former client unless the former client gives informed consent, confirmed in writing; the remaining lawyer's access to material protected information also prevents the departure of the handling lawyer from clearing the conflict under Rule 1.10(b)."
+          },
+          {
+            "text": "Yes, because the former client has not paid for any work in three years and is no longer a client.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.9(a), 1.10(b): A lawyer may not represent another person in the same or a substantially related matter materially adverse to a former client unless the former client gives informed consent, confirmed in writing; the remaining lawyer's access to material protected information also prevents the departure of the handling lawyer from clearing the conflict under Rule 1.10(b)."
+          }
+        ]
+      },
+      {
+        "id": "ny_email_9_the_lateral_from_buffalo",
+        "jurisdiction": "New York",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/NY_Ethics_Email_Scenarios.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments",
+        "difficulty": 2,
+        "gold": 45,
+        "from": "Declan Foyle",
+        "role": "Buffalo Office Partner",
+        "subject": "New lateral hire - can we wall her off from the Erie County litigation?",
+        "body": "We are about to hire a litigator from a Buffalo firm that is opposing us in the pending Supreme Court, Erie County, case over the waterfront development. She was the day-to-day lead on that case for the other side for two years: she ran the discovery, staffed the depositions and made the strategic calls.\n\nI assume we screen her, pay her no part of the fee, and notify the other side in writing, then carry on. Correct?",
+        "rule": "N.Y. R. Prof. Conduct 1.10(c)(2)-(3), 1.10(d)",
+        "explanation": "Screening a newly associated lawyer does not prevent imputation in a litigation or other adjudicative matter where that lawyer substantially participated in its management and direction or had substantial day-to-day decision-making responsibility; the disqualification may be waived only under Rule 1.7 conditions.",
+        "choices": [
+          {
+            "text": "Correct. A timely screen with notice and no fee share always removes imputation in New York.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.10(c)(2)-(3), 1.10(d): Screening a newly associated lawyer does not prevent imputation in a litigation or other adjudicative matter where that lawyer substantially participated in its management and direction or had substantial day-to-day decision-making responsibility; the disqualification may be waived only under Rule 1.7 conditions."
+          },
+          {
+            "text": "No. Because the matter is litigation and she substantially participated in its management and direction with day-to-day decision-making responsibility, a screen will not prevent imputation; any waiver must meet Rule 1.7's conditions, including the affected clients' informed consent confirmed in writing; without that, the firm cannot continue the adverse representation after hiring her.",
+            "grade": "correct"
+          },
+          {
+            "text": "Correct, provided she also signs an affidavit that she will not discuss the case.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.10(c)(2)-(3), 1.10(d): Screening a newly associated lawyer does not prevent imputation in a litigation or other adjudicative matter where that lawyer substantially participated in its management and direction or had substantial day-to-day decision-making responsibility; the disqualification may be waived only under Rule 1.7 conditions."
+          },
+          {
+            "text": "No. A firm may never hire a lawyer from opposing counsel's firm while a matter is pending.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.10(c)(2)-(3), 1.10(d): Screening a newly associated lawyer does not prevent imputation in a litigation or other adjudicative matter where that lawyer substantially participated in its management and direction or had substantial day-to-day decision-making responsibility; the disqualification may be waived only under Rule 1.7 conditions."
+          }
+        ]
+      },
+      {
+        "id": "ny_email_10_the_restaurant_owner_who_walked_out",
+        "jurisdiction": "New York",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/NY_Ethics_Email_Scenarios.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments",
+        "difficulty": 2,
+        "gold": 45,
+        "from": "Sal Petracca",
+        "role": "Bronx Office Partner",
+        "subject": "Arthur Avenue consultation - the landlord now wants us",
+        "body": "Two weeks ago I spent forty minutes with a restaurant owner on Arthur Avenue who was thinking of suing his landlord over a lease dispute. He told me quite a lot about his finances and his negotiating bottom line. He decided not to hire us.\n\nThis morning the landlord called and wants to retain the firm in the same dispute. I know things that would hurt the restaurant owner. What are our options?",
+        "rule": "N.Y. R. Prof. Conduct 1.18(b)-(d)",
+        "explanation": "A lawyer who received significantly harmful information from a prospective client is disqualified from a materially adverse representation in the same matter, and the firm may proceed only with both parties' informed consent confirmed in writing or, after reasonable measures limited intake to information reasonably necessary to decide whether to accept, through prompt internal notice, an effective screen, no fee share and written notice under Rule 1.18(d)(2); paragraph (d)(3) also requires a reasonable conclusion that the firm can represent competently and diligently.",
+        "choices": [
+          {
+            "text": "The firm may take the landlord freely because the restaurant owner never became a client.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.18(b)-(d): A lawyer who received significantly harmful information from a prospective client is disqualified from a materially adverse representation in the same matter, and the firm may proceed only with both parties' informed consent confirmed in writing or, after reasonable measures limited intake to information reasonably necessary to decide whether to accept, through prompt internal notice, an effective screen, no fee share and written notice under Rule 1.18(d)(2); paragraph (d)(3) also requires a reasonable conclusion that the firm can represent competently and diligently."
+          },
+          {
+            "text": "The firm may take the landlord as long as you personally do not work on it, without further steps.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.18(b)-(d): A lawyer who received significantly harmful information from a prospective client is disqualified from a materially adverse representation in the same matter, and the firm may proceed only with both parties' informed consent confirmed in writing or, after reasonable measures limited intake to information reasonably necessary to decide whether to accept, through prompt internal notice, an effective screen, no fee share and written notice under Rule 1.18(d)(2); paragraph (d)(3) also requires a reasonable conclusion that the firm can represent competently and diligently."
+          },
+          {
+            "text": "The firm may never represent the landlord.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.18(b)-(d): A lawyer who received significantly harmful information from a prospective client is disqualified from a materially adverse representation in the same matter, and the firm may proceed only with both parties' informed consent confirmed in writing or, after reasonable measures limited intake to information reasonably necessary to decide whether to accept, through prompt internal notice, an effective screen, no fee share and written notice under Rule 1.18(d)(2); paragraph (d)(3) also requires a reasonable conclusion that the firm can represent competently and diligently."
+          },
+          {
+            "text": "You are personally disqualified; the firm may proceed only if both the landlord and the restaurant owner give informed consent confirmed in writing, or if you took reasonable measures to limit the information you received, the firm promptly gives appropriate internal notice, implements an effective screen with no fee share, and promptly gives the restaurant owner written notice (subject to the rule's confidentiality postponement); in either route a reasonable lawyer must conclude the firm can represent competently and diligently.",
+            "grade": "correct"
+          }
+        ]
+      },
+      {
+        "id": "ny_email_11_leaving_the_kings_county_case",
+        "jurisdiction": "New York",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/NY_Ethics_Email_Scenarios.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments",
+        "difficulty": 2,
+        "gold": 45,
+        "from": "Chidi Okafor",
+        "role": "Brooklyn Office Partner",
+        "subject": "Client stopped paying - can I just stop showing up?",
+        "body": "Our client in the Supreme Court, Kings County, commercial case on Court Street deliberately disregards his fee agreement despite three invoices and our calls. Assume the applicable court rules require permission to withdraw. Trial is in six weeks. I want out. I plan to send a letter saying we are done, keep the unused portion of the $25,000 advance to cover the time we spent chasing him, and hold the file until he pays.\n\nAnything wrong with that plan?",
+        "rule": "N.Y. R. Prof. Conduct 1.16(c)(5), 1.16(d), 1.16(e)",
+        "explanation": "Deliberate disregard of a fee obligation permits withdrawal, but where the tribunal's rules require permission, withdrawal requires that permission, the lawyer must continue if ordered, and on termination must give notice, deliver papers and property the client is entitled to and promptly refund any unearned advance fee.",
+        "choices": [
+          {
+            "text": "Nothing. Nonpayment is grounds for withdrawal and the file may be held until the bill is paid.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.16(c)(5), 1.16(d), 1.16(e): Deliberate disregard of a fee obligation permits withdrawal, but where the tribunal's rules require permission, withdrawal requires that permission, the lawyer must continue if ordered, and on termination must give notice, deliver papers and property the client is entitled to and promptly refund any unearned advance fee."
+          },
+          {
+            "text": "You must continue through trial because withdrawal is never permitted within sixty days of trial.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.16(c)(5), 1.16(d), 1.16(e): Deliberate disregard of a fee obligation permits withdrawal, but where the tribunal's rules require permission, withdrawal requires that permission, the lawyer must continue if ordered, and on termination must give notice, deliver papers and property the client is entitled to and promptly refund any unearned advance fee."
+          },
+          {
+            "text": "Nonpayment may permit withdrawal, but because the applicable court rules require it, you need permission to withdraw, must continue if the court orders you to, and on termination must give reasonable notice, deliver the papers the client is entitled to, and promptly refund any unearned part of the advance.",
+            "grade": "correct"
+          },
+          {
+            "text": "You may withdraw by letter, but must return the entire advance including the earned portion.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.16(c)(5), 1.16(d), 1.16(e): Deliberate disregard of a fee obligation permits withdrawal, but where the tribunal's rules require permission, withdrawal requires that permission, the lawyer must continue if ordered, and on termination must give notice, deliver papers and property the client is entitled to and promptly refund any unearned advance fee."
+          }
+        ]
+      },
+      {
+        "id": "ny_email_12_the_salt_potato_engagement_letter",
+        "jurisdiction": "New York",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/NY_Ethics_Email_Scenarios.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments",
+        "difficulty": 2,
+        "gold": 45,
+        "from": "Tomasz Kowalczyk",
+        "role": "Syracuse Office Partner",
+        "subject": "Quick zoning matter for the Tipperary Hill client",
+        "body": "A Tipp Hill tavern owner wants us to handle a zoning variance before the city board. We expect the fee to be roughly $7,500 on an hourly basis. We have never represented him before. He is in a hurry and says a handshake is fine; he trusts us because we are on the same side of the green-over-red traffic light.\n\nDo we need paper before we start?",
+        "rule": "22 NYCRR Part 1215; N.Y. R. Prof. Conduct 1.5(b)",
+        "explanation": "Where the fee is expected to be $3,000 or more and no exception applies, a written letter of engagement or retainer agreement stating scope, fees and billing practices, and, where applicable, Part 137 arbitration rights is required. Under section 1215.1(a), the letter precedes the work unless impracticability or an undetermined scope justifies a reasonable-time delay; section 1215.1(c) separately permits a signed retainer agreement covering the required matters before or within a reasonable time after starting.",
+        "choices": [
+          {
+            "text": "Yes. Because the expected fee exceeds $3,000 and this is a new client, Part 1215 requires a written letter of engagement or retainer agreement stating the scope of services, the fee and expense basis and billing practices, and, where applicable, notice of the right to fee arbitration under Part 137. The letter must precede starting, with a reasonable-time delay only if earlier delivery is impracticable or the scope cannot yet be determined; a signed retainer covering the required matters is an alternative under section 1215.1(c).",
+            "grade": "correct"
+          },
+          {
+            "text": "No. A written engagement letter is required only for contingent-fee and domestic-relations matters.",
+            "grade": "wrong",
+            "why": "22 NYCRR Part 1215; N.Y. R. Prof. Conduct 1.5(b): Where the fee is expected to be $3,000 or more and no exception applies, a written letter of engagement or retainer agreement stating scope, fees and billing practices, and, where applicable, Part 137 arbitration rights is required. Under section 1215.1(a), the letter precedes the work unless impracticability or an undetermined scope justifies a reasonable-time delay; section 1215.1(c) separately permits a signed retainer agreement covering the required matters before or within a reasonable time after starting."
+          },
+          {
+            "text": "No. A handshake is sufficient if the client waives the writing.",
+            "grade": "wrong",
+            "why": "22 NYCRR Part 1215; N.Y. R. Prof. Conduct 1.5(b): Where the fee is expected to be $3,000 or more and no exception applies, a written letter of engagement or retainer agreement stating scope, fees and billing practices, and, where applicable, Part 137 arbitration rights is required. Under section 1215.1(a), the letter precedes the work unless impracticability or an undetermined scope justifies a reasonable-time delay; section 1215.1(c) separately permits a signed retainer agreement covering the required matters before or within a reasonable time after starting."
+          },
+          {
+            "text": "Yes, but the letter may be provided at the end of the matter along with the final bill.",
+            "grade": "wrong",
+            "why": "22 NYCRR Part 1215; N.Y. R. Prof. Conduct 1.5(b): Where the fee is expected to be $3,000 or more and no exception applies, a written letter of engagement or retainer agreement stating scope, fees and billing practices, and, where applicable, Part 137 arbitration rights is required. Under section 1215.1(a), the letter precedes the work unless impracticability or an undetermined scope justifies a reasonable-time delay; section 1215.1(c) separately permits a signed retainer agreement covering the required matters before or within a reasonable time after starting."
+          }
+        ]
+      },
+      {
+        "id": "ny_email_13_the_alexandria_bay_boat_check",
+        "jurisdiction": "New York",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/NY_Ethics_Email_Scenarios.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments",
+        "difficulty": 2,
+        "gold": 45,
+        "from": "Margarethe Van Rensselaer",
+        "role": "Albany Office Managing Partner",
+        "subject": "Escrow disbursement for the Thousand Islands closing",
+        "body": "We are closing a boat sale in Alexandria Bay on Friday and need to disburse $40,000 from escrow to the seller, who prefers cash. Our Watertown office manager, who is not a lawyer, has been added as a signatory on the escrow account so he can cut the check while I am up in the islands.\n\nFine to write the check \"to cash\" and have him sign it?",
+        "rule": "N.Y. R. Prof. Conduct 1.15(e)",
+        "explanation": "Special-account withdrawals must be made only to a named payee and not to cash, by check or by bank transfer with the payee's prior written approval, and only a lawyer admitted in New York may be an authorized signatory.",
+        "choices": [
+          {
+            "text": "Yes, provided the ledger records the seller's name as the true recipient.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.15(e): Special-account withdrawals must be made only to a named payee and not to cash, by check or by bank transfer with the payee's prior written approval, and only a lawyer admitted in New York may be an authorized signatory."
+          },
+          {
+            "text": "No. Escrow withdrawals must be made to a named payee and never to cash, by check or by bank transfer with the payee's prior written approval, and only a lawyer admitted in New York may be a signatory on the account.",
+            "grade": "correct"
+          },
+          {
+            "text": "Yes, because the office manager is a firm employee acting under your supervision.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.15(e): Special-account withdrawals must be made only to a named payee and not to cash, by check or by bank transfer with the payee's prior written approval, and only a lawyer admitted in New York may be an authorized signatory."
+          },
+          {
+            "text": "No, because escrow funds may be disbursed only by court order.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.15(e): Special-account withdrawals must be made only to a named payee and not to cash, by check or by bank transfer with the payee's prior written approval, and only a lawyer admitted in New York may be an authorized signatory."
+          }
+        ]
+      },
+      {
+        "id": "ny_email_14_the_metro_north_platform_incident",
+        "jurisdiction": "New York",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/NY_Ethics_Email_Scenarios.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments",
+        "difficulty": 2,
+        "gold": 45,
+        "from": "Nadia Petrov",
+        "role": "Hudson Valley Office Partner",
+        "subject": "Insurer wants us to reach out to the injured passengers now",
+        "body": "A passenger was seriously injured on a station platform in Westchester six days ago. We represent the commuter-rail contractor's liability insurer, which will defend and indemnify the contractor. The claims adjuster wants us to write to the injured passenger and her family this week with a sympathetic letter and an offer to \"talk things through.\"\n\nNobody has filed anything yet. Can we send it?",
+        "rule": "N.Y. R. Prof. Conduct 4.5(a)",
+        "explanation": "After a specific incident involving potential personal-injury claims, a lawyer for an actual or potential defendant or its indemnitor may not make an unsolicited communication to the injured person or family before the 30th day, or the 15th day where a filing is a legal prerequisite within 30 days.",
+        "choices": [
+          {
+            "text": "Yes. The 30-day rule applies only to lawyers seeking to represent injured persons, not to defense counsel.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 4.5(a): After a specific incident involving potential personal-injury claims, a lawyer for an actual or potential defendant or its indemnitor may not make an unsolicited communication to the injured person or family before the 30th day, or the 15th day where a filing is a legal prerequisite within 30 days."
+          },
+          {
+            "text": "Yes, provided the letter does not mention settlement.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 4.5(a): After a specific incident involving potential personal-injury claims, a lawyer for an actual or potential defendant or its indemnitor may not make an unsolicited communication to the injured person or family before the 30th day, or the 15th day where a filing is a legal prerequisite within 30 days."
+          },
+          {
+            "text": "No. A lawyer representing an actual or potential defendant or its insurer may not make an unsolicited communication to the injured individual or her family before the 30th day after the incident, unless a filing must be made within 30 days as a legal prerequisite, in which case the 15th day applies.",
+            "grade": "correct"
+          },
+          {
+            "text": "No. Defense counsel may never communicate with an injured person before suit is filed.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 4.5(a): After a specific incident involving potential personal-injury claims, a lawyer for an actual or potential defendant or its indemnitor may not make an unsolicited communication to the injured person or family before the 30th day, or the 15th day where a filing is a legal prerequisite within 30 days."
+          }
+        ]
+      },
+      {
+        "id": "ny_email_15_the_borscht_belt_barn",
+        "jurisdiction": "New York",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/NY_Ethics_Email_Scenarios.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments",
+        "difficulty": 3,
+        "gold": 60,
+        "from": "Abe Rosenblatt",
+        "role": "Catskills Office Partner",
+        "subject": "Client says he will burn the old resort barn for the insurance",
+        "body": "Our client owns a shuttered Catskills resort near Monticello. During a meeting about the property's insurance renewal he said, quite seriously, that if the buyer walks he will \"have a little fire\" in the barn next month and collect on the policy. I told him that is arson and insurance fraud and that we will not help. He laughed and changed the subject.\n\nMust I call the sheriff? May I? Or is this locked in the privilege?",
+        "rule": "N.Y. R. Prof. Conduct 1.6(b)(2), 1.2(d)",
+        "explanation": "A lawyer may, but is not required to, reveal confidential information to the extent the lawyer reasonably believes necessary to prevent the client from committing a crime, and must not counsel or assist conduct the lawyer knows is illegal.",
+        "choices": [
+          {
+            "text": "You may, but are not required to, reveal confidential information to the extent you reasonably believe necessary to prevent the client from committing the crime; you must not assist him, and you should continue to counsel him against it.",
+            "grade": "correct"
+          },
+          {
+            "text": "You must report him to law enforcement immediately because the Rules mandate disclosure of any intended crime.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.6(b)(2), 1.2(d): A lawyer may, but is not required to, reveal confidential information to the extent the lawyer reasonably believes necessary to prevent the client from committing a crime, and must not counsel or assist conduct the lawyer knows is illegal."
+          },
+          {
+            "text": "You may not reveal anything because a client's stated intention to commit a crime is protected confidential information.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.6(b)(2), 1.2(d): A lawyer may, but is not required to, reveal confidential information to the extent the lawyer reasonably believes necessary to prevent the client from committing a crime, and must not counsel or assist conduct the lawyer knows is illegal."
+          },
+          {
+            "text": "You may reveal everything you know about the client's finances and the property to the insurer so it can cancel the policy.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.6(b)(2), 1.2(d): A lawyer may, but is not required to, reveal confidential information to the extent the lawyer reasonably believes necessary to prevent the client from committing a crime, and must not counsel or assist conduct the lawyer knows is illegal."
+          }
+        ]
+      },
+      {
+        "id": "ny_email_16_the_cooperstown_dinner_story",
+        "jurisdiction": "New York",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/NY_Ethics_Email_Scenarios.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments",
+        "difficulty": 3,
+        "gold": 60,
+        "from": "Rosalind Delacroix",
+        "role": "Manhattan Office Partner",
+        "subject": "Great anecdote for the Hall of Fame weekend dinner",
+        "body": "I am speaking at a bar association dinner in Cooperstown during induction weekend. I want to tell the story of a former client, a well-known collectibles dealer, whose embarrassing bookkeeping habits we discovered while defending him in an Otsego County case five years ago. The matter settled confidentially and the details never came out. I would not name him, but the room will figure it out.\n\nThe representation ended years ago. It is fair game now, right?",
+        "rule": "N.Y. R. Prof. Conduct 1.6(a), 1.9(c)(2)",
+        "explanation": "Confidential information includes information gained during the representation that is likely to be embarrassing or detrimental to the client whether or not privileged, and a lawyer may not reveal a former client's confidential information except as the Rules would permit for a current client; information that is generally known falls outside the definition, but a confidential settlement whose details never came out is not generally known.",
+        "choices": [
+          {
+            "text": "Yes. Confidentiality ends when the representation ends.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.6(a), 1.9(c)(2): Confidential information includes information gained during the representation that is likely to be embarrassing or detrimental to the client whether or not privileged, and a lawyer may not reveal a former client's confidential information except as the Rules would permit for a current client; information that is generally known falls outside the definition, but a confidential settlement whose details never came out is not generally known."
+          },
+          {
+            "text": "Yes, provided you do not say the client's name.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.6(a), 1.9(c)(2): Confidential information includes information gained during the representation that is likely to be embarrassing or detrimental to the client whether or not privileged, and a lawyer may not reveal a former client's confidential information except as the Rules would permit for a current client; information that is generally known falls outside the definition, but a confidential settlement whose details never came out is not generally known."
+          },
+          {
+            "text": "Yes, because the information was never privileged; it was just embarrassing.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.6(a), 1.9(c)(2): Confidential information includes information gained during the representation that is likely to be embarrassing or detrimental to the client whether or not privileged, and a lawyer may not reveal a former client's confidential information except as the Rules would permit for a current client; information that is generally known falls outside the definition, but a confidential settlement whose details never came out is not generally known."
+          },
+          {
+            "text": "No. Information gained during the representation that would be embarrassing or detrimental to the former client remains confidential after the representation ends, and you may not reveal it unless the Rules permit or it has become generally known.",
+            "grade": "correct"
+          }
+        ]
+      },
+      {
+        "id": "ny_email_17_the_60_centre_street_surprise",
+        "jurisdiction": "New York",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/NY_Ethics_Email_Scenarios.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments",
+        "difficulty": 3,
+        "gold": 60,
+        "from": "Rosalind Delacroix",
+        "role": "Manhattan Office Partner",
+        "subject": "Our witness lied on the stand at 60 Centre Street",
+        "body": "In the Supreme Court, New York County, trial this week our client testified that he never received the March notice of default. Over lunch on the courthouse steps he told me, with a grin, that of course he got it and shredded it. His testimony on that point is material.\n\nHe forbids me to say anything and reminds me that what he told me is confidential. What are my obligations?",
+        "rule": "N.Y. R. Prof. Conduct 3.3(a)(3), 3.3(c)",
+        "explanation": "When a lawyer comes to know that material evidence offered by the client is false, the lawyer shall take reasonable remedial measures including, if necessary, disclosure to the tribunal, and this duty applies even if compliance requires disclosing information otherwise protected by Rule 1.6.",
+        "choices": [
+          {
+            "text": "Do nothing, because the client's admission to you is confidential information and confidentiality overrides candor to the tribunal.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 3.3(a)(3), 3.3(c): When a lawyer comes to know that material evidence offered by the client is false, the lawyer shall take reasonable remedial measures including, if necessary, disclosure to the tribunal, and this duty applies even if compliance requires disclosing information otherwise protected by Rule 1.6."
+          },
+          {
+            "text": "Take reasonable remedial measures, beginning with urging the client to correct the testimony, and if that fails, disclose to the tribunal as necessary, even though the information is otherwise protected by Rule 1.6.",
+            "grade": "correct"
+          },
+          {
+            "text": "Move to withdraw quietly and let successor counsel decide what to do.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 3.3(a)(3), 3.3(c): When a lawyer comes to know that material evidence offered by the client is false, the lawyer shall take reasonable remedial measures including, if necessary, disclosure to the tribunal, and this duty applies even if compliance requires disclosing information otherwise protected by Rule 1.6."
+          },
+          {
+            "text": "Ask the judge to strike the entire testimony without explaining why.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 3.3(a)(3), 3.3(c): When a lawyer comes to know that material evidence offered by the client is false, the lawyer shall take reasonable remedial measures including, if necessary, disclosure to the tribunal, and this duty applies even if compliance requires disclosing information otherwise protected by Rule 1.6."
+          }
+        ]
+      },
+      {
+        "id": "ny_email_18_the_beef_on_weck_witness",
+        "jurisdiction": "New York",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/NY_Ethics_Email_Scenarios.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments",
+        "difficulty": 3,
+        "gold": 60,
+        "from": "Declan Foyle",
+        "role": "Buffalo Office Partner",
+        "subject": "Paying the key witness - how much and when?",
+        "body": "The key fact witness in our Buffalo construction case is a retired ironworker who lives near Larkinville. He is willing to testify but will lose two days of wages and has to drive in from Lackawanna. Our client wants to \"make it worth his while\" and proposes $500 a day plus a $5,000 bonus if we win.\n\nWhat can we pay him?",
+        "rule": "N.Y. R. Prof. Conduct 3.4(b)",
+        "explanation": "A lawyer may advance or acquiesce in reasonable compensation to a witness for loss of time in attending, testifying and preparing, and reasonable related expenses, but not compensation contingent on the content of the testimony or the outcome of the matter.",
+        "choices": [
+          {
+            "text": "Nothing. Any payment to a fact witness is prohibited.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 3.4(b): A lawyer may advance or acquiesce in reasonable compensation to a witness for loss of time in attending, testifying and preparing, and reasonable related expenses, but not compensation contingent on the content of the testimony or the outcome of the matter."
+          },
+          {
+            "text": "Both the daily amount and the bonus, as long as the amounts are disclosed to the court.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 3.4(b): A lawyer may advance or acquiesce in reasonable compensation to a witness for loss of time in attending, testifying and preparing, and reasonable related expenses, but not compensation contingent on the content of the testimony or the outcome of the matter."
+          },
+          {
+            "text": "Reasonable compensation for his loss of time in attending, testifying and preparing, plus reasonable related expenses; no payment contingent on the content of his testimony or the outcome of the case.",
+            "grade": "correct"
+          },
+          {
+            "text": "Only his mileage, because fact witnesses may be reimbursed for expenses but never for lost time.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 3.4(b): A lawyer may advance or acquiesce in reasonable compensation to a witness for loss of time in attending, testifying and preparing, and reasonable related expenses, but not compensation contingent on the content of the testimony or the outcome of the matter."
+          }
+        ]
+      },
+      {
+        "id": "ny_email_19_the_contractor_s_little_reminder",
+        "jurisdiction": "New York",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/NY_Ethics_Email_Scenarios.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments",
+        "difficulty": 3,
+        "gold": 60,
+        "from": "Sal Petracca",
+        "role": "Bronx Office Partner",
+        "subject": "Leverage in the Pelham Bay renovation dispute",
+        "body": "Our client's contractor walked off a Pelham Bay renovation with a $60,000 deposit. We are demanding the money back. The client has learned the contractor may have skipped some sales-tax filings and wants our demand letter to say that unless the deposit is returned by Friday we will refer the tax issue to the District Attorney.\n\nIt is true, and it would get his attention. Can we put it in the letter?",
+        "rule": "N.Y. R. Prof. Conduct 3.4(e)",
+        "explanation": "A lawyer shall not present, participate in presenting, or threaten to present criminal charges solely to obtain an advantage in a civil matter; the truth of the allegation is no defense.",
+        "choices": [
+          {
+            "text": "No. A lawyer may not present, participate in presenting, or threaten to present criminal charges solely to obtain an advantage in a civil matter.",
+            "grade": "correct"
+          },
+          {
+            "text": "Yes, because the underlying allegation is true and truthful statements are always permitted.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 3.4(e): A lawyer shall not present, participate in presenting, or threaten to present criminal charges solely to obtain an advantage in a civil matter; the truth of the allegation is no defense."
+          },
+          {
+            "text": "Yes, provided the letter is sent to the contractor's lawyer rather than to the contractor directly.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 3.4(e): A lawyer shall not present, participate in presenting, or threaten to present criminal charges solely to obtain an advantage in a civil matter; the truth of the allegation is no defense."
+          },
+          {
+            "text": "Yes, because the threat concerns a matter related to the dispute.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 3.4(e): A lawyer shall not present, participate in presenting, or threaten to present criminal charges solely to obtain an advantage in a civil matter; the truth of the allegation is no defense."
+          }
+        ]
+      },
+      {
+        "id": "ny_email_20_the_judge_at_the_rail",
+        "jurisdiction": "New York",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/NY_Ethics_Email_Scenarios.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments",
+        "difficulty": 3,
+        "gold": 60,
+        "from": "Colette Abernathy",
+        "role": "Saratoga Springs Office Partner",
+        "subject": "Ran into the judge at the paddock",
+        "body": "I saw the judge assigned to our pending Saratoga County commercial case at the paddock before the fourth race. We chatted about the weather. She is deciding our summary judgment motion next week and I badly want to mention one point the other side glossed over.\n\nI would keep it to two sentences. Harmless?",
+        "rule": "N.Y. R. Prof. Conduct 3.5(a)(2)",
+        "explanation": "In an adversarial proceeding a lawyer may not communicate as to the merits with the judge before whom the matter is pending except in official proceedings, in writing with a copy promptly delivered to other parties, orally upon adequate notice to them, or as otherwise authorized by law or Part 100.",
+        "choices": [
+          {
+            "text": "Yes. Brief social conversation with a judge is permitted and a passing mention of the case is harmless.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 3.5(a)(2): In an adversarial proceeding a lawyer may not communicate as to the merits with the judge before whom the matter is pending except in official proceedings, in writing with a copy promptly delivered to other parties, orally upon adequate notice to them, or as otherwise authorized by law or Part 100."
+          },
+          {
+            "text": "Yes, provided you send opposing counsel an email afterward summarizing what you said.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 3.5(a)(2): In an adversarial proceeding a lawyer may not communicate as to the merits with the judge before whom the matter is pending except in official proceedings, in writing with a copy promptly delivered to other parties, orally upon adequate notice to them, or as otherwise authorized by law or Part 100."
+          },
+          {
+            "text": "No, and you should also report the judge for speaking with you.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 3.5(a)(2): In an adversarial proceeding a lawyer may not communicate as to the merits with the judge before whom the matter is pending except in official proceedings, in writing with a copy promptly delivered to other parties, orally upon adequate notice to them, or as otherwise authorized by law or Part 100."
+          },
+          {
+            "text": "No. In an adversarial proceeding you may not communicate about the merits with the judge before whom the matter is pending except in official proceedings, in writing with a copy promptly delivered to all other parties, or orally on adequate notice to them, or as otherwise authorized by law.",
+            "grade": "correct"
+          }
+        ]
+      },
+      {
+        "id": "ny_email_21_the_polygraph_and_the_tabloid",
+        "jurisdiction": "New York",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/NY_Ethics_Email_Scenarios.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments",
+        "difficulty": 3,
+        "gold": 60,
+        "from": "Marcus Greene",
+        "role": "Long Island Office Partner",
+        "subject": "Reporter is calling about the Montauk marina case",
+        "body": "Our client is charged in Suffolk County with felony arson at a Montauk marina. He faces state prison time. A tabloid reporter wants a comment. The client passed a private polygraph last week and wants me to tell the reporter that, plus that the co-defendant \"already confessed and named someone else.\"\n\nCan I say that?",
+        "rule": "N.Y. R. Prof. Conduct 3.6(a)-(c)",
+        "explanation": "Extrajudicial statements about test results and confessions in a matter that could result in incarceration are ordinarily likely to materially prejudice the proceeding, while paragraph (c), still subject to paragraph (a), permits stating without elaboration the charge, public-record information, that an investigation is in progress, scheduling, and the presumption of innocence.",
+        "choices": [
+          {
+            "text": "Yes. A lawyer may say anything about a criminal case that is true.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 3.6(a)-(c): Extrajudicial statements about test results and confessions in a matter that could result in incarceration are ordinarily likely to materially prejudice the proceeding, while paragraph (c), still subject to paragraph (a), permits stating without elaboration the charge, public-record information, that an investigation is in progress, scheduling, and the presumption of innocence."
+          },
+          {
+            "text": "No. In a criminal matter that could result in incarceration, statements about the results of any examination or test and about the existence or contents of a confession are ordinarily likely to prejudice the proceeding; subject to the no-material-prejudice requirement, you may state without elaboration the charge, that an investigation is ongoing, information in the public record, scheduling, and that the charge is an accusation and the client is presumed innocent.",
+            "grade": "correct"
+          },
+          {
+            "text": "No. A criminal defense lawyer may never speak to the press while charges are pending.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 3.6(a)-(c): Extrajudicial statements about test results and confessions in a matter that could result in incarceration are ordinarily likely to materially prejudice the proceeding, while paragraph (c), still subject to paragraph (a), permits stating without elaboration the charge, public-record information, that an investigation is in progress, scheduling, and the presumption of innocence."
+          },
+          {
+            "text": "Yes, provided the statement is made on background and not for attribution.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 3.6(a)-(c): Extrajudicial statements about test results and confessions in a matter that could result in incarceration are ordinarily likely to materially prejudice the proceeding, while paragraph (c), still subject to paragraph (a), permits stating without elaboration the charge, public-record information, that an investigation is in progress, scheduling, and the presumption of innocence."
+          }
+        ]
+      },
+      {
+        "id": "ny_email_22_the_coney_island_rent",
+        "jurisdiction": "New York",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/NY_Ethics_Email_Scenarios.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments",
+        "difficulty": 3,
+        "gold": 60,
+        "from": "Chidi Okafor",
+        "role": "Brooklyn Office Partner",
+        "subject": "Boardwalk client cannot make rent while the case is pending",
+        "body": "Our personal-injury client was hurt on a Coney Island ride and cannot work. We represent her on a contingent fee. She is two months behind on rent and asked whether the firm can front her $3,000 for rent and a MetroCard until the case settles. She would repay us from the recovery. I feel terrible for her.\n\nCan we do it?",
+        "rule": "N.Y. R. Prof. Conduct 1.8(e)",
+        "explanation": "While representing a client in contemplated or pending litigation a lawyer may not advance or guarantee financial assistance, except court costs and litigation expenses; the separate financial-assistance exception for qualifying free legal services does not apply to this contingent-fee engagement.",
+        "choices": [
+          {
+            "text": "Yes. A lawyer may advance living expenses to a client in litigation if repayment is contingent on the outcome.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.8(e): While representing a client in contemplated or pending litigation a lawyer may not advance or guarantee financial assistance, except court costs and litigation expenses; the separate financial-assistance exception for qualifying free legal services does not apply to this contingent-fee engagement."
+          },
+          {
+            "text": "Yes, provided the advance is documented as a loan at a fair interest rate.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.8(e): While representing a client in contemplated or pending litigation a lawyer may not advance or guarantee financial assistance, except court costs and litigation expenses; the separate financial-assistance exception for qualifying free legal services does not apply to this contingent-fee engagement."
+          },
+          {
+            "text": "No. While representing a client in contemplated or pending litigation, our for-profit firm in this contingent-fee representation cannot advance her rent or living expenses; the applicable exceptions concern court costs and litigation expenses, although you may tell her about legal-aid and public assistance resources.",
+            "grade": "correct"
+          },
+          {
+            "text": "No, unless the client signs a written waiver of the conflict.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 1.8(e): While representing a client in contemplated or pending litigation a lawyer may not advance or guarantee financial assistance, except court costs and litigation expenses; the separate financial-assistance exception for qualifying free legal services does not apply to this contingent-fee engagement."
+          }
+        ]
+      },
+      {
+        "id": "ny_email_23_the_astoria_tenant_across_the_table",
+        "jurisdiction": "New York",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/NY_Ethics_Email_Scenarios.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments",
+        "difficulty": 3,
+        "gold": 60,
+        "from": "Priya Raman",
+        "role": "Queens Office Partner",
+        "subject": "Landlord client wants me to \"walk the tenant through\" the surrender agreement",
+        "body": "We represent an Astoria landlord who has negotiated a buyout with a rent-stabilized tenant. The tenant has no lawyer. Our client wants me to sit down with the tenant at the Ditmars Boulevard coffee shop, tell her the agreement is \"totally standard, nothing to worry about,\" answer her questions about what her rights are, and get her signature.\n\nI would be honest with her. Is this all right?",
+        "rule": "N.Y. R. Prof. Conduct 4.3",
+        "explanation": "In dealing with an unrepresented person a lawyer shall not state or imply disinterest, must correct a known misunderstanding of the lawyer's role, and may not give legal advice other than to secure counsel when the person's interests conflict with the client's.",
+        "choices": [
+          {
+            "text": "No. You must not state or imply that you are disinterested, must correct any misunderstanding of your role, and may not give her legal advice other than to secure counsel because her interests conflict with the landlord's.",
+            "grade": "correct"
+          },
+          {
+            "text": "Yes, provided you tell her at the outset that you are a lawyer.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 4.3: In dealing with an unrepresented person a lawyer shall not state or imply disinterest, must correct a known misunderstanding of the lawyer's role, and may not give legal advice other than to secure counsel when the person's interests conflict with the client's."
+          },
+          {
+            "text": "Yes, because the tenant may waive her right to counsel by signing.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 4.3: In dealing with an unrepresented person a lawyer shall not state or imply disinterest, must correct a known misunderstanding of the lawyer's role, and may not give legal advice other than to secure counsel when the person's interests conflict with the client's."
+          },
+          {
+            "text": "No. A lawyer may never communicate with an unrepresented adverse party.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 4.3: In dealing with an unrepresented person a lawyer shall not state or imply disinterest, must correct a known misunderstanding of the lawyer's role, and may not give legal advice other than to secure counsel when the person's interests conflict with the client's."
+          }
+        ]
+      },
+      {
+        "id": "ny_email_24_the_misdirected_albany_email",
+        "jurisdiction": "New York",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/NY_Ethics_Email_Scenarios.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments",
+        "difficulty": 3,
+        "gold": 60,
+        "from": "Margarethe Van Rensselaer",
+        "role": "Albany Office Managing Partner",
+        "subject": "Opposing counsel just emailed us their internal strategy memo",
+        "body": "Opposing counsel in the Albany County Article 78 proceeding meant to forward a privileged strategy memo to her client and sent it to me instead. It is clearly marked privileged and clearly not meant for us. It also happens to be very useful.\n\nWhat does the Rule require me to do?",
+        "rule": "N.Y. R. Prof. Conduct 4.4(b)",
+        "explanation": "A lawyer who receives a document relating to the representation and knows or reasonably should know it was inadvertently sent shall promptly notify the sender; the Rule text imposes notice, and any further obligation is a question of other law.",
+        "choices": [
+          {
+            "text": "Nothing. A lawyer who receives an adversary's document by mistake may use it freely.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 4.4(b): A lawyer who receives a document relating to the representation and knows or reasonably should know it was inadvertently sent shall promptly notify the sender; the Rule text imposes notice, and any further obligation is a question of other law."
+          },
+          {
+            "text": "File the memo with the court so the judge can decide whether it is privileged.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 4.4(b): A lawyer who receives a document relating to the representation and knows or reasonably should know it was inadvertently sent shall promptly notify the sender; the Rule text imposes notice, and any further obligation is a question of other law."
+          },
+          {
+            "text": "Forward it to the client so the client can decide whether to use it.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 4.4(b): A lawyer who receives a document relating to the representation and knows or reasonably should know it was inadvertently sent shall promptly notify the sender; the Rule text imposes notice, and any further obligation is a question of other law."
+          },
+          {
+            "text": "Promptly notify the sender that you received it; the Rule requires prompt notice when you know or reasonably should know a document was inadvertently sent.",
+            "grade": "correct"
+          }
+        ]
+      },
+      {
+        "id": "ny_email_25_the_hospital_waiting_room_plan",
+        "jurisdiction": "New York",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/NY_Ethics_Email_Scenarios.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments",
+        "difficulty": 3,
+        "gold": 60,
+        "from": "Declan Foyle",
+        "role": "Buffalo Office Partner",
+        "subject": "Marketing director's idea for the bus-crash cases",
+        "body": "After the tour-bus crash on the Thruway, our marketing director, who is not a lawyer, proposes to visit the hospital waiting rooms in Buffalo, hand out our brochures to injured passengers and their families, and sign them up on the spot. The passengers are strangers to us, are not lawyers, and do not routinely buy these services for business purposes. He says he, not a lawyer, will do the talking so the firm is safe.\n\nGreen light?",
+        "rule": "N.Y. R. Prof. Conduct 7.3(b), 8.4(a), 5.3(b)",
+        "explanation": "A lawyer may not solicit professional employment by live person-to-person contact for pecuniary gain from persons outside the listed relationships, may not violate the Rules through the acts of another, and is responsible for a nonlawyer's conduct the lawyer orders or ratifies.",
+        "choices": [
+          {
+            "text": "Yes. The solicitation rules apply only to lawyers, so a nonlawyer employee may make the contact.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 7.3(b), 8.4(a), 5.3(b): A lawyer may not solicit professional employment by live person-to-person contact for pecuniary gain from persons outside the listed relationships, may not violate the Rules through the acts of another, and is responsible for a nonlawyer's conduct the lawyer orders or ratifies."
+          },
+          {
+            "text": "No. Live person-to-person solicitation of strangers for pecuniary gain is prohibited, and a lawyer may not do through a nonlawyer what the lawyer may not do directly; a partner who orders or ratifies it is responsible.",
+            "grade": "correct"
+          },
+          {
+            "text": "Yes, provided the brochures include the firm's name and address.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 7.3(b), 8.4(a), 5.3(b): A lawyer may not solicit professional employment by live person-to-person contact for pecuniary gain from persons outside the listed relationships, may not violate the Rules through the acts of another, and is responsible for a nonlawyer's conduct the lawyer orders or ratifies."
+          },
+          {
+            "text": "Yes, provided the marketing director waits until the passengers are discharged.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 7.3(b), 8.4(a), 5.3(b): A lawyer may not solicit professional employment by live person-to-person contact for pecuniary gain from persons outside the listed relationships, may not violate the Rules through the acts of another, and is responsible for a nonlawyer's conduct the lawyer orders or ratifies."
+          }
+        ]
+      },
+      {
+        "id": "ny_email_26_the_disbarred_friend_in_ithaca",
+        "jurisdiction": "New York",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/NY_Ethics_Email_Scenarios.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments",
+        "difficulty": 3,
+        "gold": 60,
+        "from": "Yuki Tanabe",
+        "role": "Ithaca Office Partner",
+        "subject": "Old classmate lost his license - can he \"consult\" for us?",
+        "body": "A law-school classmate of mine was disbarred last year. He is brilliant on Tompkins County land-use matters. He proposes to work for us as a \"consultant\": meeting our clients alone at the gorge-side cafe, advising them on their options, and drafting the papers we would file under my name.\n\nHe would not appear in court. Is that a workable arrangement?",
+        "rule": "N.Y. R. Prof. Conduct 5.5, 5.3(a)-(b)",
+        "explanation": "A lawyer shall not aid a nonlawyer in the unauthorized practice of law, and remains responsible for adequately supervising nonlawyers and for their conduct that would violate the Rules if done by a lawyer.",
+        "choices": [
+          {
+            "text": "Yes. A disbarred lawyer may practice as a consultant as long as an admitted lawyer signs the filings.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 5.5, 5.3(a)-(b): A lawyer shall not aid a nonlawyer in the unauthorized practice of law, and remains responsible for adequately supervising nonlawyers and for their conduct that would violate the Rules if done by a lawyer."
+          },
+          {
+            "text": "Yes, provided clients are told he is disbarred.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 5.5, 5.3(a)-(b): A lawyer shall not aid a nonlawyer in the unauthorized practice of law, and remains responsible for adequately supervising nonlawyers and for their conduct that would violate the Rules if done by a lawyer."
+          },
+          {
+            "text": "No. A lawyer may not aid a nonlawyer in the unauthorized practice of law; independently advising clients on their legal options is practicing law, and you would also be responsible for his conduct as a nonlawyer under your supervision.",
+            "grade": "correct"
+          },
+          {
+            "text": "No, unless the Appellate Division approves the consulting arrangement in advance.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 5.5, 5.3(a)-(b): A lawyer shall not aid a nonlawyer in the unauthorized practice of law, and remains responsible for adequately supervising nonlawyers and for their conduct that would violate the Rules if done by a lawyer."
+          }
+        ]
+      },
+      {
+        "id": "ny_email_27_the_prior_lawyer_s_escrow",
+        "jurisdiction": "New York",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/NY_Ethics_Email_Scenarios.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments",
+        "difficulty": 3,
+        "gold": 60,
+        "from": "Marcus Greene",
+        "role": "Long Island Office Partner",
+        "subject": "Client says her old lawyer stole from escrow",
+        "body": "Our new client, a Hamptons landscaper, told me in confidence that the lawyer who handled her prior real-estate closing kept $30,000 of her escrow deposit and has been dodging her calls. She showed me the closing statement and the bank records. It is about as clear as these things get.\n\nShe does not want to \"make trouble\" and asked me not to tell anyone. Do I have to report him?",
+        "rule": "N.Y. R. Prof. Conduct 8.3(a), 8.3(c)(1)",
+        "explanation": "A lawyer who knows of another lawyer's violation raising a substantial question as to honesty must report it, but the Rule does not require disclosure of information protected by Rules 1.6, 1.9 or 1.18; informed client consent may permit the disclosure here.",
+        "choices": [
+          {
+            "text": "Rule 8.3 requires a lawyer who knows of another lawyer's violation raising a substantial question about honesty to report it, but it does not require disclosure of information protected by Rule 1.6; you should explain the situation to the client and seek her informed consent to report, and if she refuses, the Rule does not require you to report.",
+            "grade": "correct"
+          },
+          {
+            "text": "You must report him immediately regardless of the client's wishes because escrow theft is always reportable.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 8.3(a), 8.3(c)(1): A lawyer who knows of another lawyer's violation raising a substantial question as to honesty must report it, but the Rule does not require disclosure of information protected by Rules 1.6, 1.9 or 1.18; informed client consent may permit the disclosure here."
+          },
+          {
+            "text": "You may never report because everything a client tells you is privileged.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 8.3(a), 8.3(c)(1): A lawyer who knows of another lawyer's violation raising a substantial question as to honesty must report it, but the Rule does not require disclosure of information protected by Rules 1.6, 1.9 or 1.18; informed client consent may permit the disclosure here."
+          },
+          {
+            "text": "You must report him only if he is admitted in the same Judicial Department as you.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 8.3(a), 8.3(c)(1): A lawyer who knows of another lawyer's violation raising a substantial question as to honesty must report it, but the Rule does not require disclosure of information protected by Rules 1.6, 1.9 or 1.18; informed client consent may permit the disclosure here."
+          }
+        ]
+      },
+      {
+        "id": "ny_email_28_the_holiday_party_at_the_rink",
+        "jurisdiction": "New York",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/NY_Ethics_Email_Scenarios.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments",
+        "difficulty": 3,
+        "gold": 60,
+        "from": "Rosalind Delacroix",
+        "role": "Manhattan Office Partner",
+        "subject": "What a partner said at the holiday party",
+        "body": "At the firm holiday party at the Rockefeller Center rink, a senior partner made repeated demeaning remarks to a junior associate about her national origin and her pregnancy, loudly enough for a group to hear. She was visibly upset. Another partner told me later that it was \"just a party\" and \"not the practice of law,\" so the Rules do not apply.\n\nIs that right?",
+        "rule": "N.Y. R. Prof. Conduct 8.4(g), 5.1(b), 5.1(d)",
+        "explanation": "Harassment on the basis of a protected category in the practice of law, which includes interacting with coworkers and operating or managing a firm, is misconduct whether or not unlawful, and lawyers with management responsibility must make reasonable efforts to ensure compliance and take remedial action.",
+        "choices": [
+          {
+            "text": "Yes. The Rules govern only conduct in court and in client matters.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 8.4(g), 5.1(b), 5.1(d): Harassment on the basis of a protected category in the practice of law, which includes interacting with coworkers and operating or managing a firm, is misconduct whether or not unlawful, and lawyers with management responsibility must make reasonable efforts to ensure compliance and take remedial action."
+          },
+          {
+            "text": "Yes, because the remarks, while unkind, were not unlawful.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 8.4(g), 5.1(b), 5.1(d): Harassment on the basis of a protected category in the practice of law, which includes interacting with coworkers and operating or managing a firm, is misconduct whether or not unlawful, and lawyers with management responsibility must make reasonable efforts to ensure compliance and take remedial action."
+          },
+          {
+            "text": "No, but only the associate can raise it and the firm has no obligation to act.",
+            "grade": "wrong",
+            "why": "N.Y. R. Prof. Conduct 8.4(g), 5.1(b), 5.1(d): Harassment on the basis of a protected category in the practice of law, which includes interacting with coworkers and operating or managing a firm, is misconduct whether or not unlawful, and lawyers with management responsibility must make reasonable efforts to ensure compliance and take remedial action."
+          },
+          {
+            "text": "No. Conduct in the practice of law includes interacting with coworkers and operating or managing a law firm, and harassment on the basis of a protected category is misconduct whether or not it is unlawful; partners with management responsibility must take reasonable remedial action.",
+            "grade": "correct"
+          }
+        ]
+      },
+      {
+        "id": "ny_short_bodega_settlement_offer",
+        "jurisdiction": "New York",
+        "from": "Rosalind Delacroix",
+        "role": "Manhattan Office Partner",
+        "gold": 30,
+        "subject": "Washington Heights bodega — lowball offer, don’t bother the client",
+        "body": "The insurer just offered $18,000 to settle the bodega owner’s slip-and-fall claim. It’s insulting and I plan to reject it by Friday. No need to call the client and get his hopes up or down — he trusts us to handle it. Agreed?",
+        "rule": "N.Y. R. Prof. Conduct 1.4(a)(1)(iii) / 1.2(a) — Communication; client decides settlement",
+        "choices": [
+          {
+            "grade": "correct",
+            "text": "Promptly tell the client about the offer and explain it; the decision whether to settle is his, not ours."
+          },
+          {
+            "grade": "wrong",
+            "text": "Reject it without telling him, since it is obviously below what the case is worth.",
+            "why": "Promptly communicate settlement offers and explain enough for an informed decision. The client decides whether to settle; a partner cannot quietly reject or accept an offer on these facts. Rules 1.4(a)(1)(iii), (b) and 1.2(a)."
+          },
+          {
+            "grade": "very_wrong",
+            "text": "Accept it quietly if the insurer bumps it to $25,000 — the client will be happy with any check.",
+            "why": "Promptly communicate settlement offers and explain enough for an informed decision. The client decides whether to settle; a partner cannot quietly reject or accept an offer on these facts. Rules 1.4(a)(1)(iii), (b) and 1.2(a)."
+          }
+        ],
+        "difficulty": 1,
+        "explanation": "Promptly communicate settlement offers and explain enough for an informed decision. The client decides whether to settle; a partner cannot quietly reject or accept an offer on these facts. Rules 1.4(a)(1)(iii), (b) and 1.2(a).",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/SHORT-QUESTIONS.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments"
+      },
+      {
+        "id": "ny_short_subway_ad_specialist",
+        "jurisdiction": "New York",
+        "from": "Priya Raman",
+        "role": "Queens Office Partner",
+        "gold": 30,
+        "subject": "7 train ad copy — \"Queens’ #1 Certified DWI Specialist\"",
+        "body": "Marketing wants to run a car card on the 7 line: \"Queens’ #1 Certified DWI Specialist — We Win.\" Nobody at the firm holds any certification, but we do handle a lot of DWI cases in Kew Gardens. Approve the copy?",
+        "rule": "N.Y. R. Prof. Conduct 7.1(a), (c), (d) — Communications Concerning a Lawyer’s Services",
+        "choices": [
+          {
+            "grade": "correct",
+            "text": "No. Drop \"Certified Specialist,\" \"#1\" and \"We Win,\" and make sure the ad names a responsible lawyer or the firm with contact information."
+          },
+          {
+            "grade": "wrong",
+            "text": "Approve it if we add \"results may vary\" in small type at the bottom.",
+            "why": "The firm has no certification to advertise. Rule 7.1(c) requires qualifying certification and identification of the certifier, paragraph (a) bars misleading claims, and paragraph (d) requires a responsible lawyer or firm name and contact information. Fine print does not cure a fictitious credential."
+          },
+          {
+            "grade": "very_wrong",
+            "text": "Approve it, and leave the firm name off so the ad feels like a public-service message.",
+            "why": "The firm has no certification to advertise. Rule 7.1(c) requires qualifying certification and identification of the certifier, paragraph (a) bars misleading claims, and paragraph (d) requires a responsible lawyer or firm name and contact information. Fine print does not cure a fictitious credential."
+          }
+        ],
+        "difficulty": 1,
+        "explanation": "The firm has no certification to advertise. Rule 7.1(c) requires qualifying certification and identification of the certifier, paragraph (a) bars misleading claims, and paragraph (d) requires a responsible lawyer or firm name and contact information. Fine print does not cure a fictitious credential.",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/SHORT-QUESTIONS.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments"
+      },
+      {
+        "id": "ny_short_escrow_weekend_loan",
+        "jurisdiction": "New York",
+        "from": "Margarethe Van Rensselaer",
+        "role": "Albany Office Managing Partner",
+        "gold": 30,
+        "subject": "Payroll is Friday — escrow can cover it until the Monday wire",
+        "body": "A client wire we were counting on slipped to Monday and payroll runs Friday. The Attorney Escrow Account has plenty in it from the Troy closing. Move $40,000 to operating today and I will put it back first thing Monday. Nobody is harmed. Please set it up.",
+        "rule": "N.Y. R. Prof. Conduct 1.15(a) — Prohibition Against Commingling and Misappropriation",
+        "choices": [
+          {
+            "grade": "correct",
+            "text": "Decline. Funds in escrow belong to others; a short-term \"loan\" from escrow is misappropriation regardless of intent to repay."
+          },
+          {
+            "grade": "wrong",
+            "text": "Move only the portion that will become the firm’s fee at the Troy closing, since that money is basically ours.",
+            "why": "Rule 1.15(a) forbids misappropriating entrusted funds. Repayment intentions do not authorize a temporary transfer. Under paragraph (b)(4), a potentially payable fee stays in the special account until due, and a disputed portion remains until the dispute is finally resolved."
+          },
+          {
+            "grade": "very_wrong",
+            "text": "Do it. The money will be back before the bank statement closes and no client will know.",
+            "why": "Rule 1.15(a) forbids misappropriating entrusted funds. Repayment intentions do not authorize a temporary transfer. Under paragraph (b)(4), a potentially payable fee stays in the special account until due, and a disputed portion remains until the dispute is finally resolved."
+          }
+        ],
+        "difficulty": 2,
+        "explanation": "Rule 1.15(a) forbids misappropriating entrusted funds. Repayment intentions do not authorize a temporary transfer. Under paragraph (b)(4), a potentially payable fee stays in the special account until due, and a disputed portion remains until the dispute is finally resolved.",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/SHORT-QUESTIONS.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments"
+      },
+      {
+        "id": "ny_short_plattsburgh_conflict_system",
+        "jurisdiction": "New York",
+        "from": "Bea Underhill",
+        "role": "Lake Placid Office Partner",
+        "gold": 30,
+        "subject": "Opening the Plattsburgh satellite — do we really need a conflicts database up here?",
+        "body": "The new Plattsburgh office will be me and one paralegal serving the North Country. I know every client personally and can spot a conflict in my head. Setting up the firm’s conflict-check system and logging every engagement feels like Manhattan overhead. Can we skip it for the satellite?",
+        "rule": "N.Y. R. Prof. Conduct 1.10(e)-(g) — Written record of engagements and conflict-checking system",
+        "choices": [
+          {
+            "grade": "correct",
+            "text": "No. Every firm must make a written record of each engagement at or near the time it begins and maintain a system that checks new clients, new matters, new lawyers and newly added parties against current and past engagements."
+          },
+          {
+            "grade": "wrong",
+            "text": "Skip the system but keep a list of clients in a notebook and check it when something feels off.",
+            "why": "Rule 1.10(e) requires timely written engagement records and a system checking the four listed triggers. Memory or an occasionally consulted notebook is insufficient. A dependable manual system can qualify; no particular database product is required. Substantial failure is independently a violation under paragraph (f)."
+          },
+          {
+            "grade": "very_wrong",
+            "text": "Skip it. A conflict is only a violation if you actually represent someone you shouldn’t.",
+            "why": "Rule 1.10(e) requires timely written engagement records and a system checking the four listed triggers. Memory or an occasionally consulted notebook is insufficient. A dependable manual system can qualify; no particular database product is required. Substantial failure is independently a violation under paragraph (f)."
+          }
+        ],
+        "difficulty": 2,
+        "explanation": "Rule 1.10(e) requires timely written engagement records and a system checking the four listed triggers. Memory or an occasionally consulted notebook is insufficient. A dependable manual system can qualify; no particular database product is required. Substantial failure is independently a violation under paragraph (f).",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/SHORT-QUESTIONS.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments"
+      },
+      {
+        "id": "ny_short_long_island_noncompete",
+        "jurisdiction": "New York",
+        "from": "Marcus Greene",
+        "role": "Long Island Office Partner",
+        "gold": 30,
+        "subject": "Associate agreement — two-year, 50-mile non-compete from Mineola",
+        "body": "We keep training associates who leave for Garden City firms and take clients with them. I want every new associate agreement to bar practicing law within 50 miles of Mineola for two years after departure. It is standard in every other industry on the Island. Draft it up?",
+        "rule": "N.Y. R. Prof. Conduct 5.6(a)(1) — Restrictions On Right To Practice",
+        "choices": [
+          {
+            "grade": "correct",
+            "text": "No. A lawyer may not participate in offering or making an employment agreement that restricts a lawyer’s right to practice after the relationship ends, other than an agreement concerning retirement benefits."
+          },
+          {
+            "grade": "wrong",
+            "text": "Draft it, but soften it to a one-year, 25-mile radius so it is reasonable.",
+            "why": "Rule 5.6(a)(1) prohibits participating in this employment restriction on future practice. Reducing its radius or calling it standard does not cure it. The retirement-benefit exception and the separate sale-of-practice provision are not implicated by these facts."
+          },
+          {
+            "grade": "very_wrong",
+            "text": "Draft it and insist everyone signs; firms in other industries use these restrictions all the time.",
+            "why": "Rule 5.6(a)(1) prohibits participating in this employment restriction on future practice. Reducing its radius or calling it standard does not cure it. The retirement-benefit exception and the separate sale-of-practice provision are not implicated by these facts."
+          }
+        ],
+        "difficulty": 3,
+        "explanation": "Rule 5.6(a)(1) prohibits participating in this employment restriction on future practice. Reducing its radius or calling it standard does not cure it. The retirement-benefit exception and the separate sale-of-practice provision are not implicated by these facts.",
+        "sourceType": "new-york-style",
+        "sourceNote": "Unofficial New York educational practice. Source check: September 27, 2026. Not official bar-exam questions or legal advice.",
+        "sourceChecked": "2026-09-27",
+        "localSourceFile": "content/questions/new-york/SHORT-QUESTIONS.md",
+        "sourceUrl": "https://www.nycourts.gov/rules/amendments-joint-rules-departments-appellate-division",
+        "sourceLabel": "New York questions and answer key",
+        "officialSourceLabel": "New York rules and amendments"
+      }
+    ];
+    Object.assign(exports, { CALIFORNIA_SCENARIOS, NEW_YORK_SCENARIOS });
+  },
+  "js/data/mail.js": (exports, require) => {
+    function canAccessBarMail(player) { return player.zone === 'office' || player.upgrades.includes('work_phone'); }
+    function scenarioMatchesPack(scenario, pack) {
+      if (pack === 'ca') return scenario.sourceType === 'california-style';
+      if (pack === 'ny') return scenario.sourceType === 'new-york-style';
+      if (pack === 'sqe') return scenario.sourceType === 'sqe-style';
+      if (pack === 'mpre') return scenario.sourceType === 'mpre-style';
+      if (pack === 'juris') return scenario.sourceType === 'lawscape';
+      return true;
+    }
+    function practiceInbox(player, scenarios) {
+      const difficulty = player.casesDone < 5 ? 1 : player.casesDone < 12 ? 2 : 3;
+      const pool = scenarios.filter((scenario) => scenarioMatchesPack(scenario, player.practicePack));
+      const tier = pool.filter((scenario) => scenario.difficulty === difficulty);
+      const eligible = tier.length ? tier : pool;
+      return { eligible, unread: eligible.filter((scenario) => !player.seen.includes(scenario.id)), difficulty, levelLabel: tier.length ? `Level ${difficulty}` : 'All levels' };
+    }
+    function billableMessageOpen({ inGame, visible, mailOpen, messageOpen }) {
+      return inGame && visible && mailOpen && messageOpen;
+    }
+    Object.assign(exports, { canAccessBarMail, scenarioMatchesPack, practiceInbox, billableMessageOpen });
+  },
+  "js/lounge.js": (exports, require) => {
+    const { WHISKEY_SLOW_MS } = require("js/data/work.js");
+
+    const BAR_DRINKS = [
+      { id: 'old-fashioned', name: 'The Reasonable Old Fashioned', cost: 5, note: 'Orange peel, a polished glass, and no pending deadlines.', slows: true },
+      { id: 'wine', name: 'House Red · Reserved Judgment', cost: 5, note: 'Served in stemware by a very precise robot.', slows: true },
+      { id: 'ale', name: 'After-Hours Ale', cost: 3, note: 'The office is closed. Your walking pace takes a short break.', slows: true },
+      { id: 'water', name: 'Sparkling water', cost: 0, note: 'Complimentary. No movement or Ethics effect.', slows: false },
+    ];
+
+    function orderBarDrink(player, id, now = Date.now()) {
+      const drink = BAR_DRINKS.find((item) => item.id === id);
+      if (!drink || player.zone !== 'sidebar' || player.runStatus === 'ended' || player.ethics <= 0) throw new Error('Drinks are served in The Sidebar during an active run.');
+      if (player.apprenticeship.attempts.some((a) => a.status === 'pending')) throw new Error('Wait for your partner reply before making purchases.');
+      if (player.gold < drink.cost) throw new Error(`You need ${drink.cost} gold for that drink.`);
+      player.gold -= drink.cost;
+      player.sidebarDrinks = (player.sidebarDrinks || 0) + 1;
+      // Each alcoholic drink refreshes the short effect; it never damages Ethics.
+      if (drink.slows) player.slowUntil = Math.max(player.slowUntil || 0, now + WHISKEY_SLOW_MS);
+      return { drink, ethicsDamage: 0, slowUntil: player.slowUntil || 0 };
+    }
+
+    function movementMultiplier(player, now = Date.now()) { return player.slowUntil > now ? 0.5 : 1; }
+
+    const BOARD_KEY = 'lawscape_billable_board_v1';
+    let sessionBoard = [];
+    let unsavedEntries = [];
+    function validEntry(entry) {
+      return entry && typeof entry.runId === 'string' && typeof entry.name === 'string'
+        && Number.isFinite(entry.billableMs) && entry.billableMs >= 0 && Number.isFinite(entry.endedAt);
+    }
+    function readBillableBoard() {
+      try {
+        const saved = localStorage.getItem(BOARD_KEY);
+        const raw = saved === null ? sessionBoard : JSON.parse(saved);
+        if (Array.isArray(raw)) sessionBoard = raw.filter(validEntry);
+      } catch { /* retain the session copy if storage is unavailable */ }
+      const unique = new Map([...sessionBoard,...unsavedEntries].map((entry) => [entry.runId,entry]));
+      return [...unique.values()].sort((a,b) => b.billableMs-a.billableMs || a.endedAt-b.endedAt).slice(0,10);
+    }
+    function archiveDisbarredRun(player, now = Date.now()) {
+      if (player.ethics > 0 && player.runStatus !== 'ended') return { recorded: false, persisted: false };
+      const entries = readBillableBoard();
+      if (entries.some((entry) => entry.runId === player.runId)) return { recorded: false, duplicate: true };
+      if (!player.runId || !Number.isFinite(player.billableStudyMs) || player.billableStudyMs < 0) return { recorded: false, persisted: false };
+      sessionBoard = [...entries, { runId: player.runId, name: String(player.name).slice(0,80), billableMs: Math.floor(player.billableStudyMs), endedAt: now }]
+        .sort((a,b) => b.billableMs-a.billableMs || a.endedAt-b.endedAt).slice(0,10);
+      try { localStorage.setItem(BOARD_KEY,JSON.stringify(sessionBoard)); unsavedEntries=[]; return { recorded: true, persisted: true }; }
+      catch { unsavedEntries=[...sessionBoard]; return { recorded: true, persisted: false }; }
+    }
+    Object.assign(exports, { BAR_DRINKS, orderBarDrink, movementMultiplier, readBillableBoard, archiveDisbarredRun });
+  },
+  "js/data/sidebar.js": (exports, require) => {
+    // Room/topic IDs are stable attachment points for the future room service.
+    // No networking, fabricated presence, agent execution or chat transport exists here.
+    const SIDEBAR_ROOM = { id: 'sidebar', title: 'The Sidebar', mode: 'local-preview', participantLimit: 10 };
+    const SIDEBAR_TOPICS = [
+      { id: 'commons', label: 'The commons', prompt: 'Meet the other attorneys and introduce the work you enjoy practicing.' },
+      { id: 'evidence', label: 'Evidence table', prompt: 'Compare how you checked a synthetic file. Mark spoilers and cite the exercise passage.' },
+      { id: 'writing', label: 'Writing table', prompt: 'Trade ideas for a clearer partner update and more useful next steps.' },
+      { id: 'agents', label: 'AI & agents table', prompt: 'Discuss checking AI work. In the future pilot, approved AI agents will be clearly labeled and controlled by their owners.' },
+    ];
+
+    function sidebarTopic(id) { return SIDEBAR_TOPICS.find((topic) => topic.id === id) || SIDEBAR_TOPICS[0]; }
+    function saveSidebarDraft(player, topicId, text) {
+      const topic = sidebarTopic(topicId);
+      player.sidebar.topic = topic.id;
+      player.sidebar.drafts[topic.id] = String(text).slice(0, 500);
+      return { status: 'local-draft', topic: topic.id, text: player.sidebar.drafts[topic.id] };
+    }
+    Object.assign(exports, { SIDEBAR_ROOM, SIDEBAR_TOPICS, sidebarTopic, saveSidebarDraft });
   },
   "js/data/upgrades.js": (exports, require) => {
     // Upgrade catalogs, priced in gold earned from BarMail ethics scenarios.
@@ -9932,27 +12031,27 @@
           {
             "title": "California Rules of Professional Conduct",
             "description": "Full 2023 rule text and cross-reference tables.",
-            "href": "California References/rpc.md"
+            "href": "content/references/california/rpc.md"
           },
           {
             "title": "COPRAC Formal Opinions Index",
             "description": "Searchable navigation index for the bundled California ethics opinions.",
-            "href": "California References/opinions-index.md"
+            "href": "content/references/california/opinions-index.md"
           },
           {
             "title": "COPRAC Formal Opinions — Full Text",
             "description": "Complete local opinion corpus from 1965 through Opinion 2024-209.",
-            "href": "California References/opinions-full.md"
+            "href": "content/references/california/opinions-full.md"
           },
           {
             "title": "Admissions, Discipline, Trust Accounts, IOLTA, and CLE",
             "description": "Reference pointer to the controlling California sources.",
-            "href": "California References/admission-discipline.md"
+            "href": "content/references/california/admission-discipline.md"
           },
           {
             "title": "State Bar Disciplinary Procedure",
             "description": "Reference pointer and procedural framework for State Bar Court matters.",
-            "href": "California References/disciplinary-procedure.md"
+            "href": "content/references/california/disciplinary-procedure.md"
           }
         ]
       }
@@ -9970,7 +12069,7 @@
     // PLAYER may choose to open (and can edit before submitting), preserving the
     // game's no-backend, no-tracking promise.
 
-    const GAME_VERSION = '0.5.0-global-preview';
+    const GAME_VERSION = '0.6.0';
     const PROJECT_REPO_URL = 'https://github.com/joelakaufmann-lgtm/lawscape';
     const PROJECT_ISSUES_URL = `${PROJECT_REPO_URL}/issues`;
 

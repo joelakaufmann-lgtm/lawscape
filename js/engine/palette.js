@@ -1,4 +1,4 @@
-// Single source of truth for every color in the game world (see VISUAL_DESIGN.md §2).
+// Single source of truth for every color in the game world (see docs/archive/VISUAL_DESIGN.md §2).
 export const PAL = {
   marble: '#e8e4da',
   marbleDark: '#d6d0c2',

@@ -5,8 +5,8 @@ export const TRAINING_JURISDICTION = 'State of Juris · fictional firm policy';
 export const FIRM_PACKS = [
   { id: 'juris', label: 'State of Juris', status: 'Local practice', note: 'Two synthetic matters. Practice evidence handling and communication under supplied fictional office policies.' },
   { id: 'us-nv', label: 'Nevada', status: 'Needs source review', note: 'Existing reference material; a reviewed firm curriculum is not yet available.' },
-  { id: 'gb-ew', label: 'England & Wales', status: 'Needs source review', note: 'Legacy SQE-style study is in BarMail. A reviewed firm curriculum is not yet available.' },
-  { id: 'us-ca', label: 'California', status: 'Not yet available', note: 'A reference shelf is not a complete training pack.' },
+  { id: 'gb-ew', label: 'England & Wales', status: 'Needs source review', note: 'SQE-style questions are available in BarMail. A reviewed firm curriculum is not yet available.' },
+  { id: 'us-ca', label: 'California', status: 'Not yet available', note: '20 California questions are available in BarMail; a full firm curriculum is still planned.' },
   { id: 'us-az', label: 'Arizona', status: 'Not yet available', note: 'Source coverage and authored tasks still need review.' },
 ];
 

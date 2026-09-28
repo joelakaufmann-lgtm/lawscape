@@ -1,0 +1,35 @@
+{
+  "reviewDateLocal": "2026-09-27",
+  "reviewer": "Codex source check; no independent practitioner sign-off recorded",
+  "publisherDownload": {
+    "requested_url": "https://www.calbar.ca.gov/sites/default/files/portals/0/documents/rules/Rules-of-Professional-Conduct.pdf",
+    "publisher_asserted": "www.calbar.ca.gov",
+    "publisher_host": "www.calbar.ca.gov",
+    "redirected_within_publisher": false,
+    "user_agent": "Mozilla/5.0 (compatible; codex-for-legal/regulatory; legal research, primary sources)",
+    "version_label": "2026 compilation linked by current rules page",
+    "retrieved_at": "2026-09-28T05:57:23Z",
+    "bytes": 1121055,
+    "sha256": "6b604db5c547b4ef4e0c6ba6365a2a123d4bbfcb951c63bd10ff1458b5f16ba6",
+    "saved_as": "source.pdf",
+    "integrity": {
+      "schema": "regulatory-integrity/v1",
+      "instrument": {
+        "jurisdiction": "US-CA-ETHICS",
+        "profile": "california-supreme-court-rpc",
+        "instrument_id": "ca-rpc"
+      },
+      "publisher_bytes_sha256": "6b604db5c547b4ef4e0c6ba6365a2a123d4bbfcb951c63bd10ff1458b5f16ba6"
+    },
+    "final_url": "https://www.calbar.ca.gov/sites/default/files/portals/0/documents/rules/Rules-of-Professional-Conduct.pdf",
+    "status": 200,
+    "content_type": "application/pdf",
+    "http_date": "Mon, 28 Sep 2026 05:57:22 GMT",
+    "last_modified": "Mon, 01 Jun 2026 17:29:34 GMT",
+    "etag": "\"6a1dc17e-111b1f\""
+  },
+  "pdfSha256": "6b604db5c547b4ef4e0c6ba6365a2a123d4bbfcb951c63bd10ff1458b5f16ba6",
+  "derivedTextSha256": "1b018bf2d197767c78951c8e8c3cf6ce7f745c50c86d367fe2642d9ed9df59ea",
+  "transformation": "pdftotext -layout; derived text is not publisher bytes",
+  "retention": "Raw downloads retained in ignored local release/research, not the public game package."
+}

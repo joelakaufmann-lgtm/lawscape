@@ -20,8 +20,8 @@ playable scenario packs.
 
 ## Where the game is heading
 
-The current game offers a fictional State of Juris apprenticeship, US MPRE-style
-study and England & Wales SQE-style study. Reviewed real-jurisdiction firm packs
+The current game offers California and New York question packs, a fictional
+State of Juris apprenticeship, US MPRE-style study and England & Wales SQE-style study. Reviewed real-jurisdiction firm packs
 are planned at the firm level. A bundled reference shelf or existing exam-style
 set is not an approved firm curriculum.
 
@@ -73,12 +73,14 @@ than the bundle.
 
 If you change a local ethics-rule authoring file, run `npm run rules:build`.
 If you edit either additional-question Markdown source, run `npm run mpre:build`.
-A normal `npm run build` refreshes both generated modules.
+For California and New York, edit the sources listed in [Content authoring](content/README.md)
+and run `npm run states:build`. A normal `npm run build` refreshes every generated module.
 Review generated files for snapshot dates, source labels, and official links.
 
 ## Scenario contributions
 
-Ethics scenarios belong in `js/data/ethics.js`. Each scenario needs:
+Question sources are listed in [Content authoring](content/README.md);
+`js/data/ethics.js` assembles the runtime pool. Each scenario needs:
 
 - a unique identifier;
 - a clear jurisdiction/rule reference;

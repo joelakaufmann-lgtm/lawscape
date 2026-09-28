@@ -25,6 +25,7 @@ import { SIDEBAR_ROOM, SIDEBAR_TOPICS, sidebarTopic, saveSidebarDraft } from './
 import { SCENARIOS, STREAK_HEAL } from './data/ethics.js';
 import { OFFICE_UPGRADES, APARTMENT_UPGRADES, bonuses } from './data/upgrades.js';
 import { RULE_LIBRARY } from './data/rules.js';
+import { PRACTICE_PACKS } from './data/practice-packs.js';
 import {
   COFFEE_ETHICS_RESTORE,
   APARTMENT_FOOD_COST,
@@ -76,7 +77,12 @@ let billableUnsavedMs = 0;
 const desk = createApprenticeshipUI({
   beforeOpen: () => { closeEmail(); $('panel').classList.add('hidden'); hideDialogue(); stopDocumentReview(false); player?.stop(); },
   onChange: () => { if (player) player.look = playerLook(); updateHUD(); if (mailMode === 'inbox' && !$('email').classList.contains('hidden')) renderInbox(); },
-  onLegacy: () => { if (inGame) openEmail(); },
+  onPractice: (pack) => {
+    if (!inGame) return;
+    state.practicePack = pack;
+    if (!canAccessBarMail(state)) enterZone('office');
+    save(); openEmail('practice');
+  },
   onWriting: (id) => openEmail('writing', id),
   onWritingExit: (next,id) => { closeEmail(); desk.open(next,id); },
   notify: toast,
@@ -249,7 +255,7 @@ function updateQuickActions() {
   mail.title = hasUpgrade('work_phone') ? 'Open BarMail on your work phone (B)' : access ? 'Open BarMail on your office computer (B)' : 'Buy the Work Phone to use BarMail outside the office';
   const room = $('room-action');
   room.classList.toggle('hidden', !['sidebar', 'courtroom'].includes(state.zone));
-  room.textContent = state.zone === 'sidebar' ? 'The Sidebar · Room & chat' : 'Talk to Derek Balam';
+  room.textContent = state.zone === 'sidebar' ? 'The Sidebar · Table notes' : 'Talk to Derek Balam';
   $('room-service').classList.toggle('hidden', !['sidebar','courtroom'].includes(state.zone));
   $('room-service').textContent = state.zone === 'sidebar' ? 'Order a drink' : 'Sleeping AI judge';
   $('room-board').classList.toggle('hidden', state.zone !== 'sidebar');
@@ -488,7 +494,7 @@ function currentDifficulty() {
   return 3;
 }
 
-const PRACTICE_PACKS = new Set(['mixed', 'sqe', 'mpre', 'juris']);
+const VALID_PACKS = new Set(PRACTICE_PACKS.map(pack => pack.id));
 
 let mailMode = 'inbox', mailFolder = 'all', writingTaskId = null, questionAnswered = false;
 
@@ -507,7 +513,7 @@ function openEmail(folder = 'all', taskId = null) {
   mailMode = taskId ? 'writing' : 'inbox';
   writingTaskId = taskId;
   currentScenario = null;
-  $('email-pack').value = PRACTICE_PACKS.has(state.practicePack) ? state.practicePack : 'mixed';
+  $('email-pack').value = VALID_PACKS.has(state.practicePack) ? state.practicePack : 'mixed';
   for (const id of ['email-difficulty','email-source','email-hint','email-rule','email-body','email-writing-body']) $(id).classList.add('hidden');
   $('email-inbox').classList.toggle('hidden', !!taskId);
   if (taskId) {
@@ -529,7 +535,7 @@ function renderInbox() {
       const status = locked ? 'Complete six replies and two files' : latest?.status === 'pending' ? 'Sent · awaiting partner' : latest ? 'Partner replied' : state.apprenticeship.drafts[task.id] ? 'Draft saved' : 'New assignment';
       return `<button type="button" class="mail-row" data-writing="${task.id}" ${locked ? 'disabled' : ''}><span class="mail-sender">${e(task.partner)}</span><span class="mail-subject">${e(task.title)}<small>${e(task.skill)} · ${e(task.prompt.slice(0,105))}…</small></span><span class="mail-status">${status}</span></button>`;
     }).join('')}</div>` : '')
-    + (showPractice ? `<h3 class="mail-group-title">Ethics practice · ${pool.levelLabel} · ${pool.unread.length} unanswered</h3><div class="mail-list">${pool.unread.map((s) => `<button type="button" class="mail-row" data-scenario="${e(s.id)}"><span class="mail-sender">${e(s.from)}<small>${e(s.role)}</small></span><span class="mail-subject">${e(s.subject)}<small>${e(s.body.slice(0,95))}…</small></span><span class="mail-status">${s.sourceType === 'mpre-style' ? 'MPRE-style' : s.sourceType === 'sqe-style' ? 'SQE-style' : 'State of Juris'}</span></button>`).join('')}</div>${!pool.unread.length ? '<p class="mail-notice">You have answered this tier’s mail for this practice pack.</p><button type="button" id="mail-new-round">Start another study round</button>' : ''}` : '');
+    + (showPractice ? `<h3 class="mail-group-title">Ethics practice · ${pool.levelLabel} · ${pool.unread.length} unanswered</h3><div class="mail-list">${pool.unread.map((s) => `<button type="button" class="mail-row" data-scenario="${e(s.id)}"><span class="mail-sender">${e(s.from)}<small>${e(s.role)}</small></span><span class="mail-subject">${e(s.subject)}<small>${e(s.body.slice(0,95))}…</small></span><span class="mail-status">${s.jurisdiction || (s.sourceType === 'mpre-style' ? 'MPRE-style' : s.sourceType === 'sqe-style' ? 'SQE-style' : 'LawScape original')}</span></button>`).join('')}</div>${!pool.unread.length ? '<p class="mail-notice">You have answered this tier’s mail for this practice pack.</p><button type="button" id="mail-new-round">Start another study round</button>' : ''}` : '');
   $('email-inbox').querySelectorAll('[data-writing]').forEach((row) => row.onclick = () => openEmail('writing',row.dataset.writing));
   $('email-inbox').querySelectorAll('[data-scenario]').forEach((row) => row.onclick = () => openScenario(row.dataset.scenario));
   if ($('mail-new-round')) $('mail-new-round').onclick = () => {
@@ -552,10 +558,10 @@ function openScenario(id) {
   const s = currentScenario;
 
   $('email-subject').textContent = s.subject;
-  const jurisdiction = s.sourceType === 'sqe-style' ? 'England & Wales · legacy SQE-style study' : s.sourceType === 'mpre-style' ? 'US MPRE-style · model-rule study' : 'State of Juris · legacy mixed-source fiction';
+  const jurisdiction = s.jurisdiction ? `${s.jurisdiction} · unofficial ethics practice` : s.sourceType === 'sqe-style' ? 'England & Wales · SQE-style study' : s.sourceType === 'mpre-style' ? 'US MPRE-style · model-rule study' : 'LawScape original · mixed Arizona/Nevada sources';
   $('email-from').textContent = `From: ${s.from} — ${s.role} · ${jurisdiction}`;
   $('email-text').textContent = s.body;
-  $('email-pack').value = PRACTICE_PACKS.has(state.practicePack) ? state.practicePack : 'mixed';
+  $('email-pack').value = VALID_PACKS.has(state.practicePack) ? state.practicePack : 'mixed';
   const advancedLabel = s.sourceType === 'sqe-style'
     ? 'SQE+'
     : s.sourceType === 'mpre-style' ? 'MPRE+' : 'EXPERT';
@@ -563,8 +569,8 @@ function openScenario(id) {
   $('email-difficulty').textContent = `LEVEL ${s.difficulty} · ${levelNames[s.difficulty]}`;
 
   const sourceEl = $('email-source');
-  if (s.sourceType === 'mpre-style' || s.sourceType === 'sqe-style') {
-    sourceEl.textContent = s.sourceType === 'sqe-style' ? 'ENGLAND & WALES · SQE-STYLE' : 'MPRE-STYLE';
+  if (s.sourceUrl) {
+    sourceEl.textContent = s.jurisdiction || (s.sourceType === 'sqe-style' ? 'ENGLAND & WALES · SQE-STYLE' : 'MPRE-STYLE');
     sourceEl.title = s.sourceNote;
     sourceEl.classList.remove('hidden');
     sourceEl.classList.toggle('sqe-source', s.sourceType === 'sqe-style');
@@ -659,7 +665,7 @@ function answerEmail(choice) {
         + 'court, money, and compliance duties is how practising certificates stay safe.'
       : 'That is the defensible course — engagement decisions, trust money, and candor calls '
         + 'like this one are exactly where licenses are won and lost.';
-    explainEl.textContent = `${s.rule}. ${successContext}`;
+    explainEl.textContent = `${s.rule}. ${s.explanation || successContext}`;
     deltaEl.innerHTML = `<span class="gain">+${earned} gold</span>`
       + (healed > 0 ? ` &nbsp; <span class="gain">+${healed} Ethics (streak x${state.streak}!)</span>`
                     : ` &nbsp; <span class="muted">streak x${state.streak} — one more for an Ethics heal</span>`);
@@ -678,7 +684,7 @@ function answerEmail(choice) {
       + `<span class="muted">wrong-answer streak x${state.wrongStreak}${rileyNote}</span>`;
   }
 
-  if (s.sourceType === 'mpre-style' || s.sourceType === 'sqe-style') {
+  if (s.sourceUrl) {
     appendScenarioSource(explainEl, s);
   }
 
@@ -703,17 +709,16 @@ function appendScenarioSource(container, scenario) {
   source.append('Source note: ');
   const local = document.createElement('a');
   local.href = scenario.localSourceFile
-    || (isSqe ? 'SQE_Ethics_Email_Scenarios_UK.md' : 'MPRE_Associate_Email_Scenarios.md');
+    || (isSqe ? 'content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md' : 'content/questions/mpre/MPRE_Associate_Email_Scenarios.md');
   local.target = '_blank';
   local.rel = 'noopener';
-  local.textContent = scenario.localSourceFile
-    || (isSqe ? 'England & Wales SQE Ethics Email Pack' : 'MPRE Associate Email Scenarios');
+  local.textContent = scenario.sourceLabel || (isSqe ? 'SQE questions and answer key' : 'MPRE questions and answer key');
   source.append(local, ' · ');
   const official = document.createElement('a');
   official.href = scenario.sourceUrl;
   official.target = '_blank';
   official.rel = 'noopener';
-  official.textContent = isSqe ? 'SRA SQE1 sample questions' : 'NCBE preparation page';
+  official.textContent = scenario.officialSourceLabel || (isSqe ? 'SRA SQE1 sample questions' : 'NCBE preparation page');
   source.append(official);
   if (scenario.studyGuideUrl) {
     const guide = document.createElement('a');
@@ -736,7 +741,7 @@ function closeEmail() {
 }
 $('email-close').addEventListener('click', closeEmail);
 $('email-pack').addEventListener('change', (event) => {
-  state.practicePack = PRACTICE_PACKS.has(event.target.value) ? event.target.value : 'mixed';
+  state.practicePack = VALID_PACKS.has(event.target.value) ? event.target.value : 'mixed';
   save();
   openEmail('practice');
 });
@@ -797,7 +802,7 @@ function openSidebar(topicId = state.sidebar.topic) {
   const topic = sidebarTopic(topicId);
   state.sidebar.topic = topic.id;
   save();
-  const body = openPanel(`${SIDEBAR_ROOM.title} — Room & Chat`);
+  const body = openPanel(`${SIDEBAR_ROOM.title} — Table notes`);
   $('panel-inner').classList.add('sidebar-panel');
   body.innerHTML = `
     <div class="sidebar-banner"><span class="sidebar-mode">LOCAL PREVIEW</span><h2>A place to talk shop.</h2><p>A quiet corner of the firm. Pull up a chair and choose a table.</p></div>
@@ -1303,48 +1308,15 @@ function openWardrobe() {
 }
 
 function openHelp() {
-  const body = openPanel('How LawScape Works');
+  const body = openPanel('How to play');
   body.innerHTML = `
-    <div class="help-lede">Open <b>Journal</b> (J) to begin your first firm day: inspect a synthetic file, write a partner reply, and earn a visible reward.</div>
-    <div class="row-item"><div class="grow"><h4>💻 BarMail</h4>
-      <p>Click your office computer or use BarMail. Open an email subject to answer an ethics question or write a partner reply inside the same window. Choose a practice pack in the toolbar. Buy the 2,000-gold Work Phone from the office upgrades cabinet to open all your mail anywhere.</p></div></div>
-    <div class="row-item"><div class="grow"><h4>⏱ Billable Hours</h4>
-      <p>The clock records visible time inside an open question, writing assignment or feedback. It pauses in the inbox list, other activities and hidden tabs. At disbarment, that run is recorded on The Sidebar’s local top-10 board. Scores survive resets; character possessions do not.</p></div></div>
-    <div class="row-item"><div class="grow"><h4>🗄 Document Review</h4>
-      <p>Use the filing cabinet or your journal to open the evidence room. Flag exact passages, explain your findings, then commit a file review for up to 75 study gold. Each file pays once per run.</p></div></div>
-    <div class="row-item"><div class="grow"><h4>📚 Ethics Treatises</h4>
-      <p>Buy the Ethics Treatise Shelf upgrade, then use the bookshelf to search the bundled
-      Nevada, Arizona, and California references.</p></div></div>
-    <div class="row-item"><div class="grow"><h4>🖱 Movement</h4>
-      <p>Click or tap a floor tile to walk. You can also use WASD or the arrow keys. Select
-      a highlighted person or object to walk over and interact.</p></div></div>
-    <div class="row-item"><div class="grow"><h4>🪙 Gold</h4>
-      <p>Ethics answers, writing checklists and supported file reviews earn gold. Spend it on wardrobe accessories and office or apartment upgrades. New prose is saved for self-comparison, not AI graded.</p></div></div>
-    <div class="row-item"><div class="grow"><h4>⚖ Ethics Bar</h4>
-      <p>Wrong answers damage your Ethics — the game explains the violated rule every time.
-      Damage rises from 30 to 45 and then 60 as wrong answers pile up; Riley halves it.
-      Three straight mistakes can end a brand-new attorney, so read before you reply.
-      Two correct answers in a row start healing Ethics. Resting in your bed helps too.</p></div></div>
-    <div class="row-item"><div class="grow"><h4>🥃 Professional Wellbeing</h4>
-      <p>Jim’s office bar cart demonstrates how alcohol can impair judgment and movement.
-      Returning for another drink provides a confidential lawyer-assistance resource.</p></div></div>
-    <div class="row-item"><div class="grow"><h4>☠ Disbarment</h4>
-      <p>Ethics at zero = YOU GOT DISBARRED — GAME OVER. You restart from nothing: no gold,
-      no items, no upgrades.</p></div></div>
-    <div class="row-item"><div class="grow"><h4>🏛 Court</h4>
-      <p>Derek Balam keeps watch while a robot judge sleeps in the judicial chair. Court is not in session. Different AI judge agents and reviewed hearing exercises are planned; no live judge is connected.</p></div></div>
-    <div class="row-item"><div class="grow"><h4>🍵 The Sidebar</h4>
-      <p>Use Travel to visit the lounge. B.A.R.T., a robot in butler dress, serves drinks: Sidebar alcohol costs no Ethics but slows walking for 40 seconds. Water has no effect. The board ranks billable time in completed runs. Room &amp; Chat saves local drafts; shared communication awaits multiplayer.</p></div></div>
-    <div class="row-item"><div class="grow"><h4>✂ Your attorney</h4>
-      <p>Open Journal → Wardrobe to change hair, facial hair, face shape, eyes, skin, suit, shirt, tie, and glasses. Everyone starts in trousers; a skirt suit is optional for every gender. Preview standing, walking, or seated.</p></div></div>
-    <div class="row-item"><div class="grow"><h4>✍ Email HR</h4>
-      <p>Found a bug, or ready to complain about the working conditions at Hardsell &amp;
-      Firestone? Open BarMail and press <b>Email HR</b>. HR will not read it — but your
-      message becomes a prefilled report you can file with the developers on GitHub.</p></div></div>
-    <div class="row-item"><div class="grow"><h4>🌍 Why LawScape Exists</h4>
-      <p>The thesis: legal learning should be fun — and it should be fun to learn how
-      lawyers in other countries answer the same questions. The practice-pack selector
-      (England & Wales SQE, US MPRE, State of Juris) is the first step; the Firm Jurisdictions desk collects local requests for future reviewed packs. Requests are not sent until you choose to submit them through GitHub.</p></div></div>`;
+    <div class="row-item"><div class="grow"><h4>Your first five minutes</h4><p>Open <b>Journal</b> for a guided firm assignment, or <b>BarMail</b> in your office for a quick ethics question. Open a subject line, read the facts, choose a response and read the explanation.</p></div></div>
+    <div class="row-item"><div class="grow"><h4>Choose your practice</h4><p>Use <b>Journal → Firm jurisdictions</b> or BarMail’s practice selector: California, New York, US MPRE-style, England &amp; Wales SQE-style, or LawScape original dilemmas. Mixed practice includes all five. The inbox shows your current difficulty tier.</p></div></div>
+    <div class="row-item"><div class="grow"><h4>Move, explore, customize</h4><p>Click or tap to walk and interact; WASD and arrow keys also move. Use <b>Travel</b> for locations and <b>Journal → Wardrobe</b> to change your attorney. The Work Phone unlocks BarMail outside your office.</p></div></div>
+    <div class="row-item"><div class="grow"><h4>Gold and Ethics</h4><p>Correct ethics answers earn gold. Repeated wrong answers cause increasing Ethics damage. Correct streaks and resting in your apartment help restore Ethics. At zero Ethics the character run ends: gold, upgrades and drafts are reset. Read feedback before the next reply.</p></div></div>
+    <div class="row-item"><div class="grow"><h4>Your first firm day</h4><p>Read the two synthetic files, flag evidence and complete six writing assignments to unlock the capstone. Committing locks each reply until the partner responds. Checklist choices receive authored feedback and study gold without Ethics damage; your prose is saved for self-comparison, not graded by live AI.</p></div></div>
+    <div class="row-item"><div class="grow"><h4>Research and local play</h4><p>The Ethics Treatise Shelf upgrade opens Nevada, Arizona and California reference material. Progress and Sidebar table notes stay in this browser, with no account or cross-device sync. The Sidebar has scripted characters; shared chat and live courtroom hearings are planned.</p></div></div>
+    <div class="row-item"><div class="grow"><h4>Need help?</h4><p><a href="docs/PLAYING.html" target="_blank" rel="noopener">Player guide</a> · <a href="docs/JURISDICTIONS.html" target="_blank" rel="noopener">Jurisdictions and sources</a>. <b>Email HR · Report a bug</b> prepares a GitHub report for you to review and submit. Nothing is sent automatically. This is unofficial educational practice, not legal advice.</p></div></div>`;
 }
 
 // ---------------------------------------------------------------------------

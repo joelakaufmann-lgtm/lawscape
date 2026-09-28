@@ -1,3 +1,5 @@
+> Historical design/build record. This is not the current player guide. See [How to play](../PLAYING.md).
+
 # LawScape — Visual Design & World Structure
 
 A practical planning document for artists, designers, and developers. LawScape is a law-themed

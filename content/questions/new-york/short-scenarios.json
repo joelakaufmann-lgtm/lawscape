@@ -1,0 +1,142 @@
+[
+  {
+    "id": "ny_short_bodega_settlement_offer",
+    "jurisdiction": "New York",
+    "from": "Rosalind Delacroix",
+    "role": "Manhattan Office Partner",
+    "gold": 30,
+    "subject": "Washington Heights bodega — lowball offer, don’t bother the client",
+    "body": "The insurer just offered $18,000 to settle the bodega owner’s slip-and-fall claim. It’s insulting and I plan to reject it by Friday. No need to call the client and get his hopes up or down — he trusts us to handle it. Agreed?",
+    "rule": "N.Y. R. Prof. Conduct 1.4(a)(1)(iii) / 1.2(a) — Communication; client decides settlement",
+    "choices": [
+      {
+        "grade": "correct",
+        "text": "Promptly tell the client about the offer and explain it; the decision whether to settle is his, not ours."
+      },
+      {
+        "grade": "wrong",
+        "text": "Reject it without telling him, since it is obviously below what the case is worth.",
+        "why": "Promptly communicate settlement offers and explain enough for an informed decision. The client decides whether to settle; a partner cannot quietly reject or accept an offer on these facts. Rules 1.4(a)(1)(iii), (b) and 1.2(a)."
+      },
+      {
+        "grade": "very_wrong",
+        "text": "Accept it quietly if the insurer bumps it to $25,000 — the client will be happy with any check.",
+        "why": "Promptly communicate settlement offers and explain enough for an informed decision. The client decides whether to settle; a partner cannot quietly reject or accept an offer on these facts. Rules 1.4(a)(1)(iii), (b) and 1.2(a)."
+      }
+    ],
+    "difficulty": 1,
+    "explanation": "Promptly communicate settlement offers and explain enough for an informed decision. The client decides whether to settle; a partner cannot quietly reject or accept an offer on these facts. Rules 1.4(a)(1)(iii), (b) and 1.2(a)."
+  },
+  {
+    "id": "ny_short_subway_ad_specialist",
+    "jurisdiction": "New York",
+    "from": "Priya Raman",
+    "role": "Queens Office Partner",
+    "gold": 30,
+    "subject": "7 train ad copy — \"Queens’ #1 Certified DWI Specialist\"",
+    "body": "Marketing wants to run a car card on the 7 line: \"Queens’ #1 Certified DWI Specialist — We Win.\" Nobody at the firm holds any certification, but we do handle a lot of DWI cases in Kew Gardens. Approve the copy?",
+    "rule": "N.Y. R. Prof. Conduct 7.1(a), (c), (d) — Communications Concerning a Lawyer’s Services",
+    "choices": [
+      {
+        "grade": "correct",
+        "text": "No. Drop \"Certified Specialist,\" \"#1\" and \"We Win,\" and make sure the ad names a responsible lawyer or the firm with contact information."
+      },
+      {
+        "grade": "wrong",
+        "text": "Approve it if we add \"results may vary\" in small type at the bottom.",
+        "why": "The firm has no certification to advertise. Rule 7.1(c) requires qualifying certification and identification of the certifier, paragraph (a) bars misleading claims, and paragraph (d) requires a responsible lawyer or firm name and contact information. Fine print does not cure a fictitious credential."
+      },
+      {
+        "grade": "very_wrong",
+        "text": "Approve it, and leave the firm name off so the ad feels like a public-service message.",
+        "why": "The firm has no certification to advertise. Rule 7.1(c) requires qualifying certification and identification of the certifier, paragraph (a) bars misleading claims, and paragraph (d) requires a responsible lawyer or firm name and contact information. Fine print does not cure a fictitious credential."
+      }
+    ],
+    "difficulty": 1,
+    "explanation": "The firm has no certification to advertise. Rule 7.1(c) requires qualifying certification and identification of the certifier, paragraph (a) bars misleading claims, and paragraph (d) requires a responsible lawyer or firm name and contact information. Fine print does not cure a fictitious credential."
+  },
+  {
+    "id": "ny_short_escrow_weekend_loan",
+    "jurisdiction": "New York",
+    "from": "Margarethe Van Rensselaer",
+    "role": "Albany Office Managing Partner",
+    "gold": 30,
+    "subject": "Payroll is Friday — escrow can cover it until the Monday wire",
+    "body": "A client wire we were counting on slipped to Monday and payroll runs Friday. The Attorney Escrow Account has plenty in it from the Troy closing. Move $40,000 to operating today and I will put it back first thing Monday. Nobody is harmed. Please set it up.",
+    "rule": "N.Y. R. Prof. Conduct 1.15(a) — Prohibition Against Commingling and Misappropriation",
+    "choices": [
+      {
+        "grade": "correct",
+        "text": "Decline. Funds in escrow belong to others; a short-term \"loan\" from escrow is misappropriation regardless of intent to repay."
+      },
+      {
+        "grade": "wrong",
+        "text": "Move only the portion that will become the firm’s fee at the Troy closing, since that money is basically ours.",
+        "why": "Rule 1.15(a) forbids misappropriating entrusted funds. Repayment intentions do not authorize a temporary transfer. Under paragraph (b)(4), a potentially payable fee stays in the special account until due, and a disputed portion remains until the dispute is finally resolved."
+      },
+      {
+        "grade": "very_wrong",
+        "text": "Do it. The money will be back before the bank statement closes and no client will know.",
+        "why": "Rule 1.15(a) forbids misappropriating entrusted funds. Repayment intentions do not authorize a temporary transfer. Under paragraph (b)(4), a potentially payable fee stays in the special account until due, and a disputed portion remains until the dispute is finally resolved."
+      }
+    ],
+    "difficulty": 2,
+    "explanation": "Rule 1.15(a) forbids misappropriating entrusted funds. Repayment intentions do not authorize a temporary transfer. Under paragraph (b)(4), a potentially payable fee stays in the special account until due, and a disputed portion remains until the dispute is finally resolved."
+  },
+  {
+    "id": "ny_short_plattsburgh_conflict_system",
+    "jurisdiction": "New York",
+    "from": "Bea Underhill",
+    "role": "Lake Placid Office Partner",
+    "gold": 30,
+    "subject": "Opening the Plattsburgh satellite — do we really need a conflicts database up here?",
+    "body": "The new Plattsburgh office will be me and one paralegal serving the North Country. I know every client personally and can spot a conflict in my head. Setting up the firm’s conflict-check system and logging every engagement feels like Manhattan overhead. Can we skip it for the satellite?",
+    "rule": "N.Y. R. Prof. Conduct 1.10(e)-(g) — Written record of engagements and conflict-checking system",
+    "choices": [
+      {
+        "grade": "correct",
+        "text": "No. Every firm must make a written record of each engagement at or near the time it begins and maintain a system that checks new clients, new matters, new lawyers and newly added parties against current and past engagements."
+      },
+      {
+        "grade": "wrong",
+        "text": "Skip the system but keep a list of clients in a notebook and check it when something feels off.",
+        "why": "Rule 1.10(e) requires timely written engagement records and a system checking the four listed triggers. Memory or an occasionally consulted notebook is insufficient. A dependable manual system can qualify; no particular database product is required. Substantial failure is independently a violation under paragraph (f)."
+      },
+      {
+        "grade": "very_wrong",
+        "text": "Skip it. A conflict is only a violation if you actually represent someone you shouldn’t.",
+        "why": "Rule 1.10(e) requires timely written engagement records and a system checking the four listed triggers. Memory or an occasionally consulted notebook is insufficient. A dependable manual system can qualify; no particular database product is required. Substantial failure is independently a violation under paragraph (f)."
+      }
+    ],
+    "difficulty": 2,
+    "explanation": "Rule 1.10(e) requires timely written engagement records and a system checking the four listed triggers. Memory or an occasionally consulted notebook is insufficient. A dependable manual system can qualify; no particular database product is required. Substantial failure is independently a violation under paragraph (f)."
+  },
+  {
+    "id": "ny_short_long_island_noncompete",
+    "jurisdiction": "New York",
+    "from": "Marcus Greene",
+    "role": "Long Island Office Partner",
+    "gold": 30,
+    "subject": "Associate agreement — two-year, 50-mile non-compete from Mineola",
+    "body": "We keep training associates who leave for Garden City firms and take clients with them. I want every new associate agreement to bar practicing law within 50 miles of Mineola for two years after departure. It is standard in every other industry on the Island. Draft it up?",
+    "rule": "N.Y. R. Prof. Conduct 5.6(a)(1) — Restrictions On Right To Practice",
+    "choices": [
+      {
+        "grade": "correct",
+        "text": "No. A lawyer may not participate in offering or making an employment agreement that restricts a lawyer’s right to practice after the relationship ends, other than an agreement concerning retirement benefits."
+      },
+      {
+        "grade": "wrong",
+        "text": "Draft it, but soften it to a one-year, 25-mile radius so it is reasonable.",
+        "why": "Rule 5.6(a)(1) prohibits participating in this employment restriction on future practice. Reducing its radius or calling it standard does not cure it. The retirement-benefit exception and the separate sale-of-practice provision are not implicated by these facts."
+      },
+      {
+        "grade": "very_wrong",
+        "text": "Draft it and insist everyone signs; firms in other industries use these restrictions all the time.",
+        "why": "Rule 5.6(a)(1) prohibits participating in this employment restriction on future practice. Reducing its radius or calling it standard does not cure it. The retirement-benefit exception and the separate sale-of-practice provision are not implicated by these facts."
+      }
+    ],
+    "difficulty": 3,
+    "explanation": "Rule 5.6(a)(1) prohibits participating in this employment restriction on future practice. Reducing its radius or calling it standard does not cure it. The retirement-benefit exception and the separate sale-of-practice provision are not implicated by these facts."
+  }
+]

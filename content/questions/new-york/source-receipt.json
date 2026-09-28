@@ -1,0 +1,35 @@
+{
+  "reviewDateLocal": "2026-09-27",
+  "reviewer": "Codex source check; no independent practitioner sign-off recorded",
+  "publisherDownload": {
+    "requested_url": "https://nysba.org/wp-content/uploads/2026/09/NYSBA-NY-Rules-of-Professional-Conduct-as-amended-through-July-1-2026.pdf",
+    "publisher_asserted": "nysba.org",
+    "publisher_host": "nysba.org",
+    "redirected_within_publisher": false,
+    "user_agent": "Mozilla/5.0 (compatible; codex-for-legal/regulatory; legal research, primary sources)",
+    "version_label": "NYSBA republication of court rules through July 1 2026",
+    "retrieved_at": "2026-09-28T06:14:06Z",
+    "bytes": 949602,
+    "sha256": "8499edb6079e29dc14a05ac3eddc98b0cf368841d2af948adf716102e195927b",
+    "saved_as": "source.pdf",
+    "integrity": {
+      "schema": "regulatory-integrity/v1",
+      "instrument": {
+        "jurisdiction": "US-NY-ETHICS",
+        "profile": "republished-court-rule-text",
+        "instrument_id": "ny-rpc"
+      },
+      "publisher_bytes_sha256": "8499edb6079e29dc14a05ac3eddc98b0cf368841d2af948adf716102e195927b"
+    },
+    "final_url": "https://nysba.org/wp-content/uploads/2026/09/NYSBA-NY-Rules-of-Professional-Conduct-as-amended-through-July-1-2026.pdf",
+    "status": 200,
+    "content_type": "application/pdf",
+    "http_date": "Mon, 28 Sep 2026 06:14:06 GMT",
+    "last_modified": "Thu, 17 Sep 2026 19:27:19 GMT",
+    "etag": "\"6aac3f17-e7d62\""
+  },
+  "pdfSha256": "8499edb6079e29dc14a05ac3eddc98b0cf368841d2af948adf716102e195927b",
+  "derivedTextSha256": "d97dff99fe800cd32dc26bf4f487036f07db088f4d1a95aca20660cf235a92ea",
+  "transformation": "pdftotext -layout; derived text is not publisher bytes",
+  "retention": "Raw downloads retained in ignored local release/research, not the public game package."
+}

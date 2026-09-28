@@ -35,7 +35,7 @@ import { state, reset, damageEthics, healEthics, maxEthics } from '../js/state.j
 
 test('ethics scenario identifiers are unique and every scenario is playable', () => {
   assert.equal(new Set(SCENARIOS.map((scenario) => scenario.id)).size, SCENARIOS.length);
-  assert.equal(SCENARIOS.length, 118);
+  assert.equal(SCENARIOS.length, 171);
 
   for (const scenario of SCENARIOS) {
     assert.ok(scenario.subject);
@@ -61,7 +61,7 @@ test('ethics scenario identifiers are unique and every scenario is playable', ()
       assert.ok(scenario.sourceNote.includes('not an official SRA or Kaplan SQE question'));
       assert.match(scenario.sourceUrl, /^https:\/\/sqe\.sra\.org\.uk\//);
       assert.match(scenario.studyGuideUrl, /^https:\/\/sqe1prep\.co\.uk\//);
-      assert.equal(scenario.localSourceFile, 'SQE_Ethics_Email_Scenarios_UK.md');
+      assert.equal(scenario.localSourceFile, 'content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md');
     }
   }
 });
@@ -69,16 +69,16 @@ test('ethics scenario identifiers are unique and every scenario is playable', ()
 test('difficulty tiers and both exam-style practice packs are available', () => {
   assert.deepEqual(
     [1, 2, 3].map((difficulty) => SCENARIOS.filter((scenario) => scenario.difficulty === difficulty).length),
-    [11, 33, 74],
+    [21, 53, 97],
   );
   assert.equal(SCENARIOS.filter((scenario) => scenario.sourceType === 'mpre-style').length, 69);
   assert.equal(SCENARIOS.filter((scenario) => scenario.sourceType === 'sqe-style').length, 28);
   assert.equal(
-    SCENARIOS.filter((scenario) => scenario.localSourceFile === 'MPRE_Associate_Email_Scenarios_Additional_20.md').length,
+    SCENARIOS.filter((scenario) => scenario.localSourceFile === 'content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_20.md').length,
     20,
   );
   assert.equal(
-    SCENARIOS.filter((scenario) => scenario.localSourceFile === 'MPRE_Associate_Email_Scenarios_Additional_41.md').length,
+    SCENARIOS.filter((scenario) => scenario.localSourceFile === 'content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md').length,
     41,
   );
   assert.deepEqual(
@@ -106,11 +106,11 @@ test('the treatise library includes Nevada, Arizona, and the California referenc
   assert.deepEqual(
     california.resources.map((resource) => resource.href),
     [
-      'California References/rpc.md',
-      'California References/opinions-index.md',
-      'California References/opinions-full.md',
-      'California References/admission-discipline.md',
-      'California References/disciplinary-procedure.md',
+      'content/references/california/rpc.md',
+      'content/references/california/opinions-index.md',
+      'content/references/california/opinions-full.md',
+      'content/references/california/admission-discipline.md',
+      'content/references/california/disciplinary-procedure.md',
     ],
   );
 });

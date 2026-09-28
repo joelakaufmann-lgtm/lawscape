@@ -17,6 +17,7 @@
 import { MPRE_SCENARIOS } from './mpre.js';
 import { ADDITIONAL_MPRE_SCENARIOS } from './mpre-additional.js';
 import { SQE_SCENARIOS } from './sqe.js';
+import { CALIFORNIA_SCENARIOS, NEW_YORK_SCENARIOS } from './state-questions.js';
 
 export const STREAK_HEAL = 10;
 
@@ -461,4 +462,6 @@ export const SCENARIOS = [
   ...MPRE_SCENARIOS,
   ...ADDITIONAL_MPRE_SCENARIOS,
   ...SQE_SCENARIOS,
+  ...CALIFORNIA_SCENARIOS,
+  ...NEW_YORK_SCENARIOS,
 ];

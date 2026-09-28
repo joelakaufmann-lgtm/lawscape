@@ -60,8 +60,15 @@ for (const match of (await read('css/style.css')).matchAll(/url\(['"]?([^)'"\s]+
 for (const set of RULE_LIBRARY) {
   for (const resource of set.resources || []) await checkLink(resource.href, 'index.html', dist);
 }
-for (const file of ['README.md', 'CONTRIBUTING.md', 'ROADMAP.md', 'docs/BUILD.md', 'docs/DEPLOYMENT.md', 'docs/JURISDICTIONS.md']) {
-  for (const match of (await read(file)).matchAll(/\]\(([^)]+)\)/g)) await checkLink(match[1], file, dist);
+for (const scenario of SCENARIOS) {
+  if (scenario.localSourceFile) await checkLink(scenario.localSourceFile, 'index.html', dist);
+}
+for (const file of ['README.md', 'CONTRIBUTING.md', 'ROADMAP.md', 'docs/README.md', 'docs/BUILD.md', 'docs/DEPLOYMENT.md', 'docs/PLAYING.md', 'docs/JURISDICTIONS.md', 'content/README.md',
+  ...SITE_FILES.filter(file => file.startsWith('content/questions/') && file.endsWith('.md'))]) {
+  for (const match of (await read(file, root)).matchAll(/\]\(([^)]+)\)/g)) await checkLink(match[1], file, root);
+}
+for (const file of ['docs/PLAYING.html', 'docs/JURISDICTIONS.html']) {
+  for (const match of (await read(file)).matchAll(/(?:src|href)="([^"]+)"/g)) await checkLink(match[1], file, dist);
 }
 const bundle = await read('js/lawscape.bundle.js');
 for (const module of ['js/entities/actor.js', 'js/entities/robots.js', 'js/ui/appearance.js', 'js/world/zones.js', 'js/apprenticeship.js', 'js/lounge.js']) {

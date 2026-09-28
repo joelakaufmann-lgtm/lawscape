@@ -5,8 +5,8 @@ import path from 'node:path';
 
 const projectRoot = path.resolve(import.meta.dirname, '..');
 const sourceNames = [
-  'MPRE_Associate_Email_Scenarios_Additional_20.md',
-  'MPRE_Associate_Email_Scenarios_Additional_41.md',
+  'content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_20.md',
+  'content/questions/mpre/MPRE_Associate_Email_Scenarios_Additional_41.md',
 ];
 const outputPath = path.join(projectRoot, 'js/data/mpre-additional.js');
 

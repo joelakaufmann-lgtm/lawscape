@@ -1,6 +1,6 @@
 # LawScape Roadmap
 
-Updated September 25, 2026 · Release candidate 0.5.0 · Direction: Astra Plan v1.4
+Updated September 27, 2026 · Release 0.6.0 · Direction: Astra Plan v1.4
 
 Legal learning should be fun, including learning how attorneys in different
 jurisdictions approach the same dilemma. LawScape puts that learning inside
@@ -46,9 +46,10 @@ Cloudflare multiplayer pilot. Neither is active in this local release.
   commons, evidence/writing tables and an AI & agents table. Topic drafts save
   in the current browser. No shared messages, live agents, other-player
   presence, or network transport exists. Drafts will never auto-send later.
-- 118 existing ethics scenarios, including 69 original MPRE-style and 28
-  England & Wales SQE-style questions; the practice-pack selector and bundled
-  Nevada, Arizona and California reference material remain available.
+- 171 ethics questions: 20 California, 33 New York, 69 US MPRE-style,
+  28 England & Wales SQE-style and all 21 original dilemmas. Question packs
+  open directly from Firm jurisdictions. Source-review limits are recorded in
+  the [catalog](docs/JURISDICTIONS.md); references remain available on the shelf.
 - Firm jurisdiction requests save locally and can become a player-reviewed
   GitHub issue draft. They are not a public request queue or approved packs.
 - Gold, upgrades, reward accessories, Ethics consequences and **full-reset
@@ -69,7 +70,8 @@ reviewer, determine the actual legal system/regulator (including subnational
 systems), select dated primary sources, author original dilemmas, review the
 answer key and test feedback before marking a pack available. Expand beyond this
 incomplete snapshot as LegalQuants join or identify missing jurisdictions.
-The present US and England & Wales practice remains distinct from this goal.
+The present question packs remain distinct from full jurisdiction-specific firm curricula.
+Canada remains a planned province-specific expansion.
 
 ## Next — live grading of written work
 
@@ -186,8 +188,8 @@ procedure. Public deployment follows the reviewed private pilot.
 
 ## Build record and contributions
 
-See [local build notes](planning/local-apprenticeship-build.md),
-[README](README.md), and [CONTRIBUTING](CONTRIBUTING.md). Current new content is
-synthetic. Existing legal references have not been newly cite-checked in this
-avatar/room update. Actual attorney content review and learner playtesting are
+See [local build notes](docs/archive/local-apprenticeship-build.md),
+[README](README.md), and [CONTRIBUTING](CONTRIBUTING.md). The California and New York question source reviews are recorded with their
+packs. Existing reference archives and the original 118 questions were retained
+without a new substantive review. All clients and game matters are synthetic. Actual attorney content review and learner playtesting are
 still needed before claims about educational effectiveness or legal accuracy.

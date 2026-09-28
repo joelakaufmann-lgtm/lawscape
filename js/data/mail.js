@@ -1,5 +1,7 @@
 export function canAccessBarMail(player) { return player.zone === 'office' || player.upgrades.includes('work_phone'); }
 export function scenarioMatchesPack(scenario, pack) {
+  if (pack === 'ca') return scenario.sourceType === 'california-style';
+  if (pack === 'ny') return scenario.sourceType === 'new-york-style';
   if (pack === 'sqe') return scenario.sourceType === 'sqe-style';
   if (pack === 'mpre') return scenario.sourceType === 'mpre-style';
   if (pack === 'juris') return scenario.sourceType === 'lawscape';

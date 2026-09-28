@@ -54,7 +54,7 @@ export function freshState() {
     moneybagsStolen: false,    // client gold taken from Jim Hardsell's safe
     moneybagsPurchases: 0,     // upgrade purchases made after taking the gold
     seen: [],              // scenario ids already served this cycle
-    practicePack: 'mixed', // 'mixed' | 'sqe' | 'mpre' | 'juris'
+    practicePack: 'mixed', // 'mixed' | 'sqe' | 'mpre' | 'juris' | 'ca' | 'ny'
     upgrades: [],
     zone: 'office',
     pos: { x: 6, y: 10 },

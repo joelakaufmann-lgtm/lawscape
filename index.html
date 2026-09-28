@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="A new way to learn legal ethics: a playable law firm with US and England & Wales practice today, and a vision for every LegalQuant jurisdiction.">
+<meta name="description" content="A new way to learn legal ethics: a playable law firm with 171 questions across California, New York, US MPRE-style, England & Wales and original office dilemmas.">
 <meta name="theme-color" content="#17233b">
 <meta property="og:type" content="website">
 <meta property="og:title" content="LawScape — Legal Ethics RPG">
-<meta property="og:description" content="Build your practice. Explore legal ethics. US and England & Wales practice today; a worldwide LegalQuants curriculum is the goal.">
+<meta property="og:description" content="Build your practice. Explore legal ethics. 171 ethics questions, seven locations and a guided fictional firm apprenticeship.">
 <meta property="og:image" content="assets/og-lawscape.png">
 <meta name="twitter:card" content="summary_large_image">
 <title>LawScape — Legal Ethics RPG</title>
@@ -41,7 +41,7 @@
       <canvas id="minimap" width="150" height="120"></canvas>
       <div id="control-hint">Click or tap to walk · WASD/Arrows move · B opens BarMail</div>
       <button id="quest-status" type="button">First firm day · Open Journal</button>
-      <div id="room-tools"><button id="room-action" class="hidden" type="button">Room &amp; chat</button><button id="room-service" class="hidden" type="button">Bartender</button><button id="room-board" class="hidden" type="button">High scores</button></div>
+      <div id="room-tools"><button id="room-action" class="hidden" type="button">Table notes</button><button id="room-service" class="hidden" type="button">Bartender</button><button id="room-board" class="hidden" type="button">High scores</button></div>
       <div id="movement-status" class="hidden" role="status"></div>
     </div>
 
@@ -88,13 +88,15 @@
           <button id="email-inbox-open" type="button">📥 All mail</button><button id="email-writing" type="button">✎ Writing assignments</button>
           <label id="email-pack-label" for="email-pack">Practice pack
             <select id="email-pack">
-              <option value="mixed">Mixed Inbox</option>
+              <option value="mixed">Mixed practice</option>
+              <option value="ca">California</option>
+              <option value="ny">New York</option>
               <option value="sqe">England &amp; Wales SQE Ethics</option>
               <option value="mpre">US MPRE</option>
-              <option value="juris">State of Juris</option>
+              <option value="juris">LawScape original dilemmas</option>
             </select>
           </label>
-          <button id="email-hr-open" type="button" title="Report a bug or complain about the working conditions of this virtual law firm">✍ Email HR</button>
+          <button id="email-hr-open" type="button" title="Report a bug or complain about the working conditions of this virtual law firm">✍ Email HR · Report a bug</button>
           <span id="email-difficulty"></span>
           <span id="email-source" class="hidden"></span>
           <button id="email-hint" class="hidden" type="button">Ask Riley for Hint · 100 gold</button>
@@ -150,7 +152,7 @@
         <div class="brand-seal" aria-hidden="true">§</div>
         <h1>LawScape</h1>
         <p class="tagline">Read the file. Make the call. Build your practice.</p>
-        <p class="title-mission">A new way to learn legal ethics.<br><span>US &amp; England and Wales practice today. Every LegalQuant jurisdiction is the ambition.</span></p>
+        <p class="title-mission">A new way to learn legal ethics.<br><span>171 questions, including California and New York. Choose your practice in Firm jurisdictions.</span></p>
         <div class="title-features" aria-label="Game features">
           <span><b>6</b> writing assignments</span>
           <span><b>2</b> synthetic matters</span>
@@ -160,7 +162,7 @@
         <button id="btn-continue" class="hidden">Continue Your Practice</button>
         <details class="how-to">
           <summary>How to play</summary>
-          <p>Click or tap the floor to walk. Select people and office objects to interact. Open BarMail, choose the ethical response, earn gold, and upgrade your office and apartment.</p>
+          <p>Start with Journal for a guided assignment, or BarMail in your office for a quick ethics question. Choose a jurisdiction, read the facts and feedback, then explore. <a href="docs/PLAYING.html" target="_blank" rel="noopener">Read the player guide</a>.</p>
           <p><b>Keyboard:</b> WASD or arrow keys move. B opens BarMail, R opens your record, T opens travel, and Escape closes a window.</p>
         </details>
         <button id="btn-reset" class="hidden small danger-link">Reset saved game</button>
@@ -168,7 +170,7 @@
         <p class="disclaimer">LawScape is a fictional educational game. It is not legal advice
         and does not create an attorney-client relationship. US and England-and-Wales rules
         are simplified for gameplay — always read the operative text.</p>
-        <p class="hr-note">Version <span id="game-version">0.5.0</span> · Beta — spotted a bug? <a href="https://github.com/joelakaufmann-lgtm/lawscape/issues" target="_blank" rel="noopener">Email HR</a>, which forwards everything, unread, to the developers on GitHub.</p>
+        <p class="hr-note">Version <span id="game-version">0.6.0</span> · Beta — spotted a bug? <a href="https://github.com/joelakaufmann-lgtm/lawscape/issues" target="_blank" rel="noopener">Email HR · Report a bug</a>. Review your report on GitHub before submitting.</p>
       </div>
     </div>
 

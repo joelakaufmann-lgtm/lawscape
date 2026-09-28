@@ -183,7 +183,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .desk-metrics b { font-size: 21px; }
   .desk-metrics span { padding-left: 12px; font-size: 10px; }
   .desk-sources, .sent-reply, .partner-reply { padding: 16px; }
-  #quest-status { top: auto; bottom: 16px; font-size: 11px; }
+  #quest-status { position: fixed; top: auto; bottom: 16px; font-size: 11px; }
 }
 @media (max-width: 420px) {
   .desk-hero { align-items: flex-start; }
@@ -727,7 +727,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   #hud-zone { grid-column: 1; grid-row: 2; padding: 4px 9px; }
   #hud-buttons {
     grid-column: 1; grid-row: 3; width: 100%;
-    display: grid; grid-template-columns: repeat(4, 1fr);
+    display: grid; grid-template-columns: repeat(5, 1fr);
   }
   .hud-action { min-width: 0; padding: 7px 3px; font-size: 11px; }
   .hud-action { min-height: 42px; }
@@ -912,7 +912,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   #email-writing-body #desk-body { padding: 20px 16px; }
   #email-toolbar { gap: 6px; }
   #email-toolbar #email-pack-label { width: 100%; }
-  #movement-status { bottom: 60px; }
+  #movement-status { position: fixed; bottom: 60px; }
   .row-item { flex-wrap: wrap; }
 }
 /* Worldwide curriculum: an explicit future goal beside current pack status. */

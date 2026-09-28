@@ -1,0 +1,162 @@
+[
+  {
+    "id": "ca_01_sunset_settlement", "difficulty": 1,
+    "from": "Maya Chen", "role": "San Francisco Partner", "subject": "Sunset bakery — an offer beneath our dignity",
+    "body": "The other side emailed a written $12,000 settlement offer in the bakery lease dispute. I think it is ridiculous. The client has not seen it and has given us no settlement instructions. Can we leave it in the inbox until something respectable arrives?",
+    "rule": "Cal. R. Prof. Conduct 1.4.1(a)(2)",
+    "explanation": "Promptly communicate every amount, term and condition of the written settlement offer. Your assessment of its value does not excuse withholding it.",
+    "answers": ["Promptly give the client all the offer terms and explain our assessment.", "Wait until the offer reaches our internal target.", "Reject it without telling the client because we know the case best.", "Forward only the dollar amount; the release terms can wait."], "correct": 0
+  },
+  {
+    "id": "ca_02_oakland_insurance", "difficulty": 1,
+    "from": "Elena Ruiz", "role": "Oakland Partner", "subject": "New engagement, no insurance, excellent stationery",
+    "body": "Our private firm has no professional liability insurance. A new client is retaining us for a 40-hour contract matter, with no emergency. We have never disclosed the lack of insurance to her. Is an oral mention at the coffee machine enough?",
+    "rule": "Cal. R. Prof. Conduct 1.4.2(a), (c)",
+    "explanation": "The uninsured lawyer must inform the client in writing at engagement. None of the listed exceptions applies to this ordinary 40-hour private engagement.",
+    "answers": ["Yes, if the client nods.", "No. Disclose the lack of insurance in writing at engagement.", "No disclosure is needed unless the client asks.", "Disclose it only if a claim is filed."], "correct": 1
+  },
+  {
+    "id": "ca_03_pasadena_flat_fee", "difficulty": 1,
+    "from": "Noah Patel", "role": "Pasadena Partner", "subject": "Calling the fee nonrefundable should solve everything",
+    "body": "We will charge $4,000 in advance to prepare a small business contract. The money pays for the drafting work, not solely for our availability. Can we label it a nonrefundable true retainer so we keep all of it if the client cancels before any work?",
+    "rule": "Cal. R. Prof. Conduct 1.5(d)-(e), 1.16(e)(2)",
+    "explanation": "A payment for specified services is not a true availability retainer. The nonrefundable label cannot change that; unearned advance fees must be refunded on termination.",
+    "answers": ["Yes, if the client is a sophisticated business owner.", "Yes, if the invoice uses capital letters.", "No. Treat it as a fee for services and refund any unearned portion on termination.", "Yes, because every flat fee is earned on receipt."], "correct": 2
+  },
+  {
+    "id": "ca_04_sacramento_referral", "difficulty": 1,
+    "from": "Inez Brooks", "role": "Sacramento Partner", "subject": "Referral arrangement over tacos",
+    "body": "An outside lawyer referred a contract case and we propose a fee division. There is no court order. We shook hands, but neither the lawyers' agreement nor the client's consent is in writing. May we divide the fee now?",
+    "rule": "Cal. R. Prof. Conduct 1.5.1(a)",
+    "explanation": "The lawyers need a written fee-division agreement. The client must consent in writing after full written disclosure of the division, participants and terms, at the agreement or as soon thereafter as reasonably practicable. The division alone cannot increase the total fee.",
+    "answers": ["Yes; referrals are an internal accounting matter.", "Yes; tell the client only if the bill increases.", "Yes; a handshake binds both lawyers.", "No. Satisfy the written agreement, disclosure and client-consent requirements, without increasing the fee solely for the split."], "correct": 3
+  },
+  {
+    "id": "ca_05_san_diego_adverse_client", "difficulty": 2,
+    "from": "Maya Chen", "role": "San Diego Partner", "subject": "Same client, entirely different file",
+    "body": "We currently advise Harbor Solar on employment contracts. A new client wants us to sue Harbor Solar in an unrelated supply dispute. Neither client has given informed written consent. Can unrelated subject matter alone clear the conflict?",
+    "rule": "Cal. R. Prof. Conduct 1.7(a), (d)",
+    "explanation": "Direct adversity to a current client requires informed written consent from each client even in separate matters, plus satisfaction of the consentability conditions in paragraph (d). Unrelated subject matter alone is insufficient.",
+    "answers": ["No. Assess consentability and obtain the required informed written consents before accepting.", "Yes; only same-matter conflicts count.", "Yes; open a different billing number.", "Yes; consent from the new client alone is enough."], "correct": 0
+  },
+  {
+    "id": "ca_06_fresno_business_deal", "difficulty": 2,
+    "from": "Elena Ruiz", "role": "Fresno Partner", "subject": "Buying into the client's almond business",
+    "body": "I want to purchase an ownership stake directly from our existing almond-grower client. This is a negotiated investment, not a standard purchase of goods. The terms and my role have not been disclosed in writing, and she has no independent lawyer. She says she trusts me. Enough?",
+    "rule": "Cal. R. Prof. Conduct 1.8.1(a)-(c)",
+    "explanation": "The transaction must be fair and reasonable, with written disclosure of terms and the lawyer's role. An unrepresented client must receive written advice to seek an independent lawyer and a reasonable opportunity to do so, followed by informed written consent.",
+    "answers": ["Yes; trust substitutes for disclosure.", "No. Complete the fairness, written disclosure, independent-advice and informed-written-consent safeguards.", "Yes; give her oral notice after closing.", "No lawyer may ever transact with a client."], "correct": 1
+  },
+  {
+    "id": "ca_07_monterey_gift", "difficulty": 2,
+    "from": "Noah Patel", "role": "Monterey Partner", "subject": "A thank-you cottage in the will",
+    "body": "An unrelated estate-planning client asks me to draft a will giving me her $900,000 cottage. No independent lawyer has advised her or provided a certificate of independent review. She insists the gift was her idea. May I draft it on these facts?",
+    "rule": "Cal. R. Prof. Conduct 1.8.3(a)(2)",
+    "explanation": "The substantial-gift instrument is prohibited on these facts. The rule has exceptions for a related recipient or independent advice with a certificate meeting Probate Code section 21384; neither is present. An unsolicited request alone is insufficient.",
+    "answers": ["Yes; she suggested it first.", "Yes; she can sign a generic conflict waiver.", "No. Neither the related-person nor qualifying independent-review exception is satisfied.", "Yes; wills are exempt from the gift rule."], "correct": 2
+  },
+  {
+    "id": "ca_08_irvine_third_party_payer", "difficulty": 2,
+    "from": "Inez Brooks", "role": "Irvine Partner", "subject": "Dad pays, Dad gets the file?",
+    "body": "An adult client's father offers to pay her legal fees if we send him every confidential update and let him decide strategy. The client has not consented. No law, court order or other exception applies. Can we accept those terms?",
+    "rule": "Cal. R. Prof. Conduct 1.8.6(a)-(c)",
+    "explanation": "Third-party payment cannot interfere with independent judgment or the client relationship. Confidential information must remain protected, and the client's informed written consent to the payment arrangement is required here. Paying does not make the father the client.",
+    "answers": ["Yes; the payer controls the engagement.", "Yes; send only the most interesting updates.", "Yes; obtain the father's written consent.", "No. Preserve the client's control and confidentiality and obtain her required informed written consent to an appropriate arrangement."], "correct": 3
+  },
+  {
+    "id": "ca_09_santa_rosa_former_client", "difficulty": 2,
+    "from": "Maya Chen", "role": "Santa Rosa Partner", "subject": "That winery agreement we drafted",
+    "body": "I drafted a winery's distribution agreement last year; that engagement ended. The distributor now wants me to attack that same agreement against the winery. The winery has not given informed written consent. Does closing the old file make us clear?",
+    "rule": "Cal. R. Prof. Conduct 1.9(a)",
+    "explanation": "A former representation still bars materially adverse representation in the same or a substantially related matter without the former client's informed written consent. Archiving the file does not end that duty.",
+    "answers": ["No. The same-matter adversity requires the former client's informed written consent.", "Yes; the engagement ended.", "Yes; ask only the distributor to consent.", "Yes; promise not to open the archive."], "correct": 0
+  },
+  {
+    "id": "ca_10_berkeley_advance_fee", "difficulty": 2,
+    "from": "Elena Ruiz", "role": "Berkeley Partner", "subject": "Advance flat fee — operating account?",
+    "body": "A client pays a $3,000 flat fee in advance for a lease review. We want to deposit it in operating. No work has been done and we have given no written disclosure about trust-account or refund rights. She has signed nothing. Is the flat-fee label enough?",
+    "rule": "Cal. R. Prof. Conduct 1.15(a)-(b)",
+    "explanation": "Advance fees generally belong in trust. For the flat-fee operating-account exception, disclose in writing the client's right to require trust deposit until earned and to an unearned-fee refund. Because this fee exceeds $1,000, the client's agreement to operating deposit and those disclosures must be in a writing signed by the client.",
+    "answers": ["Yes; every flat fee belongs in operating immediately.", "No. Use trust unless the required disclosures and signed agreement for this exception are obtained.", "Yes; a bookkeeping note is enough.", "No; flat fees can never be paid in advance."], "correct": 1
+  },
+  {
+    "id": "ca_11_long_beach_disputed_fee", "difficulty": 2,
+    "from": "Noah Patel", "role": "Long Beach Partner", "subject": "A disputed fee and an undisputed recovery",
+    "body": "Settlement funds have cleared trust. The client is entitled to an undisputed $30,000 but contests our claimed $5,000 fee. There are no other claims or impediments. Can we transfer the disputed fee to operating and hold the rest until she stops arguing?",
+    "rule": "Cal. R. Prof. Conduct 1.15(c)(2), (d)(7)",
+    "explanation": "Keep the disputed fee in trust until the dispute is finally resolved, and promptly distribute the undisputed funds the client is entitled to receive. Neither moving the disputed portion nor withholding the client's undisputed portion is justified.",
+    "answers": ["Yes; we control the trust account.", "Move all funds to operating pending mediation.", "No. Retain the disputed portion in trust and promptly release the undisputed client funds.", "Keep everything indefinitely because any dispute freezes all funds."], "correct": 2
+  },
+  {
+    "id": "ca_12_riverside_return_file", "difficulty": 2,
+    "from": "Inez Brooks", "role": "Riverside Partner", "subject": "File release held hostage by an invoice",
+    "body": "Our representation has ended and the client requests her pleadings, correspondence and expert reports for new counsel. No protective order, nondisclosure agreement, statute or regulation prevents release. She still owes fees. May we hold these client materials until payment?",
+    "rule": "Cal. R. Prof. Conduct 1.16(e)(1)",
+    "explanation": "On termination, promptly release requested client materials and property, subject to the rule's stated legal restrictions. The duty applies whether the client paid for them or not.",
+    "answers": ["Yes; unpaid files are firm property.", "Yes; offer only a one-page summary.", "Wait until the fee dispute is resolved.", "No. Promptly release the requested client materials despite the unpaid bill."], "correct": 3
+  },
+  {
+    "id": "ca_13_los_angeles_adverse_authority", "difficulty": 3,
+    "from": "Maya Chen", "role": "Los Angeles Partner", "subject": "The case nobody wants in the brief",
+    "body": "We found controlling California authority directly adverse to our position. Opposing counsel has not disclosed it. It contains no client secrets. The partner wants it omitted because the other side can do its own research. What should we do?",
+    "rule": "Cal. R. Prof. Conduct 3.3(a)(2)",
+    "explanation": "Disclose known, directly adverse legal authority in the controlling jurisdiction that opposing counsel has not disclosed. You may explain a good-faith distinction; silence is not an acceptable research strategy.",
+    "answers": ["Disclose it and explain any good-faith distinction.", "Omit it because opposing counsel bears the research burden.", "Quote only its favorable sentence and hide the holding.", "Ask the client to waive the court's right to know."], "correct": 0
+  },
+  {
+    "id": "ca_14_san_jose_evidence", "difficulty": 3,
+    "from": "Elena Ruiz", "role": "San Jose Partner", "subject": "Discovery hold versus the cleanup button",
+    "body": "Our technology client has emails covered by an existing legal preservation obligation. The founder wants us to help permanently delete the damaging ones before discovery. The messages are embarrassing, not privileged. Can we call it routine housekeeping?",
+    "rule": "Cal. R. Prof. Conduct 3.4(a)-(b)",
+    "explanation": "A lawyer cannot unlawfully destroy or conceal evidence, assist another in doing so, or suppress evidence subject to a legal production obligation. Calling deliberate destruction housekeeping does not change the conduct.",
+    "answers": ["Yes, if deletion is automatic.", "No. Preserve the evidence and refuse to assist its unlawful destruction.", "Yes; only filed exhibits count as evidence.", "Yes, if the founder clicks the button."], "correct": 1
+  },
+  {
+    "id": "ca_15_santa_barbara_threat", "difficulty": 3,
+    "from": "Noah Patel", "role": "Santa Barbara Partner", "subject": "Pay the civil demand or face a licensing complaint",
+    "body": "In a private fee dispute with a licensed contractor, the client wants our letter to threaten a complaint that could suspend the contractor's license unless he pays. The complaint is not a legal prerequisite to a civil action. Can we use that threat to secure payment?",
+    "rule": "Cal. R. Prof. Conduct 3.10(a)-(c)",
+    "explanation": "California prohibits threats of criminal, administrative or disciplinary charges to obtain an advantage in a civil dispute. This license-sanction complaint fits the administrative definition and is not within the prerequisite-filing exclusion.",
+    "answers": ["Yes; only threats of criminal charges are prohibited.", "Yes; no lawsuit has been filed yet.", "No. Remove the administrative-charge threat from the civil demand.", "Yes; truthful allegations always permit a threat."], "correct": 2
+  },
+  {
+    "id": "ca_16_ventura_represented_person", "difficulty": 3,
+    "from": "Inez Brooks", "role": "Ventura Partner", "subject": "The represented owner says call me directly",
+    "body": "We know the adverse owner has counsel in the dispute. She invites us to call her directly to negotiate. Her lawyer has not consented, and no law or court order authorizes the communication. Is her invitation enough?",
+    "rule": "Cal. R. Prof. Conduct 4.2(a), (c)",
+    "explanation": "For this communication about the representation, consent must come from the other lawyer. The represented person's invitation alone does not satisfy Rule 4.2, and the authorization exceptions are excluded by the facts.",
+    "answers": ["Yes; the person can always waive the rule herself.", "Yes; copy her lawyer afterward.", "Yes; label the call off the record.", "No. Obtain her lawyer's consent before discussing the matter directly."], "correct": 3
+  },
+  {
+    "id": "ca_17_san_luis_obispo_wrong_attachment", "difficulty": 3,
+    "from": "Maya Chen", "role": "San Luis Obispo Partner", "subject": "The attachment marked privileged",
+    "body": "Opposing counsel accidentally sends us a privileged strategy memo. The mistake and privilege are reasonably apparent from the first paragraph. May we finish reading the useful parts before notifying the sender?",
+    "rule": "Cal. R. Prof. Conduct 4.4(a)-(b)",
+    "explanation": "Refrain from examining the writing beyond what is necessary to determine that it is privileged or work product, and promptly notify the sender. California's rule requires both steps in these circumstances.",
+    "answers": ["No. Stop unnecessary review and promptly notify the sender.", "Yes; notice alone permits unlimited reading first.", "Yes; forward it to the client before notifying counsel.", "Delete it silently and never mention it."], "correct": 0
+  },
+  {
+    "id": "ca_18_palm_springs_supervisor", "difficulty": 3,
+    "from": "Elena Ruiz", "role": "Palm Springs Associate", "subject": "The partner ordered the false statement",
+    "body": "A partner directs me to knowingly tell the judge a fabricated fact. There is no arguable question of professional duty; we both know it is false. Does following the partner's order protect me?",
+    "rule": "Cal. R. Prof. Conduct 5.2(a)-(b), 3.3(a)(1)",
+    "explanation": "Subordinates remain bound by professional duties. The reasonable-resolution protection applies only to an arguable duty question, not a knowingly fabricated statement to a tribunal.",
+    "answers": ["Yes; all responsibility moves to the supervisor.", "No. Refuse the false statement; the supervisor exception does not apply.", "Yes; get the instruction in writing.", "Yes; junior lawyers cannot be disciplined."], "correct": 1
+  },
+  {
+    "id": "ca_19_sacramento_crime_confidence", "difficulty": 3,
+    "from": "Noah Patel", "role": "Sacramento Partner", "subject": "Importing a crime exception from another state",
+    "body": "A client privately reveals a planned financial crime involving no threat of death or substantial bodily harm. The information is protected client information; the client refuses consent and no other disclosure authority applies. A colleague says every planned crime permits disclosure under California Rule 1.6. Correct?",
+    "rule": "Cal. R. Prof. Conduct 1.6(a)-(d)",
+    "explanation": "California Rule 1.6's criminal-act exception concerns prevention of death or substantial bodily harm and includes additional safeguards. It is not a general financial-crime exception. These facts do not permit disclosure under that rule; this does not authorize assisting the crime.",
+    "answers": ["Yes; any financial crime automatically waives confidentiality.", "Yes; disclose only if the amount exceeds $10,000.", "No. This rule does not authorize disclosure of this protected information on these facts.", "Yes; another state's broader rule controls our California exercise."], "correct": 2
+  },
+  {
+    "id": "ca_20_eureka_reporting", "difficulty": 3,
+    "from": "Inez Brooks", "role": "Eureka Partner", "subject": "Credible evidence of another lawyer's theft",
+    "body": "We know of credible evidence that another lawyer deliberately stole entrusted funds, raising a substantial question about honesty. The evidence is public, not protected by client confidentiality, privilege, mediation or assistance-program confidentiality, or another nondisclosure rule. Can we simply ignore it?",
+    "rule": "Cal. R. Prof. Conduct 8.3(a), (d)",
+    "explanation": "With knowledge of credible evidence of qualifying misconduct raising a substantial fitness or honesty question, report without undue delay to the State Bar or a tribunal with authority to investigate or act. The disclosure protections in paragraph (d) remain important, but these facts exclude them.",
+    "answers": ["Yes; reporting another lawyer is always optional.", "Wait until the lawyer is convicted.", "Post accusations on social media instead of reporting to an authorized body.", "No. Report without undue delay to the State Bar or an authorized tribunal."], "correct": 3
+  }
+]
