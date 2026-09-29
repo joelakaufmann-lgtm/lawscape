@@ -7,7 +7,7 @@ import process from 'node:process';
 import vm from 'node:vm';
 
 const projectRoot = path.resolve(import.meta.dirname, '..');
-const indexPath = path.join(projectRoot, 'index.html');
+const indexPath = path.join(projectRoot, 'game.html');
 const indexHtml = await readFile(indexPath, 'utf8');
 const bundlePath = path.join(projectRoot, 'js/lawscape.bundle.js');
 const bundle = await readFile(bundlePath, 'utf8');
@@ -30,10 +30,10 @@ for (const id of requiredIds) {
 }
 
 if (!indexHtml.includes('<script defer src="js/lawscape.bundle.js"></script>')) {
-  failures.push('index.html does not load the file-friendly browser bundle.');
+  failures.push('game.html does not load the file-friendly browser bundle.');
 }
 if (indexHtml.includes('type="module"')) {
-  failures.push('index.html still requires ES modules and will not open directly from disk.');
+  failures.push('game.html still requires ES modules and will not open directly from disk.');
 }
 
 for (const relativePath of [

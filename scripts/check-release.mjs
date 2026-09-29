@@ -38,8 +38,9 @@ for (const file of manifest.files) {
 }
 
 execFileSync(process.execPath, ['scripts/check.mjs'], { cwd: root, stdio: 'inherit' });
+const gameHtml = await read('game.html');
 const html = await read('index.html');
-assert.ok(html.includes(`id="game-version">${version}</span>`), 'Title screen version is stale');
+assert.ok(gameHtml.includes(`id="game-version">${version}</span>`), 'Title screen version is stale');
 const sourceHtml = await read('index.html', root);
 // Packaging changes only the social preview metadata for GitHub Pages.
 const normalizeHtml = text => text
@@ -55,7 +56,11 @@ async function checkLink(link, from, base) {
   assert.ok(target.startsWith(base + path.sep), `Link leaves package: ${from}: ${link}`);
   assert.ok((await stat(target)).isFile(), `Missing linked file: ${from}: ${link}`);
 }
-for (const match of html.matchAll(/(?:src|href)="([^"]+)"/g)) await checkLink(match[1], 'index.html', dist);
+for (const file of ['index.html', 'game.html']) {
+  for (const match of (await read(file)).matchAll(/(?:src|href)="([^"]+)"/g)) await checkLink(match[1], file, dist);
+}
+assert.ok(html.includes('href="game.html"'), 'Landing page must link to the game');
+assert.ok(html.includes('BY JOEL KAUFMANN'), 'Landing page authorship is missing');
 for (const match of (await read('css/style.css')).matchAll(/url\(['"]?([^)'"\s]+)['"]?\)/g)) await checkLink(match[1], 'css/style.css', dist);
 for (const set of RULE_LIBRARY) {
   for (const resource of set.resources || []) await checkLink(resource.href, 'index.html', dist);

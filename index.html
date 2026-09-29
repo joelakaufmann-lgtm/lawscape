@@ -1,200 +1,67 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="A new way to learn legal ethics: a playable law firm with 171 questions across California, New York, US MPRE-style, England & Wales and original office dilemmas.">
-<meta name="theme-color" content="#17233b">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="dark"><title>LawScape by Joel Kaufmann — Legal Ethics RPG</title>
+<meta name="description" content="A better way to learn the ethics of life as a lawyer. Explore LawScape, an independent educational game by Joel Kaufmann.">
+<meta name="author" content="Joel Kaufmann">
+<meta property="og:title" content="LawScape by Joel Kaufmann">
+<meta property="og:description" content="A better way to learn the ethics of life as a lawyer.">
 <meta property="og:type" content="website">
-<meta property="og:title" content="LawScape — Legal Ethics RPG">
-<meta property="og:description" content="Build your practice. Explore legal ethics. 171 ethics questions, seven locations and a guided fictional firm apprenticeship.">
-<meta property="og:image" content="assets/og-lawscape.png">
-<meta name="twitter:card" content="summary_large_image">
-<title>LawScape — Legal Ethics RPG</title>
-<link rel="stylesheet" href="css/style.css">
-</head>
-<body>
-  <a class="skip-link" href="#title-screen">Skip to game controls</a>
-  <div id="game">
-    <canvas id="world" tabindex="0" aria-label="LawScape game world. Click or tap the floor to walk and objects to interact."></canvas>
-
-    <!-- HUD -->
-    <div id="hud" class="hidden" aria-label="Game status and quick actions">
-      <div id="hud-stats">
-        <span class="stat" id="stat-gold" title="Gold">🪙 <b>0</b></span>
-        <span class="stat ethics" title="Ethics">
-          ⚖️
-          <span id="ethics-bar"><span id="ethics-fill" class="ok"></span></span>
-          <span id="ethics-num">100/100</span>
-        </span>
-        <span class="stat" id="stat-streak" title="Correct-answer streak">🔥 <b>x0</b></span>
-        <span class="stat" id="stat-billable" title="Billable study time — visible time inside open questions, writing assignments and feedback">⏱ <b>0:00:00</b></span>
-      </div>
-      <div id="hud-zone">Your Law Office</div>
-      <div id="hud-buttons" aria-label="Quick actions">
-        <button id="btn-journal" class="hud-action" aria-label="Open apprenticeship journal" aria-keyshortcuts="J"><span aria-hidden="true">✎</span><span>Journal</span></button>
-        <button id="btn-mail" class="hud-action" aria-label="Open BarMail" aria-keyshortcuts="B"><span aria-hidden="true">✉</span><span>BarMail</span></button>
-        <button id="btn-record" class="hud-action" aria-label="Open professional record" aria-keyshortcuts="R"><span aria-hidden="true">▣</span><span>Record</span></button>
-        <button id="btn-travel" class="hud-action" aria-label="Open travel menu" aria-keyshortcuts="T"><span aria-hidden="true">↗</span><span>Travel</span></button>
-        <button id="btn-help" class="hud-action" aria-label="How to play" aria-keyshortcuts="H"><span aria-hidden="true">?</span><span>Help</span></button>
-      </div>
-      <canvas id="minimap" width="150" height="120"></canvas>
-      <div id="control-hint">Click or tap to walk · WASD/Arrows move · B opens BarMail</div>
-      <button id="quest-status" type="button">First firm day · Open Journal</button>
-      <div id="room-tools"><button id="room-action" class="hidden" type="button">Table notes</button><button id="room-service" class="hidden" type="button">Bartender</button><button id="room-board" class="hidden" type="button">High scores</button></div>
-      <div id="movement-status" class="hidden" role="status"></div>
-    </div>
-
-    <div id="work-status" class="hidden" role="status" aria-live="polite">
-      <div class="work-status-head">
-        <span><b>Document Review</b> · +5 gold per cycle</span>
-        <button id="btn-stop-review" aria-label="Stop document review">Stop</button>
-      </div>
-      <div id="review-progress"><span id="review-progress-fill"></span></div>
-      <div id="review-time">Next cycle in 1:00</div>
-    </div>
-
-    <div id="toast" class="hidden" role="status" aria-live="polite"></div>
-    <div id="hoverlabel" class="hidden"></div>
-
-    <!-- Dialogue (OSRS-style chatbox) -->
-    <div id="dialogue" class="hidden" role="dialog" aria-live="polite" aria-labelledby="dialogue-name">
-      <div id="dialogue-name"></div>
-      <div id="dialogue-text"></div>
-      <div id="dialogue-choices"></div>
-    </div>
-
-    <!-- Panels (shops, record, help) -->
-    <div id="panel" class="hidden" role="dialog" aria-modal="true" aria-labelledby="panel-title">
-      <div id="panel-inner">
-        <div id="panel-header">
-          <span id="panel-title"></span>
-          <button id="panel-close" aria-label="Close panel">✕</button>
-        </div>
-        <div id="panel-tabs"></div>
-        <div id="panel-body"></div>
-      </div>
-    </div>
-
-    <!-- BarMail: the in-game computer screen -->
-    <div id="email" class="hidden" role="dialog" aria-modal="true" aria-labelledby="email-appname">
-      <div id="email-window">
-        <div id="email-titlebar">
-          <span class="email-dot"></span><span class="email-dot"></span><span class="email-dot"></span>
-          <span id="email-appname">BarMail — Secure Attorney Inbox</span>
-          <button id="email-close" aria-label="Close BarMail">✕</button>
-        </div>
-        <div id="email-toolbar">
-          <button id="email-inbox-open" type="button">📥 All mail</button><button id="email-writing" type="button">✎ Writing assignments</button>
-          <label id="email-pack-label" for="email-pack">Practice pack
-            <select id="email-pack">
-              <option value="mixed">Mixed practice</option>
-              <option value="ca">California</option>
-              <option value="ny">New York</option>
-              <option value="sqe">England &amp; Wales SQE Ethics</option>
-              <option value="mpre">US MPRE</option>
-              <option value="juris">LawScape original dilemmas</option>
-            </select>
-          </label>
-          <button id="email-hr-open" type="button" title="Report a bug or complain about the working conditions of this virtual law firm">✍ Email HR · Report a bug</button>
-          <span id="email-difficulty"></span>
-          <span id="email-source" class="hidden"></span>
-          <button id="email-hint" class="hidden" type="button">Ask Riley for Hint · 100 gold</button>
-          <span id="email-rule" class="hidden"></span>
-        </div>
-        <div id="email-inbox"></div>
-        <div id="email-writing-body" class="hidden"></div>
-        <div id="email-body" class="hidden">
-          <button id="email-back" type="button">← Back to inbox</button>
-          <div id="email-head">
-            <div id="email-subject"></div>
-            <div id="email-from"></div>
-          </div>
-          <div id="email-text"></div>
-          <div id="email-replies">
-            <div class="reply-label">Choose your reply:</div>
-            <div id="email-choices"></div>
-          </div>
-          <div id="email-result" class="hidden">
-            <div id="email-verdict"></div>
-            <div id="email-explain"></div>
-            <div id="email-delta"></div>
-            <button id="email-continue">Back to Inbox</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Disbarment -->
-    <section id="apprenticeship" class="hidden" role="dialog" aria-modal="true" aria-labelledby="desk-title">
-      <div class="desk-window">
-        <header class="desk-topbar"><div><span class="desk-mark" aria-hidden="true">§</span><div><h1 id="desk-title">The Associate’s Desk</h1><p>Hardsell &amp; Firestone <span>· Local apprenticeship</span></p></div></div><button id="desk-close" type="button" aria-label="Close apprenticeship desk">Back to the world <span aria-hidden="true">×</span></button></header>
-        <div class="desk-layout"><aside class="desk-sidebar"><p class="desk-kicker">Your practice</p><nav aria-label="Apprenticeship sections"><button data-desk-tab="journal" aria-current="page">01 <span>Quest journal</span></button><button data-desk-tab="writing">02 <span>BarMail · Writing</span></button><button data-desk-tab="files">03 <span>Evidence room</span></button><button data-desk-tab="firm">04 <span>Firm jurisdictions</span></button><button data-desk-tab="wardrobe">05 <span>Wardrobe</span></button></nav><div class="desk-identity"><strong id="desk-player"></strong><span>Firm associate</span><b id="desk-gold"></b></div><p class="desk-sidebar-note">“Please fix” is a complete sentence here.</p></aside><main id="desk-body" tabindex="-1"></main></div>
-      </div>
-    </section>
-
-    <!-- Disbarment -->
-    <div id="gameover" class="hidden">
-      <div id="gameover-inner">
-        <h1>YOU GOT DISBARRED</h1>
-        <h2>GAME OVER</h2>
-        <p id="gameover-text">Your Ethics reached zero. The Presiding Disciplinary Judge has
-        entered an order of disbarment. Your license, your office, your gold, and your
-        upgrades are forfeit.</p>
-        <button id="gameover-restart">Start Over From Nothing</button>
-      </div>
-    </div>
-
-    <!-- Title screen -->
-    <div id="title-screen">
-      <div class="title-card">
-        <div class="brand-eyebrow">LEGALQUANTS · THE FIRM APPRENTICESHIP</div>
-        <div class="brand-seal" aria-hidden="true">§</div>
-        <h1>LawScape</h1>
-        <p class="tagline">Read the file. Make the call. Build your practice.</p>
-        <p class="title-mission">A new way to learn legal ethics.<br><span>171 questions, including California and New York. Choose your practice in Firm jurisdictions.</span></p>
-        <div class="title-features" aria-label="Game features">
-          <span><b>6</b> writing assignments</span>
-          <span><b>2</b> synthetic matters</span>
-          <span><b>1</b> connected capstone</span>
-        </div>
-        <button id="btn-new" class="primary">Create an Attorney</button>
-        <button id="btn-continue" class="hidden">Continue Your Practice</button>
-        <details class="how-to">
-          <summary>How to play</summary>
-          <p>Start with Journal for a guided assignment, or BarMail in your office for a quick ethics question. Choose a jurisdiction, read the facts and feedback, then explore. <a href="docs/PLAYING.html" target="_blank" rel="noopener">Read the player guide</a>.</p>
-          <p><b>Keyboard:</b> WASD or arrow keys move. B opens BarMail, R opens your record, T opens travel, and Escape closes a window.</p>
-        </details>
-        <button id="btn-reset" class="hidden small danger-link">Reset saved game</button>
-        <p class="thesis">Your first firm day starts with a file, an impatient partner, and a draft that is suspiciously confident. Inspect the evidence, commit your reply, earn something worth wearing. Explore seven rooms, meet Derek Balam in court, and take a break at The Sidebar.</p>
-        <p class="disclaimer">LawScape is a fictional educational game. It is not legal advice
-        and does not create an attorney-client relationship. US and England-and-Wales rules
-        are simplified for gameplay — always read the operative text.</p>
-        <p class="hr-note">Version <span id="game-version">0.6.0</span> · Beta — spotted a bug? <a href="https://github.com/joelakaufmann-lgtm/lawscape/issues" target="_blank" rel="noopener">Email HR · Report a bug</a>. Review your report on GitHub before submitting.</p>
-      </div>
-    </div>
-
-    <!-- Attorney creator -->
-    <div id="creator" class="hidden">
-      <div class="title-card wide">
-        <button id="btn-creator-back" class="text-button" aria-label="Return to title screen">← Back</button>
-        <div class="brand-eyebrow">HARDSELL &amp; FIRESTONE · NEW ASSOCIATE</div>
-        <h2>Create Your Attorney</h2>
-        <p class="creator-intro">Make this attorney yours. Preview every choice standing, walking or seated.</p>
-        <div class="career-strip"><strong>Firm apprenticeship · Available</strong><span>In-house · Planned</span><span>Government · Planned</span></div>
-        <div class="creator-identity">
-          <label for="c-name">Name<input id="c-name" type="text" maxlength="24" placeholder="Alex Barrister"></label>
-          <div><span class="field-label">Gender</span><div id="c-gender" class="pill-row" role="group" aria-label="Gender"></div></div>
-        </div>
-        <div id="c-appearance"></div>
-        <p class="creator-stakes">Your first office is the fictional State of Juris. Real-jurisdiction firm packs need source review; you can request one from your desk. Existing ethics dilemmas carry consequences: zero Ethics ends the run and resets gold, upgrades and apprenticeship progress.</p>
-        <button id="btn-start" class="primary">Begin Your Firm Apprenticeship</button>
-      </div>
-    </div>
-  </div>
-  <noscript>
-    <div class="noscript">LawScape needs JavaScript enabled to play.</div>
-  </noscript>
-  <script defer src="js/lawscape.bundle.js"></script>
-</body>
-</html>
+<style>
+:root{--bg:#151e27;--panel:#1c2932;--panel-2:#222f37;--line:#3b4b4d;--text:#f1ebdc;--muted:#b1bdb8;--gold:#ebc785;--cream:#f2e6cb;--red:#ee937e;--max:1200px;font-family:Arial,Helvetica,sans-serif;color:var(--text);background:var(--bg);scroll-behavior:smooth}*{box-sizing:border-box}body{margin:0}h1,h2,h3,p,figure{margin:0}a{color:inherit;text-underline-offset:4px}button,input{font:inherit}button{cursor:pointer;color:inherit}button,a{-webkit-tap-highlight-color:transparent;touch-action:manipulation}button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid var(--gold);outline-offset:5px}img{display:block;width:100%;height:auto}button{border:0}button[hidden],[hidden]{display:none!important}.wrap{width:min(var(--max),calc(100% - 80px));margin-inline:auto}.eyebrow{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);line-height:1.7}.dot{height:6px;width:6px;background:currentColor;border-radius:50%;display:inline-block;margin-right:7px;vertical-align:1px}.muted{color:var(--muted)}.preview-bar{border-bottom:1px solid #344046;background:#111a21;color:#abb7b3;font-size:10px;letter-spacing:.5px}.preview-bar .wrap{min-height:38px;display:flex;justify-content:space-between;align-items:center;gap:15px}.preview-bar b{color:#e2c993;font-weight:500}.preview-bar a{font-size:10px;text-decoration:none;border-bottom:1px solid #768374;padding:2px 0}.skip{position:fixed;top:-120px;left:15px;z-index:100;padding:15px;color:#101a1f;background:var(--gold)}.skip:focus{top:10px}.site-header{display:flex;justify-content:space-between;align-items:center;padding-block:26px;border-bottom:1px solid var(--line);gap:25px}.brand{display:flex;align-items:center;gap:11px;text-decoration:none;font:700 34px Georgia,serif;color:var(--cream);letter-spacing:-1.5px}.brand-seal{display:grid;place-items:center;width:32px;height:38px;border:1px solid #c5ad73;border-radius:50% 50% 4px 4px;font:26px Georgia,serif;letter-spacing:0;color:var(--gold)}.byline{display:block;font:8px Arial,sans-serif;letter-spacing:2px;text-align:right;color:#bdb599;margin-top:3px}.site-nav{display:flex;gap:25px;align-items:center;font-size:11px}.site-nav a{text-decoration:none;color:#ced3c7}.site-nav a:hover{color:var(--gold)}.button{display:inline-flex;align-items:center;justify-content:center;gap:26px;background:var(--gold);color:#172127;text-decoration:none;padding:15px 22px;border:1px solid var(--gold);border-radius:4px;font-size:12px;font-weight:700;min-height:48px}.button span{font-size:19px;font-weight:400}.button:hover{background:#f6d99f}.button.secondary{background:transparent;color:var(--cream);border-color:#748073}.button.secondary:hover{background:#26362f}.site-nav .button{padding:10px 16px;font-size:11px;min-height:40px;color:#172127}.hero{padding:50px 0 34px;display:grid;grid-template-columns:1.1fr 1fr;align-items:end;gap:65px}.hero h1{font:400 clamp(46px,5.4vw,77px)/1.04 Georgia,serif;letter-spacing:-3.2px;margin-top:19px}.hero h1 em{font-weight:400;color:var(--gold)}.hero-copy .promise{font:400 26px/1.3 Georgia,serif;letter-spacing:-.6px;max-width:460px;margin-bottom:14px}.hero-copy>p:not(.promise){font-size:13px;line-height:1.9;color:#b9c3bf;max-width:460px}.button-row{display:flex;align-items:center;gap:21px;flex-wrap:wrap;margin-top:22px}.text-link{font-size:11px;color:#dfd6bc}.career-modes{display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:18px;font-size:10px;line-height:1.7;color:var(--muted)}.career-modes span:first-child{color:var(--gold)}.capture{border:1px solid #53605b;border-radius:7px;overflow:hidden;background:#1d2931;box-shadow:0 12px 32px #07101220;min-width:0}.image-button{display:block;position:relative;width:100%;background:#17141c;padding:0;text-align:left;overflow:hidden}.image-button:focus-visible{outline-offset:-4px}.zoom-label{position:absolute;right:13px;bottom:13px;background:#18232bdf;color:#f2deae;border:1px solid #8b896aa8;border-radius:3px;padding:7px 10px;font-size:10px;opacity:0;transform:translateY(3px);transition:opacity .15s,transform .15s}.image-button:hover .zoom-label,.image-button:focus-visible .zoom-label{opacity:1;transform:translateY(0)}.capture figcaption{padding:18px 21px;display:flex;justify-content:space-between;gap:20px;align-items:start;border-top:1px solid #3c4c4b}.capture h3{font-size:14px;font-weight:600;color:#ecddbd;margin-bottom:7px}.capture figcaption p{font-size:11px;line-height:1.8;color:#aab9b2;max-width:760px}.badge{display:inline-block;border:1px solid #657852;color:#dce7bd;background:#2d3d30;border-radius:3px;padding:6px 8px;font-size:9px;font-weight:700;letter-spacing:.5px;white-space:nowrap}.game-label{display:flex;justify-content:space-between;align-items:center;padding:13px 18px;background:#233038;border:1px solid #526058;border-bottom:0;border-radius:7px 7px 0 0;color:#c9c9b4;font-size:9px;letter-spacing:1.1px}.game-label+.capture{border-top-left-radius:0;border-top-right-radius:0}.hero-shot .image-button img{aspect-ratio:auto;object-fit:contain}.upgrade-strip{padding:22px 0 0;display:grid;grid-template-columns:170px 1fr;gap:25px;align-items:start}.upgrade-strip .eyebrow{padding-top:7px;color:#a5b694;font-size:9px}.upgrade-list{list-style:none;margin:0;padding:0;display:flex;gap:8px;flex-wrap:wrap}.upgrade-list li{font-size:10px;line-height:1.5;border:1px solid #45564e;color:#c4cfbf;border-radius:4px;padding:6px 10px;background:#1d2b2d}.upgrade-list li:before{content:'✓';margin-right:7px;color:#aeca91}.play-loop{display:grid;grid-template-columns:repeat(3,1fr);gap:30px;margin-top:34px;padding:26px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.play-loop>div{display:flex;align-items:start;gap:15px}.play-loop .roman{font:27px Georgia,serif;color:#d1b176}.play-loop h3{font-size:12px;margin:3px 0 8px}.play-loop p{font-size:11px;line-height:1.85;color:var(--muted);max-width:285px}.section{padding-top:75px;scroll-margin-top:20px}.section-heading{display:flex;justify-content:space-between;align-items:end;gap:40px;margin-bottom:26px}.section h2{font:400 clamp(30px,3.5vw,45px)/1.12 Georgia,serif;letter-spacing:-1.3px;margin-top:12px}.section-heading>p{font-size:12px;line-height:1.9;max-width:350px;color:var(--muted)}.home{display:grid;grid-template-columns:.65fr 1.35fr;gap:48px;align-items:center}.home .body-copy{font-size:13px;line-height:1.95;color:#b9c4bd;margin:23px 0;max-width:335px}.home .upgrade-list{display:grid;grid-template-columns:1fr 1fr;gap:9px}.home .upgrade-list li{font-size:10px;padding:9px 10px}.home .small-note{font-size:10px;line-height:1.7;color:#93a48f;margin-top:17px}.home .capture{box-shadow:0 12px 38px #0002}.home .image-button img{object-fit:contain;aspect-ratio:1.45}.room-grid{display:grid;grid-template-columns:1fr 1fr;gap:22px}.room-grid .image-button img{aspect-ratio:1.55;object-fit:contain}.room-grid .capture{background:#1a2730}.room-grid figcaption{min-height:113px}.room-grid figcaption h3{font:21px Georgia,serif;letter-spacing:-.2px;margin-bottom:7px}.lounge{margin-top:22px;display:grid;grid-template-columns:1.05fr .95fr;align-items:center;gap:46px;background:#1d2c2b;border:1px solid #42594a;padding:26px;border-radius:7px}.lounge .capture{border-color:#51644d}.lounge .image-button img{aspect-ratio:1.55;object-fit:contain}.lounge .capture figcaption{display:none}.lounge-copy{padding:10px 20px 10px 0}.lounge h3{font:30px Georgia,serif;letter-spacing:-.7px;margin:13px 0 18px;color:#e1d8b8}.lounge p:not(.eyebrow){font-size:12px;line-height:1.9;max-width:340px;color:#b5c4b0}.lounge .small-note{margin-top:15px;font-size:10px!important;color:#91a48b!important}.learning-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}.learning-grid .image-button{height:245px;background:#171c22}.learning-grid .image-button img{height:100%;object-fit:contain}.learning-grid .capture figcaption{min-height:141px;padding:18px}.learning-grid .capture h3{font:20px Georgia,serif}.stakes{padding:42px;background:linear-gradient(135deg,#291c26,#171c25 75%);border:1px solid #765148;border-radius:9px;display:grid;grid-template-columns:.85fr 1.15fr;gap:56px;align-items:center}.stakes .eyebrow{color:#eaa58a}.stakes h2{font-size:46px;line-height:1.09;color:#f0dcd0}.stakes h2 em{color:#eeaa8d;font-weight:400}.stakes .stakes-copy>p:not(.eyebrow){font-size:13px;line-height:1.95;margin-top:23px;color:#c5bbb7;max-width:340px}.stakes .stakes-copy .mechanic{font-size:10px!important;line-height:1.7!important;color:#a69d98!important;margin-top:19px!important}.stakes .capture{border:0;background:transparent;box-shadow:none}.stakes .capture figcaption{padding:13px 0 0;border:0}.stakes .capture figcaption h3{font-size:11px;color:#d0b9b1}.stakes .capture figcaption p{font-size:10px;color:#ab9d99}.stakes .image-button{background:transparent;border-radius:7px}.stakes .button-row{margin-top:28px}.jurisdictions{padding-bottom:64px}.pack-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}.pack{padding:20px;background:#1f2d34;border:1px solid #465650;border-radius:5px}.pack .pack-tag{font-size:9px;letter-spacing:1px;color:#a4b68f}.pack h3{font:24px/1.15 Georgia,serif;color:#eddfbc;margin:15px 0 9px;letter-spacing:-.3px}.pack p{font-size:11px;line-height:1.7;color:#acbcb2}.pack strong{font-size:11px;color:#d4d9c1;font-weight:500;display:block;margin-top:15px}.jurisdiction-note{font-size:11px;line-height:1.85;color:#acb8af;padding:18px 0;border-bottom:1px solid var(--line)}.jurisdiction-note b{color:#d3d9c8}.jurisdiction-request{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-top:23px;padding:22px 24px;background:#20302f;border:1px solid #536251;border-radius:5px}.jurisdiction-request h3{font:24px/1.25 Georgia,serif;color:var(--cream);margin-bottom:8px}.jurisdiction-request p{font-size:12px;line-height:1.8;color:var(--muted);max-width:610px}.jurisdiction-request .button{flex-shrink:0}.horizon{display:flex;align-items:start;justify-content:space-between;gap:24px;padding-top:17px;font-size:11px;color:#acb8a7;line-height:1.8}.horizon b{color:#d3d9be}.final-invitation{background:#eee2c6;color:#233334;padding:38px 45px;display:flex;justify-content:space-between;align-items:center;gap:25px;border-radius:7px}.final-invitation h2{font:36px Georgia,serif;letter-spacing:-1px}.final-invitation p{font-size:12px;line-height:1.8;margin-top:10px;max-width:620px;color:#586658}.final-invitation .button{background:#233b35;border-color:#233b35;color:#f2e5c6;white-space:nowrap}.page-footer{padding:32px 0 24px;color:#8e9f99;font-size:10px;line-height:1.8}.footer-row{display:flex;justify-content:space-between;gap:30px;align-items:start}.footer-row>p{max-width:830px}.footer-mark{letter-spacing:1.4px;color:#b6b39c;white-space:nowrap;font-size:9px}.capture-notes{border-top:1px solid #35443f;margin-top:21px;padding-top:13px;font-size:10px;line-height:1.8}.capture-notes summary{cursor:pointer;color:#b9c1ac;font-size:10px;padding:5px 0}.capture-notes p{margin-top:10px;max-width:900px}.capture-notes a{color:#c8d1ba}.lightbox{width:min(1360px,calc(100% - 32px));max-height:94vh;border:1px solid #a58c61;border-radius:9px;padding:0;background:#18222a;color:var(--text);box-shadow:0 30px 120px #000b}.lightbox::backdrop{background:#080f15e8;backdrop-filter:blur(6px)}.lightbox-header{padding:16px 20px;display:flex;justify-content:space-between;align-items:center;gap:25px;border-bottom:1px solid var(--line)}.lightbox-header h2{font:24px Georgia,serif;letter-spacing:-.4px}.close{background:#314139;border-radius:50%;font-size:23px;min-width:35px;height:35px;line-height:1}.lightbox-stage{overflow:auto;max-height:67vh;display:flex;align-items:start;justify-content:center;background:#17141c}.lightbox-stage img{max-height:67vh;width:auto;max-width:100%;object-fit:contain}.lightbox-stage.zoomed{display:block}.lightbox-stage.zoomed img{width:auto;max-width:none;max-height:none}.lightbox-footer{display:grid;grid-template-columns:1fr auto;gap:22px;align-items:center;padding:16px 20px}.lightbox-footer p{font-size:11px;line-height:1.7;color:#bac5b6}.lightbox-controls{display:flex;align-items:center;gap:9px;white-space:nowrap}.lightbox-controls button{background:#2b3c37;color:#e2e5d1;padding:10px 13px;border-radius:3px;font-size:12px;min-height:38px}.lightbox-controls button[aria-pressed=true]{background:var(--gold);color:#172127}.image-count{font-size:10px;color:#bfc6b2;margin-right:5px}.no-js{padding:12px;text-align:center;background:#483f29;color:#f4e1b2;font-size:12px}
+@media(hover:none){.zoom-label{opacity:1;transform:none}}
+@media(max-width:1050px){.wrap{width:calc(100% - 50px)}.site-nav{gap:18px}.hero{gap:34px}.hero h1{font-size:60px}.hero-copy .promise{font-size:23px}.home{gap:28px;grid-template-columns:.8fr 1.2fr}.section h2{font-size:36px}.lounge{gap:25px}.stakes{padding:30px;gap:30px}.stakes h2{font-size:39px}.learning-grid .image-button{height:205px}.learning-grid .capture figcaption{min-height:160px}.pack h3{font-size:21px}.pack{padding:17px}.pack-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.brand{font-size:31px}.site-nav a{font-size:10px}.hero-shot figcaption{align-items:start}}
+@media(max-width:780px){.wrap{width:calc(100% - 36px)}.preview-bar .wrap{padding-block:9px;font-size:9px;line-height:1.6}.preview-bar .optional{display:none}.site-header{padding-block:20px;align-items:start}.brand{font-size:29px}.site-nav{gap:12px;flex-wrap:wrap;justify-content:flex-end;max-width:230px}.site-nav a{font-size:10px;line-height:1.7}.site-nav .button{display:none}.hero{grid-template-columns:1fr;padding:35px 0 28px;gap:24px}.hero h1{font-size:clamp(48px,9vw,68px);letter-spacing:-2.3px;margin-top:15px}.hero-copy .promise{font-size:25px;max-width:600px}.hero-copy>p:not(.promise){max-width:600px;font-size:13px}.button-row{gap:19px}.hero-shot .badge{display:none}.capture figcaption{padding:15px;gap:10px}.capture h3{font-size:13px}.capture figcaption p{font-size:10px;line-height:1.8}.game-label{font-size:8px;padding:12px;gap:10px;letter-spacing:.7px}.game-label span:last-child{font-size:8px}.upgrade-strip{grid-template-columns:1fr;gap:12px;padding-top:20px}.upgrade-strip .eyebrow{padding:0}.upgrade-list li{font-size:10px}.play-loop{grid-template-columns:1fr;gap:19px;margin-top:24px;padding:24px 0}.play-loop p{max-width:100%;font-size:11px}.section{padding-top:49px}.section-heading{display:block;margin-bottom:23px}.section-heading>p{max-width:100%;margin-top:17px;font-size:12px}.section h2{font-size:35px;letter-spacing:-1px}.home{grid-template-columns:1fr;gap:26px}.home .body-copy{max-width:100%;font-size:12px;margin:18px 0}.home .upgrade-list{grid-template-columns:repeat(3,1fr)}.home .upgrade-list li{font-size:9px}.home .small-note{font-size:10px}.room-grid{gap:14px}.room-grid figcaption{min-height:155px;padding:14px}.room-grid figcaption h3{font-size:20px}.room-grid figcaption p{font-size:10px}.lounge{padding:18px;grid-template-columns:1fr;gap:22px}.lounge-copy{padding:0 3px}.lounge h3{font-size:29px}.lounge p:not(.eyebrow){max-width:100%}.learning-grid{grid-template-columns:1fr;gap:20px}.learning-grid .image-button{height:auto}.learning-grid .image-button img{width:100%;height:auto;max-height:400px;object-fit:contain}.learning-grid .capture figcaption{min-height:0;padding:18px}.learning-grid .capture h3{font-size:23px}.learning-grid .capture p{font-size:11px}.stakes{grid-template-columns:1fr;padding:25px;gap:29px}.stakes h2{font-size:39px}.stakes .stakes-copy>p:not(.eyebrow){max-width:100%;font-size:12px}.stakes .stakes-copy .mechanic{max-width:100%}.pack-grid{grid-template-columns:1fr 1fr;gap:12px}.pack{padding:20px}.pack h3{font-size:25px}.pack p{font-size:11px}.jurisdiction-request{display:block;padding:20px}.jurisdiction-request .button{margin-top:17px}.horizon{display:block}.horizon>p+p{margin-top:12px}.jurisdictions{padding-bottom:37px}.final-invitation{padding:29px;display:block}.final-invitation h2{font-size:31px}.final-invitation .button{margin-top:22px}.footer-row{display:block}.footer-mark{display:block;margin-top:17px}.lightbox-header{padding:13px 15px}.lightbox-header h2{font-size:20px}.lightbox-footer{grid-template-columns:1fr;padding:14px;gap:13px}.lightbox-controls{justify-content:space-between}.lightbox-stage{max-height:56vh}.lightbox-stage img{max-height:56vh}.eyebrow{font-size:9px;letter-spacing:1.5px}}
+@media(max-width:470px){.site-header{display:block}.brand{font-size:31px}.site-nav{justify-content:flex-start;max-width:none;margin-top:19px;gap:17px}.hero h1{font-size:48px}.hero-copy .promise{font-size:24px}.game-label .optional{display:none}.room-grid{grid-template-columns:1fr;gap:20px}.room-grid figcaption{min-height:0;padding:18px}.room-grid figcaption h3{font-size:24px}.room-grid figcaption p{font-size:11px}.home .upgrade-list{grid-template-columns:1fr 1fr}.home .upgrade-list li{font-size:10px}.home .capture .badge{font-size:8px;letter-spacing:0;padding:5px}.section h2{font-size:34px}.stakes{padding:22px}.stakes h2{font-size:36px}.pack{padding:16px}.pack h3{font-size:23px}.final-invitation{padding:26px}.final-invitation h2{font-size:30px}.zoom-label{font-size:9px;right:9px;bottom:9px;padding:6px 8px}.lightbox{width:calc(100% - 16px)}.lightbox-header h2{font-size:18px}.lightbox-controls button{font-size:11px;padding:9px 10px}.image-count{font-size:9px}.hero .button{padding:14px 18px}.button-row .text-link{font-size:10px}.capture-notes{font-size:9px}}
+@media(prefers-reduced-motion:reduce){:root{scroll-behavior:auto}*{transition:none!important}}
+@media print{.preview-bar,.site-nav,.button,.text-link,.zoom-label,.capture-notes,dialog{display:none!important}:root{background:white;color:black}.wrap{width:100%}.section{break-inside:avoid;padding-top:35px}.capture,.hero{break-inside:avoid}.image-button{print-color-adjust:exact;-webkit-print-color-adjust:exact}.hero{grid-template-columns:1fr}.hero h1{font-size:45px}.home,.stakes{grid-template-columns:1fr}.hero-shot{max-width:700px;margin:auto}}
+</style></head><body>
+<a class="skip" href="#main">Skip to LawScape</a>
+<header class="site-header wrap"><a href="#main" class="brand" aria-label="LawScape"><span class="brand-seal" aria-hidden="true">§</span><span>LawScape<span class="byline">BY JOEL KAUFMANN</span></span></a><nav class="site-nav" aria-label="Page sections"><a href="#apartment">Make it yours</a><a href="#firm">Explore the firm</a><a href="#stakes">The stakes</a><a href="#jurisdictions">Jurisdictions</a><a class="button" href="game.html">Play LawScape ↗</a></nav></header>
+<main id="main" class="wrap">
+<section class="hero" aria-labelledby="hero-title"><div><p class="eyebrow"><span class="dot"></span>Welcome to Hardsell &amp; Firestone</p><h1 id="hero-title">Your desk is ready.<br><em>Your judgment<br>is next.</em></h1></div><div class="hero-copy"><p class="promise">A better way to learn<br> the ethics of life as a lawyer.</p><p>Meet the partners. Open the inbox. Make the call. LawScape turns professional responsibility into a working day you can play—with tricky decisions, office humor, and a practice worth building.</p><div class="button-row"><a class="button" href="game.html">Start your firm day <span aria-hidden="true">↗</span></a><a class="text-link" href="#firm">Take a look around ↓</a></div><div class="career-modes" aria-label="Career modes"><span>Law firm · Available</span><span>Government · Planned</span><span>In-house · Planned</span></div></div></section>
+<div class="game-label"><span><span class="dot"></span>ACTUAL GAMEPLAY · THE FULLY UPGRADED OFFICE</span><span class="optional">Every screenshot opens larger ↗</span></div>
+<figure class="capture hero-shot"><button class="image-button" type="button" data-image-title="Your office. Your practice." data-image-caption="The main office with all seven office upgrades enabled: a second monitor, reference shelf, Liz’s chair, plants, Riley, a work phone, and artwork." aria-label="Enlarge screenshot: Your office. Your practice."><img src="assets/start-page/office.png" fetchpriority="high" decoding="async" alt="Your office. Your practice.: The main office with all seven office upgrades enabled: a second monitor, reference shelf, Liz’s chair, plants, Riley, a work phone, and artwork." width="1302" height="864"><span class="zoom-label" aria-hidden="true">View larger ↗</span></button><figcaption><div><h3>Your office. Your practice.</h3><p>The main office with all seven office upgrades enabled: a second monitor, reference shelf, Liz’s chair, plants, Riley, a work phone, and artwork.</p></div><span class="badge">7 / 7 OFFICE UPGRADES</span></figcaption></figure>
+<div class="upgrade-strip"><p class="eyebrow">All 7 office upgrades</p><ul class="upgrade-list"><li>Second monitor</li><li>Ethics treatise shelf</li><li>Liz’s chair</li><li>Houseplants</li><li>Riley the paralegal</li><li>Work phone</li><li>Artwork</li></ul></div>
+<div class="play-loop"><div><span class="roman">I.</span><div><h3>The client wants an answer.</h3><p>Read the request and consider the duties behind it.</p></div></div><div><span class="roman">II.</span><div><h3>The partner wants it now.</h3><p>Look into the file. Think through the pressure. Choose your response.</p></div></div><div><span class="roman">III.</span><div><h3>You learn by making the call.</h3><p>Read the feedback, earn study gold, and build your practice.</p></div></div></div>
+<section class="section home" id="apartment" aria-labelledby="home-title"><div><p class="eyebrow">There is life after BarMail</p><h2 id="home-title">Build a practice.<br>Make a home.</h2><p class="body-copy">A better mattress. Proper coffee. A kitchen that can handle more than ramen. Spend your study gold on a place to recharge before your next firm day.</p><ul class="upgrade-list"><li>Better mattress</li><li>Coffee machine</li><li>Wardrobe rack</li><li>Wall clock</li><li>Kitchen upgrade</li><li>City view &amp; couch</li></ul><p class="small-note">Shown with all six apartment upgrades enabled in the demo save.</p></div><figure class="capture "><button class="image-button" type="button" data-image-title="Home, fully upgraded." data-image-caption="Better mattress, coffee machine, wardrobe rack, wall clock, upgraded kitchen, and the city-view window with a couch." aria-label="Enlarge screenshot: Home, fully upgraded."><img src="assets/start-page/apartment.png" loading="lazy" decoding="async" alt="Home, fully upgraded.: Better mattress, coffee machine, wardrobe rack, wall clock, upgraded kitchen, and the city-view window with a couch." width="966" height="696"><span class="zoom-label" aria-hidden="true">View larger ↗</span></button><figcaption><div><h3>Home, fully upgraded.</h3><p>Better mattress, coffee machine, wardrobe rack, wall clock, upgraded kitchen, and the city-view window with a couch.</p></div><span class="badge">6 / 6 UPGRADES</span></figcaption></figure></section>
+<section class="section" id="firm" aria-labelledby="firm-title"><div class="section-heading"><div><p class="eyebrow">A world beyond your desk</p><h2 id="firm-title">Every door has<br>its own personality.</h2></div><p>Visit the partners, step into the conference room, and take a look around the courtroom. This is the world your attorney inhabits.</p></div><div class="room-grid"><figure class="capture "><button class="image-button" type="button" data-image-title="Jim Hardsell’s corner office" data-image-caption="Meet the managing partner in his window-lined corner office. The bar cart and client-gold safe are part of the room." aria-label="Enlarge screenshot: Jim Hardsell’s corner office"><img src="assets/start-page/jim-office.png" loading="lazy" decoding="async" alt="Jim Hardsell’s corner office: Meet the managing partner in his window-lined corner office. The bar cart and client-gold safe are part of the room." width="918" height="672"><span class="zoom-label" aria-hidden="true">View larger ↗</span></button><figcaption><div><h3>Jim Hardsell’s corner office</h3><p>Meet the managing partner in his window-lined corner office. The bar cart and client-gold safe are part of the room.</p></div></figcaption></figure><figure class="capture "><button class="image-button" type="button" data-image-title="Linda Firestone’s office" data-image-caption="Visit Linda’s burgundy office, with its executive desk, reference shelf, and city-facing windows." aria-label="Enlarge screenshot: Linda Firestone’s office"><img src="assets/start-page/linda-office.png" loading="lazy" decoding="async" alt="Linda Firestone’s office: Visit Linda’s burgundy office, with its executive desk, reference shelf, and city-facing windows." width="870" height="648"><span class="zoom-label" aria-hidden="true">View larger ↗</span></button><figcaption><div><h3>Linda Firestone’s office</h3><p>Visit Linda’s burgundy office, with its executive desk, reference shelf, and city-facing windows.</p></div></figcaption></figure><figure class="capture "><button class="image-button" type="button" data-image-title="The conference room" data-image-caption="Take a look around the firm’s meeting space, with a conference table, chairs, and presentation screen." aria-label="Enlarge screenshot: The conference room"><img src="assets/start-page/conference-room.png" loading="lazy" decoding="async" alt="The conference room: Take a look around the firm’s meeting space, with a conference table, chairs, and presentation screen." width="1014" height="720"><span class="zoom-label" aria-hidden="true">View larger ↗</span></button><figcaption><div><h3>The conference room</h3><p>Take a look around the firm’s meeting space, with a conference table, chairs, and presentation screen.</p></div></figcaption></figure><figure class="capture "><button class="image-button" type="button" data-image-title="The courtroom" data-image-caption="Find Derek Balam on duty and a sleeping robot judge. Live hearings remain a future feature." aria-label="Enlarge screenshot: The courtroom"><img src="assets/start-page/courtroom.png" loading="lazy" decoding="async" alt="The courtroom: Find Derek Balam on duty and a sleeping robot judge. Live hearings remain a future feature." width="1206" height="816"><span class="zoom-label" aria-hidden="true">View larger ↗</span></button><figcaption><div><h3>The courtroom</h3><p>Find Derek Balam on duty and a sleeping robot judge. Live hearings remain a future feature.</p></div></figcaption></figure></div><div class="lounge"><figure class="capture "><button class="image-button" type="button" data-image-title="The Sidebar" data-image-caption="The in-game lounge, complete with stools, discussion tables, and B.A.R.T., the robotic bartender." aria-label="Enlarge screenshot: The Sidebar"><img src="assets/start-page/sidebar.png" loading="lazy" decoding="async" alt="The Sidebar: The in-game lounge, complete with stools, discussion tables, and B.A.R.T., the robotic bartender." width="1302" height="864"><span class="zoom-label" aria-hidden="true">View larger ↗</span></button><figcaption><div><h3>The Sidebar</h3><p>The in-game lounge, complete with stools, discussion tables, and B.A.R.T., the robotic bartender.</p></div></figcaption></figure><div class="lounge-copy"><p class="eyebrow">Clock out. Stay curious.</p><h3>Welcome to The Sidebar.</h3><p>A lounge, a robot bartender, and a place to take a seat after a demanding day. Even a fictional attorney deserves a break.</p><p class="small-note">The current lounge has scripted characters and local features. Shared chat is planned.</p></div></div></section>
+<section class="section" id="learning" aria-labelledby="learning-title"><div class="section-heading"><div><p class="eyebrow">The work is where the learning happens</p><h2 id="learning-title">A request. A file.<br>A decision that matters.</h2></div><p>Practice legal ethics through the situations of firm life. Read an email, inspect the evidence, and work out what you can responsibly say or do.</p></div><div class="learning-grid"><figure class="capture "><button class="image-button" type="button" data-image-title="Read the request." data-image-caption="The real BarMail inbox mixes partner correspondence, writing assignments, and ethics practice." aria-label="Enlarge screenshot: Read the request."><img src="assets/start-page/barmail.png" loading="lazy" decoding="async" alt="Read the request.: The real BarMail inbox mixes partner correspondence, writing assignments, and ethics practice." width="1680" height="1269"><span class="zoom-label" aria-hidden="true">View larger ↗</span></button><figcaption><div><h3>Read the request.</h3><p>The real BarMail inbox mixes partner correspondence, writing assignments, and ethics practice.</p></div></figcaption></figure><figure class="capture "><button class="image-button" type="button" data-image-title="Open the file." data-image-caption="Inspect the synthetic Lantern and Harbor matters before you put your judgment in writing." aria-label="Enlarge screenshot: Open the file."><img src="assets/start-page/evidence.png" loading="lazy" decoding="async" alt="Open the file.: Inspect the synthetic Lantern and Harbor matters before you put your judgment in writing." width="1980" height="1266"><span class="zoom-label" aria-hidden="true">View larger ↗</span></button><figcaption><div><h3>Open the file.</h3><p>Inspect the synthetic Lantern and Harbor matters before you put your judgment in writing.</p></div></figcaption></figure><figure class="capture "><button class="image-button" type="button" data-image-title="Make the call." data-image-caption="An actual game dilemma asks how you will respond to the partner’s instruction to file an unchecked AI draft." aria-label="Enlarge screenshot: Make the call."><img src="assets/start-page/dilemma.png" loading="lazy" decoding="async" alt="Make the call.: An actual game dilemma asks how you will respond to the partner’s instruction to file an unchecked AI draft." width="1680" height="1269"><span class="zoom-label" aria-hidden="true">View larger ↗</span></button><figcaption><div><h3>Make the call.</h3><p>An actual game dilemma asks how you will respond to the partner’s instruction to file an unchecked AI draft.</p></div></figcaption></figure></div></section>
+<section class="section" id="stakes" aria-labelledby="stakes-title"><div class="stakes"><div class="stakes-copy"><p class="eyebrow">The stakes are part of the game</p><h2 id="stakes-title">Build your practice.<br><em>Try not to lose it.</em></h2><p>Wrong answers can cost Ethics. At zero, your attorney is disbarred and the run ends. Your gold, upgrades, drafts, and apprenticeship progress are lost.</p><p>That apartment? That office? You start again from nothing.</p><p class="mechanic">This is LawScape’s game mechanic. The separate fictional writing and evidence exercises award study gold without Ethics damage.</p><div class="button-row"><a class="button secondary" href="game.html">Think you can handle the firm? <span aria-hidden="true">↗</span></a></div></div><figure class="capture "><button class="image-button" type="button" data-image-title="Actual disbarment game-over screen" data-image-caption="Triggered in a separate demo run. Reaching zero Ethics cleared that run’s saved progress." aria-label="Enlarge screenshot: Actual disbarment game-over screen"><img src="assets/start-page/disbarred.png" loading="lazy" decoding="async" alt="Actual disbarment game-over screen: Triggered in a separate demo run. Reaching zero Ethics cleared that run’s saved progress." width="840" height="738"><span class="zoom-label" aria-hidden="true">View larger ↗</span></button><figcaption><div><h3>Actual disbarment game-over screen</h3><p>Triggered in a separate demo run. Reaching zero Ethics cleared that run’s saved progress.</p></div></figcaption></figure></div></section>
+<section class="section jurisdictions" id="jurisdictions" aria-labelledby="jurisdictions-title"><div class="section-heading"><div><p class="eyebrow">Same curiosity. Different legal contexts.</p><h2 id="jurisdictions-title">Bring a wider world<br>into your practice.</h2></div><p>Explore the available study packs. Each has its own jurisdiction or study scope, and there is more on the horizon.</p></div><div class="pack-grid"><article class="pack"><span class="pack-tag">NEW · PRACTICE AREA</span><h3>Canada</h3><p>Professional responsibility and the ethics of practice.</p><strong>25 original questions</strong></article><article class="pack"><span class="pack-tag">PLAYABLE · STATE PRACTICE</span><h3>California</h3><p>Professional responsibility in California.</p><strong>20 original questions</strong></article><article class="pack"><span class="pack-tag">PLAYABLE · STATE PRACTICE</span><h3>New York</h3><p>Workplace emails and short ethical dilemmas.</p><strong>33 original questions</strong></article><article class="pack"><span class="pack-tag">PLAYABLE · MODEL-RULE STUDY</span><h3>US MPRE-style</h3><p>Professional-responsibility study and practice.</p><strong>69 original questions</strong></article><article class="pack"><span class="pack-tag">PLAYABLE · SQE-STYLE STUDY</span><h3>England<br>&amp; Wales</h3><p>Ethical decisions in workplace scenarios.</p><strong>28 original questions</strong></article></div><p class="jurisdiction-note"><b>Also in the game:</b> 21 original LawScape dilemmas, plus the separate fictional State of Juris apprenticeship with six writing assignments, two synthetic files, and a capstone. All question packs are unofficial educational practice.</p><div class="jurisdiction-request"><div><h3>Don’t see your jurisdiction?</h3><p>Submit it on GitHub and tell me which legal ethics topics you would like to practice.</p></div><a class="button secondary" href="https://github.com/joelakaufmann-lgtm/lawscape/issues/new?title=%5BJurisdiction+request%5D+Your+jurisdiction&amp;body=Jurisdiction+%28including+state+or+province%2C+if+applicable%29%3A%0A%0AEthics+topics+or+practice+settings+you+would+like+to+see%3A%0A%0APublic+sources+or+an+offer+to+help+%28optional%29%3A%0A" target="_blank" rel="noopener">Suggest a jurisdiction <span aria-hidden="true">↗</span></a></div><div class="horizon"><p><b>More to explore:</b> Singapore, Australia, India, UAE, and other locations are future curriculum targets.</p><p>Available packs are distinct from future jurisdiction-specific firm curricula.</p></div></section>
+<div class="final-invitation"><div><h2>Your first day starts with a choice.</h2><p>Create your attorney. Find your desk. A better way to learn the ethics of life as a lawyer.</p></div><a class="button" href="game.html">Play LawScape <span aria-hidden="true">↗</span></a></div>
+</main>
+<footer class="page-footer wrap"><div class="footer-row"><p>LawScape is a fictional educational game, not legal advice. Rules and consequences are simplified for gameplay. Study packs are not official exam material; always check the applicable rules and current sources.</p><span class="footer-mark">AN INDEPENDENT PROJECT BY JOEL KAUFMANN</span></div><details class="capture-notes"><summary>About the game screenshots</summary><p>Actual scenes from LawScape. The demo attorney shown has all seven office upgrades and all six apartment upgrades. Some images show a closer view of the room. Play to build your own practice and earn your upgrades.</p><p><a href="docs/PLAYING.html">How to play</a> · <a href="docs/JURISDICTIONS.html">Jurisdiction guide</a> · <a href="https://github.com/joelakaufmann-lgtm/lawscape" target="_blank" rel="noopener">Project on GitHub</a></p></details></footer>
+<dialog class="lightbox" id="lightbox" aria-labelledby="lightbox-title"><div class="lightbox-header"><h2 id="lightbox-title">Inside LawScape</h2><button class="close" type="button" aria-label="Close screenshot">×</button></div><div class="lightbox-stage" id="lightbox-stage" tabindex="0" aria-label="Screenshot; scroll to explore when zoomed"><img id="lightbox-image" alt=""></div><div class="lightbox-footer"><p id="lightbox-caption" aria-live="polite"></p><div class="lightbox-controls"><span class="image-count" id="image-count"></span><button type="button" id="image-prev" aria-label="Previous screenshot">←</button><button type="button" id="image-zoom" aria-pressed="false">Zoom in</button><button type="button" id="image-next" aria-label="Next screenshot">→</button></div></div></dialog>
+<noscript><p class="no-js">All game views are visible here. Enable JavaScript to enlarge and browse the screenshots.</p></noscript>
+<script>
+(()=>{
+'use strict';
+const shots=[...document.querySelectorAll('[data-image-title]')];
+const box=document.getElementById('lightbox');
+const stage=document.getElementById('lightbox-stage');
+const image=document.getElementById('lightbox-image');
+const zoom=document.getElementById('image-zoom');
+let current=0;
+function display(index){
+ current=(index+shots.length)%shots.length;
+ const source=shots[current];
+ image.src=source.querySelector('img').src;image.alt=source.querySelector('img').alt;
+ document.getElementById('lightbox-title').textContent=source.dataset.imageTitle;
+ document.getElementById('lightbox-caption').textContent=source.dataset.imageCaption;
+ document.getElementById('image-count').textContent=(current+1)+' / '+shots.length;
+ stage.classList.remove('zoomed');stage.scrollTop=0;stage.scrollLeft=0;
+ zoom.setAttribute('aria-pressed','false');zoom.textContent='Zoom in';
+}
+shots.forEach((button,index)=>button.addEventListener('click',()=>{display(index);box.showModal();}));
+box.querySelector('.close').addEventListener('click',()=>box.close());
+document.getElementById('image-prev').addEventListener('click',()=>display(current-1));
+document.getElementById('image-next').addEventListener('click',()=>display(current+1));
+zoom.addEventListener('click',()=>{const active=stage.classList.toggle('zoomed');zoom.setAttribute('aria-pressed',String(active));zoom.textContent=active?'Fit image':'Zoom in';});
+box.addEventListener('keydown',event=>{
+ if(stage.classList.contains('zoomed')&&event.target===stage)return;
+ if(event.key==='ArrowRight'){event.preventDefault();display(current+1);}
+ if(event.key==='ArrowLeft'){event.preventDefault();display(current-1);}
+});
+box.addEventListener('click',event=>{if(event.target!==box)return;const r=box.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)box.close();});
+})();
+</script></body></html>

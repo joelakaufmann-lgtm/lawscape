@@ -11,7 +11,8 @@ npm run release:check
 The game tests cover avatar rendering and migration, seven zones and their
 interactions, 171 scenarios, mail and study time, six writing assignments, two
 six-document synthetic matters, the capstone, persistence, rewards and resets.
-The static check verifies the browser entry point and generated bundle.
+The static check verifies the `game.html` browser entry point and generated bundle.
+The public `index.html` is the landing page and links to the game.
 
 The release check validates the public file allowlist, file sizes and SHA-256
 checksums, source/package equality, local documentation and game asset links,

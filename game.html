@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="A new way to learn legal ethics: a playable law firm with 171 questions across California, New York, US MPRE-style, England & Wales and original office dilemmas.">
+<meta name="theme-color" content="#17233b">
+<meta property="og:type" content="website">
+<meta property="og:title" content="LawScape — Legal Ethics RPG">
+<meta property="og:description" content="Build your practice. Explore legal ethics. 171 ethics questions, seven locations and a guided fictional firm apprenticeship.">
+<meta property="og:image" content="assets/og-lawscape.png">
+<meta name="twitter:card" content="summary_large_image">
+<title>LawScape — Legal Ethics RPG</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <a class="skip-link" href="#title-screen">Skip to game controls</a>
+  <div id="game">
+    <canvas id="world" tabindex="0" aria-label="LawScape game world. Click or tap the floor to walk and objects to interact."></canvas>
+
+    <!-- HUD -->
+    <div id="hud" class="hidden" aria-label="Game status and quick actions">
+      <div id="hud-stats">
+        <span class="stat" id="stat-gold" title="Gold">🪙 <b>0</b></span>
+        <span class="stat ethics" title="Ethics">
+          ⚖️
+          <span id="ethics-bar"><span id="ethics-fill" class="ok"></span></span>
+          <span id="ethics-num">100/100</span>
+        </span>
+        <span class="stat" id="stat-streak" title="Correct-answer streak">🔥 <b>x0</b></span>
+        <span class="stat" id="stat-billable" title="Billable study time — visible time inside open questions, writing assignments and feedback">⏱ <b>0:00:00</b></span>
+      </div>
+      <div id="hud-zone">Your Law Office</div>
+      <div id="hud-buttons" aria-label="Quick actions">
+        <button id="btn-journal" class="hud-action" aria-label="Open apprenticeship journal" aria-keyshortcuts="J"><span aria-hidden="true">✎</span><span>Journal</span></button>
+        <button id="btn-mail" class="hud-action" aria-label="Open BarMail" aria-keyshortcuts="B"><span aria-hidden="true">✉</span><span>BarMail</span></button>
+        <button id="btn-record" class="hud-action" aria-label="Open professional record" aria-keyshortcuts="R"><span aria-hidden="true">▣</span><span>Record</span></button>
+        <button id="btn-travel" class="hud-action" aria-label="Open travel menu" aria-keyshortcuts="T"><span aria-hidden="true">↗</span><span>Travel</span></button>
+        <button id="btn-help" class="hud-action" aria-label="How to play" aria-keyshortcuts="H"><span aria-hidden="true">?</span><span>Help</span></button>
+      </div>
+      <canvas id="minimap" width="150" height="120"></canvas>
+      <div id="control-hint">Click or tap to walk · WASD/Arrows move · B opens BarMail</div>
+      <button id="quest-status" type="button">First firm day · Open Journal</button>
+      <div id="room-tools"><button id="room-action" class="hidden" type="button">Table notes</button><button id="room-service" class="hidden" type="button">Bartender</button><button id="room-board" class="hidden" type="button">High scores</button></div>
+      <div id="movement-status" class="hidden" role="status"></div>
+    </div>
+
+    <div id="work-status" class="hidden" role="status" aria-live="polite">
+      <div class="work-status-head">
+        <span><b>Document Review</b> · +5 gold per cycle</span>
+        <button id="btn-stop-review" aria-label="Stop document review">Stop</button>
+      </div>
+      <div id="review-progress"><span id="review-progress-fill"></span></div>
+      <div id="review-time">Next cycle in 1:00</div>
+    </div>
+
+    <div id="toast" class="hidden" role="status" aria-live="polite"></div>
+    <div id="hoverlabel" class="hidden"></div>
+
+    <!-- Dialogue (OSRS-style chatbox) -->
+    <div id="dialogue" class="hidden" role="dialog" aria-live="polite" aria-labelledby="dialogue-name">
+      <div id="dialogue-name"></div>
+      <div id="dialogue-text"></div>
+      <div id="dialogue-choices"></div>
+    </div>
+
+    <!-- Panels (shops, record, help) -->
+    <div id="panel" class="hidden" role="dialog" aria-modal="true" aria-labelledby="panel-title">
+      <div id="panel-inner">
+        <div id="panel-header">
+          <span id="panel-title"></span>
+          <button id="panel-close" aria-label="Close panel">✕</button>
+        </div>
+        <div id="panel-tabs"></div>
+        <div id="panel-body"></div>
+      </div>
+    </div>
+
+    <!-- BarMail: the in-game computer screen -->
+    <div id="email" class="hidden" role="dialog" aria-modal="true" aria-labelledby="email-appname">
+      <div id="email-window">
+        <div id="email-titlebar">
+          <span class="email-dot"></span><span class="email-dot"></span><span class="email-dot"></span>
+          <span id="email-appname">BarMail — Secure Attorney Inbox</span>
+          <button id="email-close" aria-label="Close BarMail">✕</button>
+        </div>
+        <div id="email-toolbar">
+          <button id="email-inbox-open" type="button">📥 All mail</button><button id="email-writing" type="button">✎ Writing assignments</button>
+          <label id="email-pack-label" for="email-pack">Practice pack
+            <select id="email-pack">
+              <option value="mixed">Mixed practice</option>
+              <option value="ca">California</option>
+              <option value="ny">New York</option>
+              <option value="sqe">England &amp; Wales SQE Ethics</option>
+              <option value="mpre">US MPRE</option>
+              <option value="juris">LawScape original dilemmas</option>
+            </select>
+          </label>
+          <button id="email-hr-open" type="button" title="Report a bug or complain about the working conditions of this virtual law firm">✍ Email HR · Report a bug</button>
+          <span id="email-difficulty"></span>
+          <span id="email-source" class="hidden"></span>
+          <button id="email-hint" class="hidden" type="button">Ask Riley for Hint · 100 gold</button>
+          <span id="email-rule" class="hidden"></span>
+        </div>
+        <div id="email-inbox"></div>
+        <div id="email-writing-body" class="hidden"></div>
+        <div id="email-body" class="hidden">
+          <button id="email-back" type="button">← Back to inbox</button>
+          <div id="email-head">
+            <div id="email-subject"></div>
+            <div id="email-from"></div>
+          </div>
+          <div id="email-text"></div>
+          <div id="email-replies">
+            <div class="reply-label">Choose your reply:</div>
+            <div id="email-choices"></div>
+          </div>
+          <div id="email-result" class="hidden">
+            <div id="email-verdict"></div>
+            <div id="email-explain"></div>
+            <div id="email-delta"></div>
+            <button id="email-continue">Back to Inbox</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Disbarment -->
+    <section id="apprenticeship" class="hidden" role="dialog" aria-modal="true" aria-labelledby="desk-title">
+      <div class="desk-window">
+        <header class="desk-topbar"><div><span class="desk-mark" aria-hidden="true">§</span><div><h1 id="desk-title">The Associate’s Desk</h1><p>Hardsell &amp; Firestone <span>· Local apprenticeship</span></p></div></div><button id="desk-close" type="button" aria-label="Close apprenticeship desk">Back to the world <span aria-hidden="true">×</span></button></header>
+        <div class="desk-layout"><aside class="desk-sidebar"><p class="desk-kicker">Your practice</p><nav aria-label="Apprenticeship sections"><button data-desk-tab="journal" aria-current="page">01 <span>Quest journal</span></button><button data-desk-tab="writing">02 <span>BarMail · Writing</span></button><button data-desk-tab="files">03 <span>Evidence room</span></button><button data-desk-tab="firm">04 <span>Firm jurisdictions</span></button><button data-desk-tab="wardrobe">05 <span>Wardrobe</span></button></nav><div class="desk-identity"><strong id="desk-player"></strong><span>Firm associate</span><b id="desk-gold"></b></div><p class="desk-sidebar-note">“Please fix” is a complete sentence here.</p></aside><main id="desk-body" tabindex="-1"></main></div>
+      </div>
+    </section>
+
+    <!-- Disbarment -->
+    <div id="gameover" class="hidden">
+      <div id="gameover-inner">
+        <h1>YOU GOT DISBARRED</h1>
+        <h2>GAME OVER</h2>
+        <p id="gameover-text">Your Ethics reached zero. The Presiding Disciplinary Judge has
+        entered an order of disbarment. Your license, your office, your gold, and your
+        upgrades are forfeit.</p>
+        <button id="gameover-restart">Start Over From Nothing</button>
+      </div>
+    </div>
+
+    <!-- Title screen -->
+    <div id="title-screen">
+      <div class="title-card">
+        <div class="brand-eyebrow">BY JOEL KAUFMANN · THE FIRM APPRENTICESHIP</div>
+        <div class="brand-seal" aria-hidden="true">§</div>
+        <h1>LawScape</h1>
+        <p class="tagline">Read the file. Make the call. Build your practice.</p>
+        <p class="title-mission">A new way to learn legal ethics.<br><span>171 questions, including California and New York. Choose your practice in Firm jurisdictions.</span></p>
+        <div class="title-features" aria-label="Game features">
+          <span><b>6</b> writing assignments</span>
+          <span><b>2</b> synthetic matters</span>
+          <span><b>1</b> connected capstone</span>
+        </div>
+        <button id="btn-new" class="primary">Create an Attorney</button>
+        <button id="btn-continue" class="hidden">Continue Your Practice</button>
+        <details class="how-to">
+          <summary>How to play</summary>
+          <p>Start with Journal for a guided assignment, or BarMail in your office for a quick ethics question. Choose a jurisdiction, read the facts and feedback, then explore. <a href="docs/PLAYING.html" target="_blank" rel="noopener">Read the player guide</a>.</p>
+          <p><b>Keyboard:</b> WASD or arrow keys move. B opens BarMail, R opens your record, T opens travel, and Escape closes a window.</p>
+        </details>
+        <button id="btn-reset" class="hidden small danger-link">Reset saved game</button>
+        <p class="thesis">Your first firm day starts with a file, an impatient partner, and a draft that is suspiciously confident. Inspect the evidence, commit your reply, earn something worth wearing. Explore seven rooms, meet Derek Balam in court, and take a break at The Sidebar.</p>
+        <p class="disclaimer">LawScape is a fictional educational game. It is not legal advice
+        and does not create an attorney-client relationship. US and England-and-Wales rules
+        are simplified for gameplay — always read the operative text.</p>
+        <p class="hr-note">Version <span id="game-version">0.6.0</span> · Beta — spotted a bug? <a href="https://github.com/joelakaufmann-lgtm/lawscape/issues" target="_blank" rel="noopener">Email HR · Report a bug</a>. Review your report on GitHub before submitting.</p>
+      </div>
+    </div>
+
+    <!-- Attorney creator -->
+    <div id="creator" class="hidden">
+      <div class="title-card wide">
+        <button id="btn-creator-back" class="text-button" aria-label="Return to title screen">← Back</button>
+        <div class="brand-eyebrow">HARDSELL &amp; FIRESTONE · NEW ASSOCIATE</div>
+        <h2>Create Your Attorney</h2>
+        <p class="creator-intro">Make this attorney yours. Preview every choice standing, walking or seated.</p>
+        <div class="career-strip"><strong>Firm apprenticeship · Available</strong><span>In-house · Planned</span><span>Government · Planned</span></div>
+        <div class="creator-identity">
+          <label for="c-name">Name<input id="c-name" type="text" maxlength="24" placeholder="Alex Barrister"></label>
+          <div><span class="field-label">Gender</span><div id="c-gender" class="pill-row" role="group" aria-label="Gender"></div></div>
+        </div>
+        <div id="c-appearance"></div>
+        <p class="creator-stakes">Your first office is the fictional State of Juris. Real-jurisdiction firm packs need source review; you can request one from your desk. Existing ethics dilemmas carry consequences: zero Ethics ends the run and resets gold, upgrades and apprenticeship progress.</p>
+        <button id="btn-start" class="primary">Begin Your Firm Apprenticeship</button>
+      </div>
+    </div>
+  </div>
+  <noscript>
+    <div class="noscript">LawScape needs JavaScript enabled to play.</div>
+  </noscript>
+  <script defer src="js/lawscape.bundle.js"></script>
+</body>
+</html>
