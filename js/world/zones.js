@@ -209,7 +209,9 @@ export const ZONES = {
         interact: { label: 'Billable Hours — High Score Board', action: 'high_scores' } },
       { type: 'plant', x: 1, y: 6 },
       { type: 'plant', x: 12, y: 2 },
-      { type: 'lamppost', x: 1, y: 10 },
+      { type: 'floorlamp', x: 1, y: 10 },
+      { type: 'arcade', x: 8, y: 1,
+        interact: { label: 'Briefcase Dash — Arcade Cabinet', action: 'arcade' } },
     ],
     portals: [{ x: 7, y: 11, label: 'Leave The Sidebar', travel: true }],
     npcs: [

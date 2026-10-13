@@ -925,3 +925,16 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .global-regions p { font-size: 13px; line-height: 1.65; margin: 0; }
 .global-available { padding-top: 14px; border-top: 1px solid #b5c4b2; font-size: 13px; }
 @media(max-width:600px) { .global-curriculum { padding: 18px; } .global-regions { grid-template-columns: 1fr; } }
+
+/* Briefcase Dash arcade cabinet (The Sidebar) */
+#panel-inner.arcade-panel { width: min(760px, calc(100vw - 24px)); background: #24141a; color: #f3e9d2; }
+.arcade-panel #panel-header { background: #3a1d27; color: #f3e9d2; }
+.arcade { display: flex; flex-direction: column; gap: 10px; }
+.arcade-bezel { padding: 10px; background: #120a0e; border: 2px solid var(--brass); border-radius: 8px; box-shadow: inset 0 0 18px rgba(0,0,0,0.8); }
+#arcade-canvas { display: block; width: 100%; height: auto; aspect-ratio: 640 / 240; border-radius: 4px; touch-action: manipulation; cursor: pointer; }
+.arcade-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.arcade-help { font: 13px/1.5 Verdana, sans-serif; color: #e6d9b8; }
+.arcade-help kbd { display: inline-block; padding: 1px 6px; border: 1px solid var(--brass); border-radius: 4px; background: #3a1d27; font: bold 12px Verdana, sans-serif; }
+.arcade-touch { display: flex; gap: 8px; }
+.arcade-touch button { min-width: 72px; background: #6e2436; user-select: none; -webkit-user-select: none; }
+.arcade-status { min-height: 1.4em; font: 13px/1.4 Verdana, sans-serif; color: var(--parchment); }

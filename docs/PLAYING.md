@@ -38,7 +38,9 @@ and doors for connected rooms. Close a panel with its close button or Escape.
 Explore your office, Jim's corner office, Linda's office, the conference room,
 courtroom, The Sidebar and your apartment. The courtroom has scripted characters;
 live hearings and AI judges are planned. The Sidebar offers seating, drinks,
-local table notes and a local completed-run billable-time board. Shared chat and
+local table notes, a local completed-run billable-time board and the Briefcase
+Dash arcade cabinet: press Space to jump caterpillars and the down arrow to duck
+butterflies on the walk to the office. Shared chat and
 other-player presence are not available yet.
 
 ## Gold, Ethics and your character run

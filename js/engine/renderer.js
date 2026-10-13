@@ -69,9 +69,7 @@ export class WorldRenderer {
         // tiny per-tile variation keeps large floors from looking flat
         ctx.fillStyle = shade(c, ((x * 31 + y * 17) % 5) * 0.008 - 0.016);
         ctx.fill();
-        ctx.strokeStyle = 'rgba(20,20,30,0.08)';
-        ctx.lineWidth = 1;
-        ctx.stroke();
+        this.drawFloorDetail(zone, ch, x, y, s, c);
       }
     }
 
@@ -158,35 +156,103 @@ export class WorldRenderer {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
 
+  // Surface detail in tile space: x runs along +u, y along +v, 32 units per tile.
+  drawFloorDetail(zone, ch, x, y, s, base) {
+    const { ctx } = this;
+    ctx.save();
+    ctx.transform(1, 0.5, -1, 0.5, s.x, s.y - TILE_H / 2);
+    if (ch === 'w') {
+      // Four boards per tile, each with its own tone, seams and staggered end joints.
+      for (let row = 0; row < 4; row++) {
+        const n = (x * 7 + y * 13 + row * 5) % 7;
+        ctx.fillStyle = shade(base, (n - 3) * 0.012);
+        ctx.fillRect(0, row * 8, 32, 8);
+        ctx.fillStyle = 'rgba(255,230,190,0.05)';
+        ctx.fillRect(0, row * 8 + 2 + (n % 3), 32, 0.6);
+        ctx.fillStyle = 'rgba(30,16,8,0.32)';
+        ctx.fillRect(0, row * 8 + 7.4, 32, 0.6);
+        const joint = ((x * 11 + y * 5 + row * 19) % 4) * 8 + 4;
+        ctx.fillRect(joint, row * 8, 0.6, 8);
+      }
+    } else if (ch === 'r') {
+      // Rug: pile texture, a border wherever the rug meets bare floor, and a medallion motif.
+      const rug = (tx, ty) => tx >= 0 && ty >= 0 && tx < zone.w && ty < zone.h && zone.tile(tx, ty) === 'r';
+      ctx.fillStyle = 'rgba(0,0,0,0.06)';
+      for (let i = 0; i < 32; i += 3) ctx.fillRect(0, i, 32, 0.5);
+      const edges = { top: !rug(x, y - 1), bottom: !rug(x, y + 1), left: !rug(x - 1, y), right: !rug(x + 1, y) };
+      const band = (bx, by, bw, bh, color) => { ctx.fillStyle = color; ctx.fillRect(bx, by, bw, bh); };
+      const dark = shade(base, -0.16), gold = 'rgba(217,182,86,0.75)';
+      if (edges.left) { band(0, 0, 5, 32, dark); band(5.5, 0, 1, 32, gold); }
+      if (edges.right) { band(27, 0, 5, 32, dark); band(26, 0, 1, 32, gold); }
+      if (edges.top) { band(0, 0, 32, 5, dark); band(edges.left ? 5.5 : 0, 5.5, 32 - (edges.left ? 5.5 : 0) - (edges.right ? 5.5 : 0), 1, gold); }
+      if (edges.bottom) { band(0, 27, 32, 5, dark); band(edges.left ? 5.5 : 0, 25.5, 32 - (edges.left ? 5.5 : 0) - (edges.right ? 5.5 : 0), 1, gold); }
+      ctx.fillStyle = shade(base, 0.07);
+      ctx.beginPath(); ctx.moveTo(16, 10); ctx.lineTo(22, 16); ctx.lineTo(16, 22); ctx.lineTo(10, 16); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = 'rgba(217,182,86,0.35)';
+      ctx.fillRect(15.3, 15.3, 1.4, 1.4);
+    } else if (ch === 'm' || ch === 'M') {
+      ctx.strokeStyle = 'rgba(120,110,95,0.18)';
+      ctx.lineWidth = 0.5;
+      if ((x * 3 + y * 7) % 4 === 0) {
+        ctx.beginPath(); ctx.moveTo(2, 6 + (x % 3) * 6); ctx.bezierCurveTo(10, 2, 18, 22, 30, 14 + (y % 3) * 4); ctx.stroke();
+      }
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+      ctx.beginPath(); ctx.moveTo(0.5, 31.5); ctx.lineTo(0.5, 0.5); ctx.lineTo(31.5, 0.5); ctx.stroke();
+    }
+    ctx.restore();
+    if (ch !== 'w' && ch !== 'r') {
+      diamondPath(ctx, s.x, s.y);
+      ctx.strokeStyle = 'rgba(20,20,30,0.08)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+
   drawWall(d, zone) {
     const { ctx } = this;
     const s = gridToScreen(d.x, d.y);
     const zc = 78;
-    // reuse the box helper's geometry via a simple extrusion
     const half = TILE_W / 2, hh = TILE_H / 2;
     const N = { x: s.x, y: s.y - hh }, E = { x: s.x + half, y: s.y },
           S = { x: s.x, y: s.y + hh }, W = { x: s.x - half, y: s.y };
-    ctx.fillStyle = shade(d.color, -0.08);
-    ctx.beginPath();
-    ctx.moveTo(W.x, W.y - zc); ctx.lineTo(S.x, S.y - zc);
-    ctx.lineTo(S.x, S.y); ctx.lineTo(W.x, W.y);
-    ctx.closePath(); ctx.fill();
-    ctx.fillStyle = shade(d.color, -0.2);
-    ctx.beginPath();
-    ctx.moveTo(S.x, S.y - zc); ctx.lineTo(E.x, E.y - zc);
-    ctx.lineTo(E.x, E.y); ctx.lineTo(S.x, S.y);
-    ctx.closePath(); ctx.fill();
+    const quad = (a, b, z0, z1, color) => {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y - z1); ctx.lineTo(b.x, b.y - z1);
+      ctx.lineTo(b.x, b.y - z0); ctx.lineTo(a.x, a.y - z0);
+      ctx.closePath(); ctx.fill();
+    };
+    const left = shade(d.color, -0.08), right = shade(d.color, -0.2);
+    quad(W, S, 0, zc, left);
+    quad(S, E, 0, zc, right);
     ctx.fillStyle = shade(d.color, 0.05);
     ctx.beginPath();
     ctx.moveTo(N.x, N.y - zc); ctx.lineTo(E.x, E.y - zc);
     ctx.lineTo(S.x, S.y - zc); ctx.lineTo(W.x, W.y - zc);
     ctx.closePath(); ctx.fill();
-    // wainscot stripe
-    ctx.fillStyle = shade(d.color, -0.32);
-    ctx.beginPath();
-    ctx.moveTo(W.x, W.y - 18); ctx.lineTo(S.x, S.y - 18);
-    ctx.lineTo(S.x, S.y - 14); ctx.lineTo(W.x, W.y - 14);
-    ctx.closePath(); ctx.fill();
+
+    // Millwork on the face that looks into the room: baseboard, wainscot
+    // panels, chair rail and crown molding.
+    const faces = [];
+    if (d.y === 0) faces.push([W, S, d.color, -0.08]);
+    if (d.x === 0 && d.y > 0) faces.push([S, E, d.color, -0.2]);
+    if (d.x === 0 && d.y === zone.h - 1) faces.push([W, S, d.color, -0.08]);
+    for (const [a, b, color, tone] of faces) {
+      const t = (amt) => shade(color, tone + amt);
+      const lerp = (k) => ({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k });
+      quad(a, b, 0, 7, t(-0.24));
+      quad(a, b, 7, 8, t(0.06));
+      quad(a, b, 8, 30, t(-0.06));
+      const p0 = lerp(0.12), p1 = lerp(0.88);
+      quad(p0, p1, 12, 26, t(-0.1));
+      quad(p0, p1, 25, 26, t(0.04));
+      quad(p0, p1, 12, 13, t(-0.16));
+      quad(a, b, 30, 33, t(0.08));
+      quad(a, b, 29, 30, t(-0.22));
+      quad(a, b, 70, 71, t(-0.18));
+      quad(a, b, 71, 78, t(0.07));
+      quad(a, b, 77, 78, t(0.14));
+    }
   }
 
   // Overhead icon: gold § = task giver, parchment dot = dialogue.

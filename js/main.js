@@ -21,6 +21,7 @@ import { canAccessBarMail, practiceInbox, billableMessageOpen } from './data/mai
 import { BAR_DRINKS, orderBarDrink, movementMultiplier, archiveDisbarredRun, readBillableBoard } from './lounge.js';
 import { appearanceLook, normalizeAppearance } from './data/appearance.js';
 import { mountAppearanceEditor } from './ui/appearance.js';
+import { mountArcade } from './ui/arcade.js';
 import { SIDEBAR_ROOM, SIDEBAR_TOPICS, sidebarTopic, saveSidebarDraft } from './data/sidebar.js';
 import { SCENARIOS, STREAK_HEAL } from './data/ethics.js';
 import { OFFICE_UPGRADES, APARTMENT_UPGRADES, bonuses } from './data/upgrades.js';
@@ -259,6 +260,7 @@ function updateQuickActions() {
   $('room-service').classList.toggle('hidden', !['sidebar','courtroom'].includes(state.zone));
   $('room-service').textContent = state.zone === 'sidebar' ? 'Order a drink' : 'Sleeping AI judge';
   $('room-board').classList.toggle('hidden', state.zone !== 'sidebar');
+  $('room-arcade').classList.toggle('hidden', state.zone !== 'sidebar');
 }
 
 // ---------------------------------------------------------------------------
@@ -278,6 +280,7 @@ function runAction(action, prop = null) {
     case 'sidebar_sit': sitInSidebar(prop); break;
     case 'bartender': openBartender(); break;
     case 'high_scores': openHighScores(); break;
+    case 'arcade': openArcade(); break;
     case 'judge': openJudgeStatus(); break;
     case 'flavor_coffee':
       drinkCoffee();
@@ -788,7 +791,7 @@ function openPanel(title) {
   if (docReview.active) stopDocumentReview(false);
   player?.stop();
   hideDialogue();
-  $('panel-inner').classList.remove('sidebar-panel');
+  $('panel-inner').classList.remove('sidebar-panel', 'arcade-panel');
   $('panel-title').textContent = title;
   $('panel-tabs').innerHTML = '';
   $('panel-body').innerHTML = '';
@@ -863,6 +866,14 @@ function openHighScores() {
   body.innerHTML = `<div class="help-lede"><h3>The hours outlive the office.</h3><p>Top 10 completed runs, ranked by billable time before disbarment. This board belongs to this browser; it is not an online or verified ranking.</p></div><p class="board-current">Current run: <b>${escapeHtml(state.name)}</b> · ${formatBillableTime(state.billableStudyMs)} · still practicing</p>`
     + (entries.length ? `<table class="score-table"><caption>Completed local runs</caption><thead><tr><th scope="col">Rank</th><th scope="col">Attorney</th><th scope="col">Billable time</th></tr></thead><tbody>${entries.map((entry,index) => `<tr><td>${index+1}</td><th scope="row">${escapeHtml(entry.name)}</th><td>${formatBillableTime(entry.billableMs)}</td></tr>`).join('')}</tbody></table>` : '<p class="board-empty">No completed runs yet. A score is recorded when an attorney is disbarred.</p>')
     + '<p class="board-note">The clock counts visible time inside an open ethics email or writing assignment, including its feedback. It pauses in the inbox list, other windows, and hidden tabs. Scores survive character resets; gold, inventory and progress do not. Shared scores will require the future server-backed multiplayer build.</p>';
+}
+
+// The Sidebar's arcade cabinet: a short runner played in the shared panel.
+function openArcade() {
+  if (state.zone !== 'sidebar') return;
+  const body = openPanel('Briefcase Dash — The Sidebar Arcade');
+  $('panel-inner').classList.add('arcade-panel');
+  mountArcade(body, { look: playerLook() });
 }
 
 function openJudgeStatus() {
@@ -1488,6 +1499,7 @@ $('room-action').addEventListener('click', () => {
 });
 $('room-service').addEventListener('click', () => state.zone === 'sidebar' ? openBartender() : openJudgeStatus());
 $('room-board').addEventListener('click', openHighScores);
+$('room-arcade').addEventListener('click', openArcade);
 
 $('email').addEventListener('keydown', (event) => {
   if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeEmail(); $('btn-mail').focus(); }
