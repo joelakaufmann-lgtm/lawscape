@@ -45,7 +45,7 @@ export class WorldRenderer {
     return screenToGrid(mx - this.cam.x, my - this.cam.y);
   }
 
-  render(zone, player, npcs, hover, t) {
+  render(zone, player, npcs, hover, t, remotes = []) {
     const { ctx } = this;
     const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
@@ -132,6 +132,9 @@ export class WorldRenderer {
       if (npc.def.visible && !npc.def.visible()) continue;
       drawables.push({ depth: npc.actor.x + npc.actor.y, kind: 'npc', npc });
     }
+    for (const remote of remotes) {
+      drawables.push({ depth: remote.actor.x + remote.actor.y, kind: 'remote', remote });
+    }
     drawables.push({ depth: player.x + player.y, kind: 'player' });
 
     drawables.sort((a, b) => a.depth - b.depth);
@@ -147,13 +150,48 @@ export class WorldRenderer {
         const s = gridToScreen(d.npc.actor.x, d.npc.actor.y);
         d.npc.actor.draw(ctx, s.x, s.y, t, false);
         this.drawIndicator(d.npc.def, s, t);
+      } else if (d.kind === 'remote') {
+        const s = gridToScreen(d.remote.actor.x, d.remote.actor.y);
+        d.remote.actor.draw(ctx, s.x, s.y, t, false);
       } else {
         const s = gridToScreen(player.x, player.y);
         player.draw(ctx, s.x, s.y, t, true);
       }
     }
 
+    // Name tags last, so another attorney's name is never hidden behind furniture.
+    for (const remote of remotes) this.drawNameTag(remote, gridToScreen(remote.actor.x, remote.actor.y));
+
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+
+  // Parchment tag above another player's head: display name plus status line.
+  drawNameTag(remote, s) {
+    const { ctx } = this;
+    const name = String(remote.name || 'Attorney');
+    const label = String(remote.label || '');
+    ctx.font = 'bold 11px Verdana, sans-serif';
+    const nameWidth = ctx.measureText(name).width;
+    ctx.font = '10px Verdana, sans-serif';
+    const labelWidth = label ? ctx.measureText(label).width : 0;
+    const width = Math.max(nameWidth, labelWidth) + 12;
+    const height = label ? 30 : 18;
+    const x = s.x - width / 2, y = s.y - 92 - height;
+    ctx.fillStyle = 'rgba(243,233,210,0.92)';
+    ctx.strokeStyle = PAL.ink;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.roundRect(x, y, width, height, 3); ctx.fill(); ctx.stroke();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = PAL.ink;
+    ctx.font = 'bold 11px Verdana, sans-serif';
+    ctx.fillText(name, s.x, y + 13);
+    if (label) {
+      ctx.fillStyle = '#52635a';
+      ctx.font = '10px Verdana, sans-serif';
+      ctx.fillText(label, s.x, y + 25);
+    }
+    ctx.textAlign = 'start';
   }
 
   // Surface detail in tile space: x runs along +u, y along +v, 32 units per tile.

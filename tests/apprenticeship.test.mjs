@@ -144,7 +144,7 @@ test('legacy saves migrate additively, retain identity/economy and reject future
   assert.equal(load(), true);
   assert.equal(state.name, 'Legacy Attorney'); assert.equal(state.gold, 120); assert.equal(state.ethics, 70);
   assert.deepEqual(state.upgrades, ['houseplants']);
-  assert.equal(state.schemaVersion, 5); assert.ok(state.runId); assert.deepEqual(state.apprenticeship.attempts, []);
+  assert.equal(state.schemaVersion, 6); assert.ok(state.runId); assert.deepEqual(state.apprenticeship.attempts, []);
   items.set('lawscape_save_v2', '{broken'); assert.equal(load(), false);
   items.set('lawscape_save_v2', '{"schemaVersion":99}'); assert.equal(load(), false);
   assert.equal(state.gold, 120);

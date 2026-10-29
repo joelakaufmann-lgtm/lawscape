@@ -1,0 +1,251 @@
+{
+  "schemaVersion": "lawscape.canada.review.v1",
+  "packId": "canada-pilot",
+  "packVersion": "canada-0.1.0-review",
+  "contentSha256": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645",
+  "exportedAt": "2026-09-29T06:13:21.362Z",
+  "reviewer": "QA reviewer",
+  "notice": "Proposed practitioner content-review decisions, not release approval or learner scores.",
+  "items": [
+    {
+      "id": "CA-ON-01",
+      "title": "The right person for the hearing",
+      "jurisdiction": "Ontario",
+      "status": "revise",
+      "note": "Synthetic QA note: verify the exception. <script>window.BAD=true</script>",
+      "updatedAt": "2026-09-29T06:13:21.257Z"
+    },
+    {
+      "id": "CA-ON-02",
+      "title": "Riley can help, but can Riley speak?",
+      "jurisdiction": "Ontario",
+      "status": "pending",
+      "note": "",
+      "updatedAt": null
+    },
+    {
+      "id": "CA-ON-03",
+      "title": "An exemption needs facts",
+      "jurisdiction": "Ontario",
+      "status": "pending",
+      "note": "",
+      "updatedAt": null
+    },
+    {
+      "id": "CA-ON-04",
+      "title": "A familiar face with a suspended licence",
+      "jurisdiction": "Ontario",
+      "status": "pending",
+      "note": "",
+      "updatedAt": null
+    },
+    {
+      "id": "CA-ON-05",
+      "title": "The application has already been filed",
+      "jurisdiction": "Ontario",
+      "status": "pending",
+      "note": "",
+      "updatedAt": null
+    },
+    {
+      "id": "CA-REF-01",
+      "title": "Expertise without a higher bill",
+      "jurisdiction": "British Columbia",
+      "status": "pending",
+      "note": "",
+      "updatedAt": null
+    },
+    {
+      "id": "CA-REF-02",
+      "title": "The conflict cannot be renamed",
+      "jurisdiction": "British Columbia",
+      "status": "pending",
+      "note": "",
+      "updatedAt": null
+    },
+    {
+      "id": "CA-REF-03",
+      "title": "The additional line item",
+      "jurisdiction": "British Columbia",
+      "status": "pending",
+      "note": "",
+      "updatedAt": null
+    },
+    {
+      "id": "CA-REF-04",
+      "title": "Consent is a real choice",
+      "jurisdiction": "British Columbia",
+      "status": "pending",
+      "note": "",
+      "updatedAt": null
+    },
+    {
+      "id": "CA-REF-05",
+      "title": "A draft missing two answers",
+      "jurisdiction": "British Columbia",
+      "status": "pending",
+      "note": "",
+      "updatedAt": null
+    },
+    {
+      "id": "CA-REC-01",
+      "title": "The recorder is ready before the client",
+      "jurisdiction": "British Columbia",
+      "status": "pending",
+      "note": "",
+      "updatedAt": null
+    },
+    {
+      "id": "CA-REC-02",
+      "title": "Another lawyer joins the call",
+      "jurisdiction": "British Columbia",
+      "status": "pending",
+      "note": "",
+      "updatedAt": null
+    },
+    {
+      "id": "CA-REC-03",
+      "title": "The explanation came two minutes later",
+      "jurisdiction": "British Columbia",
+      "status": "pending",
+      "note": "",
+      "updatedAt": null
+    },
+    {
+      "id": "CA-REC-04",
+      "title": "Notice is not a privacy clearance",
+      "jurisdiction": "British Columbia",
+      "status": "pending",
+      "note": "",
+      "updatedAt": null
+    },
+    {
+      "id": "CA-REC-05",
+      "title": "The client prefers notes",
+      "jurisdiction": "British Columbia",
+      "status": "pending",
+      "note": "",
+      "updatedAt": null
+    },
+    {
+      "id": "CA-SK-01",
+      "title": "Conversational English is not the instruction",
+      "jurisdiction": "Saskatchewan",
+      "status": "pending",
+      "note": "",
+      "updatedAt": null
+    },
+    {
+      "id": "CA-SK-02",
+      "title": "A bilingual greeting is not competence",
+      "jurisdiction": "Saskatchewan",
+      "status": "pending",
+      "note": "",
+      "updatedAt": null
+    },
+    {
+      "id": "CA-SK-03",
+      "title": "Which appearance matters?",
+      "jurisdiction": "Saskatchewan",
+      "status": "pending",
+      "note": "",
+      "updatedAt": null
+    },
+    {
+      "id": "CA-SK-04",
+      "title": "A late request needs assessment",
+      "jurisdiction": "Saskatchewan",
+      "status": "pending",
+      "note": "",
+      "updatedAt": null
+    },
+    {
+      "id": "CA-SK-05",
+      "title": "Counsel retained, order still missing",
+      "jurisdiction": "Saskatchewan",
+      "status": "pending",
+      "note": "",
+      "updatedAt": null
+    },
+    {
+      "id": "CA-UND-01",
+      "title": "A promise depends on the bank",
+      "jurisdiction": "British Columbia",
+      "status": "pending",
+      "note": "",
+      "updatedAt": null
+    },
+    {
+      "id": "CA-UND-02",
+      "title": "No signature button was pressed",
+      "jurisdiction": "British Columbia",
+      "status": "pending",
+      "note": "",
+      "updatedAt": null
+    },
+    {
+      "id": "CA-UND-03",
+      "title": "The client wants an early release",
+      "jurisdiction": "British Columbia",
+      "status": "pending",
+      "note": "",
+      "updatedAt": null
+    },
+    {
+      "id": "CA-UND-04",
+      "title": "A request is not agreement",
+      "jurisdiction": "British Columbia",
+      "status": "pending",
+      "note": "",
+      "updatedAt": null
+    },
+    {
+      "id": "CA-UND-05",
+      "title": "Performance after a breach",
+      "jurisdiction": "British Columbia",
+      "status": "pending",
+      "note": "",
+      "updatedAt": null
+    },
+    {
+      "id": "CA-EMAIL-ON",
+      "title": "Who is handling tomorrow’s LTB hearing?",
+      "jurisdiction": "Ontario",
+      "status": "pending",
+      "note": "",
+      "updatedAt": null
+    },
+    {
+      "id": "CA-EMAIL-REF",
+      "title": "Explain the referral without selling the fee",
+      "jurisdiction": "British Columbia",
+      "status": "pending",
+      "note": "",
+      "updatedAt": null
+    },
+    {
+      "id": "CA-EMAIL-REC",
+      "title": "A meeting without audio",
+      "jurisdiction": "British Columbia",
+      "status": "pending",
+      "note": "",
+      "updatedAt": null
+    },
+    {
+      "id": "CA-EMAIL-SK",
+      "title": "Confirm the French-language instructions",
+      "jurisdiction": "Saskatchewan",
+      "status": "pending",
+      "note": "",
+      "updatedAt": null
+    },
+    {
+      "id": "CA-EMAIL-UND",
+      "title": "The client wants the funds today",
+      "jurisdiction": "British Columbia",
+      "status": "pending",
+      "note": "",
+      "updatedAt": null
+    }
+  ]
+}

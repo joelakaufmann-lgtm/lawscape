@@ -17,6 +17,18 @@ export const MONEYBAGS_GRACE_PURCHASES = 2;
 export const LAWYER_ASSISTANCE_PHONE = '866-828-0022';
 export const LAWYER_ASSISTANCE_URL = 'https://nvbar.org/for-lawyers/resources/wellbeing/lcl/';
 
+// Linda's paid tips. Canada test play swaps in the pack's rule briefings.
+export const ETHICS_TIPS = [
+  'Client consent to a conflict usually must be informed and confirmed in writing. A signature without an explanation of material risks is not enough.',
+  'Advance fees belong in trust until earned. Calling money “nonrefundable” does not transform unearned money into the firm’s property.',
+  'Confidentiality is broader than attorney-client privilege. Do not use the two concepts as synonyms.',
+  'With an unrepresented person whose interests may conflict with your client’s, the safest legal advice is: get your own lawyer.',
+  'Candor to the tribunal can require correcting a false statement even when correction hurts the client’s position.',
+  'A subordinate lawyer remains responsible for a clear ethics violation even when a supervisor ordered it.',
+  'Reporting misconduct requires a substantial question about honesty, trustworthiness, or fitness—not every technical rule violation.',
+  'When client and third-party claims to funds conflict, keep the disputed portion separate while promptly releasing any undisputed portion.',
+];
+
 export function rileyHintEligible(upgrades) {
   return upgrades.includes('paralegal') && upgrades.includes('subscription');
 }

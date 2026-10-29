@@ -1,0 +1,10 @@
+{
+  "checks": [
+    "All five overview detail targets open with pointer input and close with Escape.",
+    "Keyboard activation and focus restoration work.",
+    "Context text can be edited using the shared editor.",
+    "Client export preserves edits and detail; template clears sample content; both reopen offline.",
+    "Working Save/reopen preserves edited text."
+  ],
+  "errors": []
+}

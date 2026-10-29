@@ -1,0 +1,64 @@
+Light.--bg: present (#fbfaf6)
+Light.--card: present (#fffdf7)
+Light.--card-strong: present (#f3e9d2)
+Light.--ink: present (#1f3a5f)
+Light.--muted: present (#50504c)
+Light.--faint: present (#59554c)
+Light.--line: present (rgba(31,58,95,.18))
+Light.--line-strong: present (rgba(31,58,95,.35))
+Light.--red: present (#6e2436)
+Light.--red-strong: present (#562033)
+Light.--red-wash: present (rgba(110,36,54,.06))
+Light.--tint: present (#f3e9d2)
+Light --ink on --bg: 10.99:1
+Light --ink on --card: 11.29:1
+Light --ink on --card-strong: 9.51:1
+Light --ink on --tint: 9.51:1
+Light --muted on --bg: 7.75:1
+Light --muted on --card: 7.96:1
+Light --muted on --card-strong: 6.71:1
+Light --muted on --tint: 6.71:1
+Light --faint on --bg: 7.11:1
+Light --faint on --card: 7.30:1
+Light --faint on --card-strong: 6.15:1
+Light --faint on --tint: 6.15:1
+Light --red on --bg: 10.21:1
+Light --red on --card: 10.49:1
+Light --red on --card-strong: 8.84:1
+Light --red on --tint: 8.84:1
+Light --red-strong on --bg: 12.19:1
+Light --red-strong on --card: 12.51:1
+Light --red-strong on --card-strong: 10.54:1
+Light --red-strong on --tint: 10.54:1
+Dark.--bg: present (#000000)
+Dark.--card: present (#111111)
+Dark.--card-strong: present (#171717)
+Dark.--ink: present (#f3e9d2)
+Dark.--muted: present (#c1bcae)
+Dark.--faint: present (#aca697)
+Dark.--line: present (rgba(243,233,210,.18))
+Dark.--line-strong: present (rgba(243,233,210,.35))
+Dark.--red: present (#d0b66d)
+Dark.--red-strong: present (#dfc77f)
+Dark.--red-wash: present (rgba(208,182,109,.12))
+Dark.--tint: present (#161616)
+Dark --ink on --bg: 17.40:1
+Dark --ink on --card: 15.64:1
+Dark --ink on --card-strong: 14.85:1
+Dark --ink on --tint: 14.99:1
+Dark --muted on --bg: 11.07:1
+Dark --muted on --card: 9.96:1
+Dark --muted on --card-strong: 9.45:1
+Dark --muted on --tint: 9.54:1
+Dark --faint on --bg: 8.66:1
+Dark --faint on --card: 7.78:1
+Dark --faint on --card-strong: 7.39:1
+Dark --faint on --tint: 7.46:1
+Dark --red on --bg: 10.59:1
+Dark --red on --card: 9.53:1
+Dark --red on --card-strong: 9.04:1
+Dark --red on --tint: 9.13:1
+Dark --red-strong on --bg: 12.61:1
+Dark --red-strong on --card: 11.34:1
+Dark --red-strong on --card-strong: 10.77:1
+Dark --red-strong on --tint: 10.87:1

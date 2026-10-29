@@ -1,0 +1,413 @@
+{
+  "schemaVersion": "legaldesign.build.v4",
+  "brief": {
+    "title": "Canada test pack \u2014 review overview",
+    "reader": "LawScape owner and collaborating Canadian practitioner",
+    "action": "Inspect all 30 exercises, record proposed edits and decide what requires revision before release.",
+    "purpose": "status",
+    "message": "The local test includes 25 questions and five emails; practitioner validation remains pending.",
+    "spine": "comparison",
+    "situation": "meeting",
+    "form": "one-page",
+    "sources": [
+      {
+        "id": "PACK",
+        "label": "Canada pilot pack.json and local integration",
+        "status": "supplied-unverified"
+      }
+    ],
+    "assumptions": [
+      "The user requested local game integration and the existing LawScape palette.",
+      "All people and records are original fictional examples."
+    ],
+    "gaps": [
+      "Canadian practitioner legal approval has not been obtained.",
+      "No French-language course, new maps, or continuing-matter engine is supplied in this pilot."
+    ]
+  },
+  "style": {
+    "source": "design-md",
+    "ref": "DESIGN.md"
+  },
+  "composition": {
+    "strategy": "composed",
+    "shape": "Review brief with a five-row curriculum table",
+    "rationale": "The equal five-question allocation and distinct email topics are most accurately compared in a table. Open narrative gives scope; two final cards distinguish limits and action. No spatial map suggests legal coverage outside the three provinces.",
+    "sections": [
+      {
+        "id": "overview",
+        "purpose": "Explain the completed test content and pending practitioner review.",
+        "unitIds": [
+          "title",
+          "context",
+          "question",
+          "answer",
+          "coverage",
+          "scope",
+          "action"
+        ],
+        "layout": {
+          "columns": 12,
+          "placements": [
+            {
+              "unitId": "title",
+              "row": 1,
+              "column": 1,
+              "span": 12
+            },
+            {
+              "unitId": "context",
+              "row": 2,
+              "column": 1,
+              "span": 12
+            },
+            {
+              "unitId": "question",
+              "row": 3,
+              "column": 1,
+              "span": 5
+            },
+            {
+              "unitId": "answer",
+              "row": 3,
+              "column": 6,
+              "span": 7
+            },
+            {
+              "unitId": "coverage",
+              "row": 4,
+              "column": 1,
+              "span": 12
+            },
+            {
+              "unitId": "scope",
+              "row": 5,
+              "column": 1,
+              "span": 6
+            },
+            {
+              "unitId": "action",
+              "row": 5,
+              "column": 7,
+              "span": 6
+            }
+          ]
+        }
+      }
+    ],
+    "templateRef": null
+  },
+  "overview": {
+    "sectionId": "overview",
+    "contextUnitIds": [
+      "context"
+    ],
+    "questionUnitId": "question",
+    "answerUnitId": "answer",
+    "topics": []
+  },
+  "claims": [
+    {
+      "id": "C-context",
+      "text": "The pilot adds original fictional exercises for Ontario, British Columbia and Saskatchewan to local LawScape.",
+      "kind": "material",
+      "sourceIds": [
+        "PACK"
+      ],
+      "placement": "surface",
+      "evidenceIds": [
+        "pack-detail"
+      ]
+    },
+    {
+      "id": "C-question",
+      "text": "What should the Canadian practitioner review before a wider release?",
+      "kind": "material",
+      "sourceIds": [
+        "PACK"
+      ],
+      "placement": "surface",
+      "evidenceIds": [
+        "pack-detail"
+      ]
+    },
+    {
+      "id": "C-answer",
+      "text": "All 25 proposed answer keys and five email rubrics. Source retrieval supports review; it does not constitute legal approval.",
+      "kind": "material",
+      "sourceIds": [
+        "PACK"
+      ],
+      "placement": "surface",
+      "evidenceIds": [
+        "pack-detail"
+      ]
+    },
+    {
+      "id": "C-coverage",
+      "text": "Five questions and one email cover each topic: Ontario representation, BC referrals, BC recording, Saskatchewan language rights, and BC commitments.",
+      "kind": "material",
+      "sourceIds": [
+        "PACK"
+      ],
+      "placement": "surface",
+      "evidenceIds": [
+        "pack-detail"
+      ]
+    },
+    {
+      "id": "C-scope",
+      "text": "English-language pilot. No AI grading or real email. Canadian test answers do not change Ethics, gold or question tiers. Continuing matters and new maps remain future work.",
+      "kind": "material",
+      "sourceIds": [
+        "PACK"
+      ],
+      "placement": "surface",
+      "evidenceIds": [
+        "pack-detail"
+      ]
+    },
+    {
+      "id": "C-action",
+      "text": "Open review.html to inspect every option, source and sample reply. Mark proposed ready, revise or hold; export notes as Markdown or JSON. In LawScape, select Canada \u00b7 TEST PACK.",
+      "kind": "material",
+      "sourceIds": [
+        "PACK"
+      ],
+      "placement": "surface",
+      "evidenceIds": [
+        "pack-detail"
+      ]
+    }
+  ],
+  "units": [
+    {
+      "id": "title",
+      "kind": "text",
+      "role": "title",
+      "claim": "Canada test pack \u2014 review overview",
+      "claimRefs": [
+        "C-context"
+      ],
+      "relationship": "comparison",
+      "candidates": [
+        "open narrative",
+        "aligned table"
+      ],
+      "placeholder": "Describe the review package and its scope.",
+      "variants": {
+        "a": {
+          "html": "<h1>Canada test pack \u2014 review overview</h1>",
+          "axis": "form",
+          "why": "Keep scope, quantities and required review visible.",
+          "encoding": "Reading order moves from scope to coverage to review action; table rows compare the five topics."
+        }
+      },
+      "evidence": [
+        "pack-detail"
+      ]
+    },
+    {
+      "id": "context",
+      "kind": "text",
+      "role": "summary",
+      "claim": "The pilot adds original fictional exercises for Ontario, British Columbia and Saskatchewan to local LawScape.",
+      "claimRefs": [
+        "C-context"
+      ],
+      "relationship": "comparison",
+      "candidates": [
+        "open narrative",
+        "aligned table"
+      ],
+      "placeholder": "Describe the review package and its scope.",
+      "variants": {
+        "a": {
+          "html": "<p>The pilot adds original fictional exercises for Ontario, British Columbia and Saskatchewan to local LawScape.</p>",
+          "axis": "form",
+          "why": "Keep scope, quantities and required review visible.",
+          "encoding": "Reading order moves from scope to coverage to review action; table rows compare the five topics."
+        }
+      },
+      "evidence": [
+        "pack-detail"
+      ]
+    },
+    {
+      "id": "question",
+      "kind": "card",
+      "role": "finding",
+      "claim": "What should the Canadian practitioner review before a wider release?",
+      "claimRefs": [
+        "C-question"
+      ],
+      "relationship": "comparison",
+      "candidates": [
+        "open narrative",
+        "aligned table"
+      ],
+      "placeholder": "Describe the review package and its scope.",
+      "variants": {
+        "a": {
+          "html": "<h2>Review question</h2><p>What should the Canadian practitioner review before a wider release?</p>",
+          "axis": "form",
+          "why": "Keep scope, quantities and required review visible.",
+          "encoding": "Reading order moves from scope to coverage to review action; table rows compare the five topics."
+        }
+      },
+      "evidence": [
+        "pack-detail"
+      ],
+      "detail": "pack-detail"
+    },
+    {
+      "id": "answer",
+      "kind": "card",
+      "role": "answer",
+      "claim": "All 25 proposed answer keys and five email rubrics. Source retrieval supports review; it does not constitute legal approval.",
+      "claimRefs": [
+        "C-answer"
+      ],
+      "relationship": "comparison",
+      "candidates": [
+        "open narrative",
+        "aligned table"
+      ],
+      "placeholder": "Describe the review package and its scope.",
+      "variants": {
+        "a": {
+          "html": "<h2>Ready for practitioner review</h2><p>All 25 proposed answer keys and five email rubrics. Source retrieval supports review; it does not constitute legal approval.</p>",
+          "axis": "form",
+          "why": "Keep scope, quantities and required review visible.",
+          "encoding": "Reading order moves from scope to coverage to review action; table rows compare the five topics."
+        }
+      },
+      "evidence": [
+        "pack-detail"
+      ],
+      "detail": "pack-detail"
+    },
+    {
+      "id": "coverage",
+      "kind": "table",
+      "role": "summary",
+      "claim": "Five questions and one email cover each topic: Ontario representation, BC referrals, BC recording, Saskatchewan language rights, and BC commitments.",
+      "claimRefs": [
+        "C-coverage"
+      ],
+      "relationship": "comparison",
+      "candidates": [
+        "open narrative",
+        "aligned table"
+      ],
+      "placeholder": "Describe the review package and its scope.",
+      "variants": {
+        "a": {
+          "html": "<table><thead><tr><th scope=\"col\">Topic and provincial setting</th><th scope=\"col\">Questions</th><th scope=\"col\">Email assignment</th></tr></thead><tbody><tr><td>Ontario \u00b7 LTB representation</td><td>5</td><td>Assign tomorrow\u2019s hearing</td></tr><tr><td>BC \u00b7 referrals</td><td>5</td><td>Explain the fee and seek instructions</td></tr><tr><td>BC \u00b7 recording</td><td>5</td><td>Respond to a preference for notes</td></tr><tr><td>Saskatchewan \u00b7 language rights</td><td>5</td><td>Implement French-language instructions</td></tr><tr><td>BC \u00b7 commitments</td><td>5</td><td>Handle an early-release request</td></tr></tbody></table>",
+          "axis": "form",
+          "why": "Keep scope, quantities and required review visible.",
+          "encoding": "Reading order moves from scope to coverage to review action; table rows compare the five topics."
+        }
+      },
+      "detail": "pack-detail",
+      "evidence": [
+        "pack-detail"
+      ]
+    },
+    {
+      "id": "scope",
+      "kind": "card",
+      "role": "scope",
+      "claim": "English-language pilot. No AI grading or real email. Canadian test answers do not change Ethics, gold or question tiers. Continuing matters and new maps remain future work.",
+      "claimRefs": [
+        "C-scope"
+      ],
+      "relationship": "comparison",
+      "candidates": [
+        "open narrative",
+        "aligned table"
+      ],
+      "placeholder": "Describe the review package and its scope.",
+      "variants": {
+        "a": {
+          "html": "<h2>Test boundaries</h2><p>English-language pilot. No AI grading or real email. Canadian test answers do not change Ethics, gold or question tiers. Continuing matters and new maps remain future work.</p>",
+          "axis": "form",
+          "why": "Keep scope, quantities and required review visible.",
+          "encoding": "Reading order moves from scope to coverage to review action; table rows compare the five topics."
+        }
+      },
+      "evidence": [
+        "pack-detail"
+      ],
+      "detail": "pack-detail"
+    },
+    {
+      "id": "action",
+      "kind": "card",
+      "role": "action",
+      "claim": "Open review.html to inspect every option, source and sample reply. Mark proposed ready, revise or hold; export notes as Markdown or JSON. In LawScape, select Canada \u00b7 TEST PACK.",
+      "claimRefs": [
+        "C-action"
+      ],
+      "relationship": "comparison",
+      "candidates": [
+        "open narrative",
+        "aligned table"
+      ],
+      "placeholder": "Describe the review package and its scope.",
+      "variants": {
+        "a": {
+          "html": "<h2>Your next step</h2><p>Open review.html to inspect every option, source and sample reply. Mark proposed ready, revise or hold; export notes as Markdown or JSON. In LawScape, select Canada \u00b7 TEST PACK.</p>",
+          "axis": "form",
+          "why": "Keep scope, quantities and required review visible.",
+          "encoding": "Reading order moves from scope to coverage to review action; table rows compare the five topics."
+        }
+      },
+      "detail": "pack-detail",
+      "evidence": [
+        "pack-detail"
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "pack-detail",
+      "cite": "Canada pilot version canada-0.1.0-review",
+      "locator": "pack.json: questions, emails, sources and limits; local integration modules",
+      "status": "supplied-unverified",
+      "sourceId": "PACK",
+      "claimRefs": [
+        "C-context",
+        "C-question",
+        "C-answer",
+        "C-coverage",
+        "C-scope",
+        "C-action"
+      ],
+      "detail": "Original synthetic curriculum and local test functionality. No practitioner has approved the answer key. Source-byte receipts establish file integrity only.",
+      "original": {
+        "availability": "unavailable",
+        "label": "Local source: pack.json and README.md in this package; no public release URL."
+      },
+      "popup": {
+        "type": "detail",
+        "title": "What the review package contains",
+        "lede": "Thirty original exercises, with a separate record of proposed reviewer decisions.",
+        "sections": [
+          {
+            "heading": "Inspect the complete content",
+            "body": "review.html shows every question, all four option explanations, five email prompts, fictional records, sample replies and human-review rubrics. QUESTIONS.md and EMAILS.md provide editable text copies. pack.json is the canonical curriculum source."
+          },
+          {
+            "heading": "Trace the authorities",
+            "body": "SOURCES.md identifies five official primary sources, retrieval dates and version limitations. Each exercise cites rule locators. The local originals and hashes are retained in sources/. The LSO Rule 3 page was inaccessible and is not an authority for this pack."
+          },
+          {
+            "heading": "Record a qualified decision",
+            "body": "The review page saves per-exercise decisions and notes in this browser and exports them as Markdown or JSON. Proposed ready is not release approval. The current pack remains unreviewed until the practitioner\u2019s changes and legal sign-off are recorded."
+          }
+        ]
+      }
+    }
+  ]
+}

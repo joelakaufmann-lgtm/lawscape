@@ -45,6 +45,7 @@ export const ZONES = {
     portals: [
       { x: 13, y: 2, label: 'Jim Hardsell’s Corner Office', to: 'corner_office' },
       { x: 13, y: 5, label: 'Linda Firestone’s Office', to: 'linda_office' },
+      { x: 13, y: 7, label: 'Associates’ Floor', to: 'associates', dest: { x: 16, y: 6 } },
       { x: 13, y: 9, label: 'Conference Room', to: 'conference_room' },
       { x: 6, y: 11, label: 'Leave the Office', travel: true },
     ],
@@ -219,6 +220,38 @@ export const ZONES = {
         look: { robotButler: true },
         icon: 'dot', talk: 'sidebar_host' },
     ],
+  },
+
+  // ------------------------------------------------------- ASSOCIATES' FLOOR
+  // Open-plan associate area shared by every attorney at the firm. Desks are
+  // claimed one at a time; the occupant's name appears on the brass plate.
+  associates: {
+    id: 'associates', name: 'Hardsell & Firestone — Associates’ Floor',
+    w: 18, h: 13, walls: 'wood', spawn: { x: 9, y: 11 },
+    tile(x, y) {
+      if (inRect(x, y, 2, 5, 15, 6)) return 'r';
+      return 'w';
+    },
+    props: [
+      ...[['A1', 2, 3], ['A2', 6, 3], ['A3', 10, 3], ['A4', 14, 3], ['B1', 2, 8], ['B2', 6, 8], ['B3', 10, 8], ['B4', 14, 8]]
+        .map(([deskId, x, y]) => ({
+          type: 'opendesk', x, y, deskId, seat: { x, y: y + 1 }, occupant: null, monitors: () => 1,
+          interact: { label: (prop) => prop.occupant ? `Open desk ${deskId} — ${prop.occupant}` : `Open desk ${deskId} — Sit down`, action: 'desk_sit' },
+        })),
+      { type: 'bookshelf', x: 16, y: 1, full: () => true,
+        interact: { label: 'Firm Library — Rule Library', action: 'rules' } },
+      { type: 'noticeboard', x: 4, y: 0 },
+      { type: 'wallclock', x: 9, y: 0 },
+      { type: 'coffeemachine', x: 1, y: 11 },
+      { type: 'readingtable', x: 12, y: 11 },
+      { type: 'plant', x: 1, y: 1 },
+      { type: 'plant', x: 16, y: 11 },
+    ],
+    portals: [
+      { x: 17, y: 6, label: 'Main Office', to: 'office', dest: { x: 12, y: 7 } },
+      { x: 9, y: 12, label: 'Leave the Associates’ Floor', travel: true },
+    ],
+    npcs: [],
   },
 
   // ---------------------------------------------------------------- APARTMENT

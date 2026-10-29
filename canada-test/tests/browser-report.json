@@ -1,0 +1,43 @@
+{
+  "at": "2026-09-29T06:13:13.378Z",
+  "site": "dist",
+  "checks": [
+    "Firm selector opens all 25 questions and five Canadian emails",
+    "All 25 wrong-answer paths render four explanations and preserve character metrics",
+    "Reload preserves completion and a new study round retains prior history",
+    "All five email drafts commit, reveal authored rubrics and preserve an ungraded response",
+    "Revision keeps the original and response export includes all test activity",
+    "Switching to existing packs restores the six legacy assignments and capstone without stale Canada content",
+    "Expanded two-rule briefing remains scrollable above an answerable mobile question",
+    "Practitioner notes persist safely and both exports contain version-bound decisions for all 30 items",
+    "Review filters, expanded email records and mobile layout work",
+    "Storage failure is visible in reviewer notes",
+    "Overview rendered in both themes at three desktop and two phone sizes, including simulated Retina",
+    "No JavaScript page errors during game, review or overview flows"
+  ],
+  "errors": [],
+  "screenshots": [
+    "game-canada-inbox.png",
+    "game-canada-question.png",
+    "game-canada-email.png",
+    "game-canada-mobile.png",
+    "game-canada-question-mobile.png",
+    "review-desktop.png",
+    "review-mobile.png",
+    "overview-1280-light.png",
+    "overview-1280-dark.png",
+    "overview-1440-light.png",
+    "overview-1440-dark.png",
+    "overview-2560-light.png",
+    "overview-2560-dark.png",
+    "overview-430-light.png",
+    "overview-430-dark.png",
+    "overview-390-light.png",
+    "overview-390-dark.png"
+  ],
+  "followUp": {
+    "at": "2026-09-29T14:42:58.607Z",
+    "check": "Null saved-review items recover to an empty review; new notes still save and reload.",
+    "errors": []
+  }
+}

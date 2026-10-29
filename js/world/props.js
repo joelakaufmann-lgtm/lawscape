@@ -683,6 +683,16 @@ export const PROPS = {
     },
   },
   paralegaldesk: { w: 2, h: 1, solid: true, draw(ctx,ox,oy) { workstation(ctx,ox,oy); } },
+  // Associates' Floor open desk: a plain workstation with a brass nameplate
+  // once a player has claimed it (prop.occupant is set by main.js).
+  opendesk: { w: 2, h: 1, solid: true, draw(ctx,ox,oy,prop) {
+    workstation(ctx,ox,oy,prop);
+    face(ctx,ox,oy,.8,.39,37,()=>{
+      roundRect(ctx,0,-4,26,5,1,prop.occupant?'#b69b58':'#8a7d63');
+      ctx.fillStyle='#423d32';ctx.font='4px Verdana';
+      ctx.fillText(String(prop.occupant||prop.deskId||'OPEN').toUpperCase().slice(0,10),3,0);
+    });
+  } },
   conftable: {
     w:3,h:2,solid:true,
     draw(ctx,ox,oy) {

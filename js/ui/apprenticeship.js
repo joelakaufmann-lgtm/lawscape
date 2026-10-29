@@ -1,6 +1,8 @@
-import { state, save } from '../state.js';
+import { state } from '../state.js';
+import { dispatch } from '../progress.js';
+import { now } from '../clock.js';
 import { DOCUMENT_PACKS, WRITING_TASKS, CAPSTONE, FIRM_PACKS, COSMETICS, TRAINING_JURISDICTION, evidenceAt } from '../data/apprenticeship.js';
-import { taskById, pendingAttempt, taskAttempts, returnedTasks, capstoneReady, saveDraft, commitWriting, settleReplies, submitReview, buyCosmetic, requestJurisdiction, requestIssueUrl } from '../apprenticeship.js';
+import { taskById, pendingAttempt, taskAttempts, returnedTasks, capstoneReady, requestIssueUrl } from '../apprenticeship.js';
 import { Actor } from '../entities/actor.js';
 import { appearanceLook } from '../data/appearance.js';
 import { mountAppearanceEditor } from './appearance.js';
@@ -56,8 +58,7 @@ export function createApprenticeshipUI({ beforeOpen, onChange, onPractice, onWri
     if (!isOpen()) previousFocus = document.activeElement;
     beforeOpen();
     view = next; selected = id;
-    state.apprenticeship.introduced = true;
-    save();
+    markIntroduced();
     modal.classList.remove('hidden');
     render();
     $('desk-close').focus();
@@ -67,6 +68,12 @@ export function createApprenticeshipUI({ beforeOpen, onChange, onPractice, onWri
     if (previousFocus?.isConnected) previousFocus.focus();
   }
   function isOpen() { return !modal.classList.contains('hidden'); }
+  function markIntroduced() {
+    if (state.apprenticeship.introduced) return;
+    state.apprenticeship.introduced = true;
+    dispatch({ type: 'apprenticeship_introduced' }).catch(() => {});
+  }
+  const fail = (id) => (error) => { const el = $(id); if (el) el.textContent = error.message; else notify(error.message); };
   function navigate(next, id = null) {
     if (next === 'writing' && (!writingEmbedded || !id)) { onWriting(id); return; }
     if (writingEmbedded && next !== 'writing') { onWritingExit(next,id); return; }
@@ -76,7 +83,7 @@ export function createApprenticeshipUI({ beforeOpen, onChange, onPractice, onWri
     modal.classList.add('hidden');
     host.appendChild(body);
     writingEmbedded = true; view = 'writing'; selected = id;
-    state.apprenticeship.introduced = true;
+    markIntroduced();
     render(); body.scrollTop = 0; body.focus();
   }
   function releaseWriting() {
@@ -135,21 +142,27 @@ export function createApprenticeshipUI({ beforeOpen, onChange, onPractice, onWri
         + note('Commit locks this reply. The partner returns in a few seconds. Gold reflects your checklist choices; the prose is for self-comparison.')
         + `<p id="writing-error" class="desk-error" role="alert"></p><button type="submit" ${pendingAttempt(state) ? 'disabled' : ''}>Commit reply & send to partner</button></form>`;
       const form = $('writing-form');
-      function persist() {
+      const draftAction = () => {
         const formData = new FormData(form);
-        saveDraft(state, task.id, { text: formData.get('text'), issue: formData.has('issue') ? Number(formData.get('issue')) : null, action: formData.has('action') ? Number(formData.get('action')) : null, evidence: formData.get('evidence') });
-        const saved = save();
-        const words = String(formData.get('text')).trim().split(/\s+/).filter(Boolean).length;
-        $('draft-status').textContent = `${words} words · ${saved ? 'Draft saved in this browser' : 'Session only — browser storage is unavailable'}`;
+        return { type: 'apprenticeship_save_draft', taskId: task.id, draft: { text: formData.get('text'), issue: formData.has('issue') ? Number(formData.get('issue')) : null, action: formData.has('action') ? Number(formData.get('action')) : null, evidence: formData.get('evidence') } };
+      };
+      function persist(coalesce = 400) {
+        const action = draftAction();
+        const words = String(action.draft.text).trim().split(/\s+/).filter(Boolean).length;
+        return dispatch(action, { coalesce }).then(
+          () => { const el = $('draft-status'); if (el) el.textContent = `${words} words · Draft saved`; },
+          () => { const el = $('draft-status'); if (el) el.textContent = `${words} words · Session only — the draft could not be saved`; },
+        );
       }
-      form.addEventListener('input', persist);
-      form.addEventListener('change', persist);
+      form.addEventListener('input', () => persist());
+      form.addEventListener('change', () => persist());
       form.addEventListener('submit', (event) => {
-        event.preventDefault(); persist();
-        try { commitWriting(state, task.id); save(); render(); onChange(); }
-        catch (error) { $('writing-error').textContent = error.message; }
+        event.preventDefault();
+        dispatch(draftAction()).then(() => dispatch({ type: 'apprenticeship_commit', taskId: task.id }))
+          .then(() => { render(); onChange(); })
+          .catch(fail('writing-error'));
       });
-      persist();
+      persist(0);
     }
     if (latest && !composing) {
       body.innerHTML += `<article class="sent-reply"><p class="desk-kicker">${latest.status === 'pending' ? 'Sent — awaiting partner review' : 'Your committed reply'} · Attempt ${attempts.length}</p><p class="preserve-lines">${e(latest.submission.text)}</p><dl><dt>Issue</dt><dd>${e(task.issues[latest.submission.issue])}</dd><dt>Next step</dt><dd>${e(task.actions[latest.submission.action])}</dd><dt>Evidence</dt><dd>${e(latest.submission.evidence)}</dd></dl></article>`;
@@ -182,9 +195,10 @@ export function createApprenticeshipUI({ beforeOpen, onChange, onPractice, onWri
     else {
       function persist() {
         const anchors = [...body.querySelectorAll('input[name="finding"]:checked')].map((input) => input.value);
-        state.apprenticeship.reviewDrafts[pack.id] = { selected: anchors, notes: $('review-notes').value };
-        save();
-        $('finding-count').textContent = `${anchors.length} passages flagged · draft saved`;
+        $('finding-count').textContent = `${anchors.length} passages flagged · saving…`;
+        dispatch({ type: 'apprenticeship_review_draft', packId: pack.id, selected: anchors, notes: $('review-notes').value }, { coalesce: 400 })
+          .then(() => { const el = $('finding-count'); if (el) el.textContent = `${anchors.length} passages flagged · draft saved`; })
+          .catch(() => { const el = $('finding-count'); if (el) el.textContent = `${anchors.length} passages flagged · not saved`; });
       }
       body.querySelectorAll('input[name="finding"], #review-notes').forEach((input) => input.addEventListener('input', persist));
     }
@@ -192,18 +206,17 @@ export function createApprenticeshipUI({ beforeOpen, onChange, onPractice, onWri
 
   function renderFirm(prefill = '') {
     body.innerHTML = section('Your firm · Jurisdictions', 'Choose your practice', 'Open a question pack in BarMail. Without a Work Phone, this takes you to your office computer.')
-      + `<div class="desk-card-grid">${PRACTICE_PACKS.map(pack => `<article class="desk-card"><span class="desk-badge">${pack.count} questions · Playable</span><h3>${e(pack.label)}</h3><p>${e(pack.note)}</p>${button('Play ' + pack.label, 'practice-pack', pack.id)}</article>`).join('')}</div>`
+      + `<div class="desk-card-grid">${PRACTICE_PACKS.map(pack => `<article class="desk-card"><span class="desk-badge">${pack.count} questions · ${pack.isTestPack ? 'TEST · review required' : 'Playable'}</span><h3>${e(pack.label)}</h3><p>${e(pack.note)}</p>${button('Play ' + pack.label, 'practice-pack', pack.id)}</article>`).join('')}</div>`
       + note('Unofficial educational questions with authored feedback. California and New York source checks: September 27, 2026. These question packs are separate from a full jurisdiction-specific firm curriculum.')
       + `<h3 class="desk-subheading">Your fictional firm apprenticeship</h3><p>State of Juris office policies govern six writing assignments, two synthetic files and one capstone. No real jurisdiction is implied.</p>${button('Open your journal', 'journal')}`
-      + `<details class="desk-disclosure"><summary>Future firm curricula and worldwide expansion</summary><p>${e(GLOBAL_CURRICULUM.mission)}</p><div class="global-regions">${GLOBAL_CURRICULUM.regions.map(region => `<article><h4>${e(region.name)}</h4><p>${region.places.map(e).join(' · ')}</p></article>`).join('')}</div><p>These are future targets. Canada is planned with province-specific review. A country may contain several legal systems.</p><div class="desk-card-grid">${FIRM_PACKS.filter(pack => pack.id !== 'juris').map(pack => `<article class="desk-card"><h4>${e(pack.label)} firm curriculum</h4><p>${e(pack.status)} · ${e(pack.note)}</p>${button('Request this curriculum', 'request-prefill', pack.label)}</article>`).join('')}</div></details>`
+      + `<details class="desk-disclosure"><summary>Future firm curricula and worldwide expansion</summary><p>${e(GLOBAL_CURRICULUM.mission)}</p><div class="global-regions">${GLOBAL_CURRICULUM.regions.map(region => `<article><h4>${e(region.name)}</h4><p>${region.places.map(e).join(' · ')}</p></article>`).join('')}</div><p>These are future targets. Canada has a local test pack above; practitioner review and a full continuing-matter curriculum remain pending. A country may contain several legal systems.</p><div class="desk-card-grid">${FIRM_PACKS.filter(pack => pack.id !== 'juris').map(pack => `<article class="desk-card"><h4>${e(pack.label)} firm curriculum</h4><p>${e(pack.status)} · ${e(pack.note)}</p>${button('Request this curriculum', 'request-prefill', pack.label)}</article>`).join('')}</div></details>`
       + `<form id="jurisdiction-form" class="request-form"><h3>Put a jurisdiction on the wish list</h3><p>Use an exact legal system, such as a U.S. state, England & Wales, Scotland or Northern Ireland. No real client facts or private documents.</p><label class="desk-label" for="request-label">Jurisdiction</label><input id="request-label" name="label" maxlength="80" required value="${e(prefill)}"><label class="desk-label" for="request-topic">What would you like to practice?</label><textarea id="request-topic" name="topic" maxlength="500" rows="2" required></textarea><label class="desk-label" for="request-help">Optional reviewer offer or public-source links</label><textarea id="request-help" name="help" maxlength="500" rows="2"></textarea><p class="desk-note">This saves a local request draft. You can then review it on GitHub and choose whether to submit it publicly. Nothing is sent automatically.</p><p id="request-error" class="desk-error" role="alert"></p><button type="submit">Save request locally</button></form>`
       + `<h3 class="desk-subheading">Your local request drafts</h3>${state.apprenticeship.requests.length ? state.apprenticeship.requests.map((request) => `<article class="desk-card"><h4>${e(request.label)}</h4><p>${e(request.topic)}</p><p class="desk-note">${e(request.status)}</p><a class="desk-link" href="${e(requestIssueUrl(request))}" target="_blank" rel="noopener noreferrer">Review draft on GitHub ↗</a></article>`).join('') : note('No requests saved yet. A repeat request for the same jurisdiction reopens the existing local entry.')}`;
     $('jurisdiction-form').addEventListener('submit', (event) => {
       event.preventDefault();
-      try {
-        requestJurisdiction(state, $('request-label').value, $('request-topic').value, $('request-help').value);
-        save(); renderFirm(); notify('Jurisdiction request saved locally. Nothing has been sent.');
-      } catch (error) { $('request-error').textContent = error.message; }
+      dispatch({ type: 'apprenticeship_request_jurisdiction', label: $('request-label').value, topic: $('request-topic').value, help: $('request-help').value })
+        .then(() => { renderFirm(); notify('Jurisdiction request saved locally. Nothing has been sent.'); })
+        .catch(fail('request-error'));
     });
   }
 
@@ -217,12 +230,12 @@ export function createApprenticeshipUI({ beforeOpen, onChange, onPractice, onWri
     mountAppearanceEditor($('wardrobe-appearance'), {
       prefix: 'wardrobe', read: () => state, equipped: () => state.apprenticeship.equipped,
       onChange: (key, value) => {
-        state[key] = value;
-        if (key === 'tieColor') state.apprenticeship.equipped = state.apprenticeship.equipped.filter((id) => id !== 'tie-brass');
-        save(); onChange();
-        // Keep accessory button labels in sync without remounting the editor.
-        const tie = body.querySelector('[data-action="equip"][data-value="tie-brass"]');
-        if (tie) tie.textContent = state.apprenticeship.equipped.includes('tie-brass') ? 'Unequip' : 'Equip';
+        dispatch({ type: 'set_appearance', key, value }).then(() => {
+          onChange();
+          // Keep accessory button labels in sync without remounting the editor.
+          const tie = body.querySelector('[data-action="equip"][data-value="tie-brass"]');
+          if (tie) tie.textContent = state.apprenticeship.equipped.includes('tie-brass') ? 'Unequip' : 'Equip';
+        }).catch((error) => notify(error.message));
       },
     });
   }
@@ -242,19 +255,17 @@ export function createApprenticeshipUI({ beforeOpen, onChange, onPractice, onWri
     else if (action === 'request-prefill') { renderFirm(value); $('request-label').focus(); }
     else if (action === 'revise') {
       const previous = taskAttempts(state, value).at(-1);
-      saveDraft(state, value, { ...previous.submission }); save(); render();
+      dispatch({ type: 'apprenticeship_save_draft', taskId: value, draft: { ...previous.submission } }).then(render).catch((error) => notify(error.message));
     } else if (action === 'review') {
-      try {
-        const selectedAnchors = [...body.querySelectorAll('input[name="finding"]:checked')].map((input) => input.value);
-        submitReview(state, value, selectedAnchors, $('review-notes').value); save(); render(); onChange();
-      } catch (error) { $('review-error').textContent = error.message; }
+      const selectedAnchors = [...body.querySelectorAll('input[name="finding"]:checked')].map((input) => input.value);
+      dispatch({ type: 'apprenticeship_submit_review', packId: value, selected: selectedAnchors, notes: $('review-notes').value })
+        .then(() => { render(); onChange(); })
+        .catch(fail('review-error'));
     } else if (action === 'buy') {
-      try { buyCosmetic(state, value); save(); onChange(); render(); }
-      catch (error) { notify(error.message); }
+      dispatch({ type: 'apprenticeship_buy_cosmetic', id: value }).then(() => { onChange(); render(); }).catch((error) => notify(error.message));
     } else if (action === 'equip' && state.apprenticeship.cosmetics.includes(value)) {
-      const worn = state.apprenticeship.equipped;
-      state.apprenticeship.equipped = worn.includes(value) ? worn.filter((id) => id !== value) : [...worn, value];
-      save(); onChange(); render();
+      const worn = !state.apprenticeship.equipped.includes(value);
+      dispatch({ type: 'apprenticeship_equip', id: value, worn }).then(() => { onChange(); render(); }).catch((error) => notify(error.message));
     }
   });
   document.querySelectorAll('[data-desk-tab]').forEach((tab) => tab.addEventListener('click', () => navigate(tab.dataset.deskTab)));
@@ -268,19 +279,27 @@ export function createApprenticeshipUI({ beforeOpen, onChange, onPractice, onWri
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
   });
 
-  function tick(now = Date.now()) {
-    if (now - lastTick < 500) return;
-    lastTick = now;
-    const delivered = settleReplies(state, now);
-    if (delivered.length) {
-      save(); onChange();
-      notify(`${taskById(delivered[0].taskId).partner} replied · +${delivered[0].result.gold} gold`);
-      if ((isOpen() || writingEmbedded) && (view === 'journal' || (view === 'writing' && (!selected || delivered.some((a) => a.taskId === selected))))) render();
-      // Re-enable dependent actions without discarding text entered while waiting.
-      body.querySelectorAll('[data-action="review"], #writing-form button[type="submit"]').forEach((el) => { el.disabled = false; });
-    }
-    const pending = pendingAttempt(state);
-    $('quest-status').textContent = pending ? 'Partner reviewing your reply…' : delivered.length ? 'Partner reply received · Open Journal' : `First firm day · ${returnedTasks(state).length}/6 replies · Open Journal`;
+  // Partner replies arrive from the reducer (any action settles due replies).
+  function handleDelivered(delivered) {
+    if (!delivered.length) return;
+    onChange();
+    notify(`${taskById(delivered[0].taskId).partner} replied · +${delivered[0].result.gold} gold`);
+    if ((isOpen() || writingEmbedded) && (view === 'journal' || (view === 'writing' && (!selected || delivered.some((a) => a.taskId === selected))))) render();
+    // Re-enable dependent actions without discarding text entered while waiting.
+    body.querySelectorAll('[data-action="review"], #writing-form button[type="submit"]').forEach((el) => { el.disabled = false; });
+    $('quest-status').textContent = 'Partner reply received · Open Journal';
   }
-  return { open, close, isOpen, tick, embedWriting, releaseWriting };
+  let settling = false;
+  function tick(nowMs = now()) {
+    if (nowMs - lastTick < 500) return;
+    lastTick = nowMs;
+    const pending = pendingAttempt(state);
+    if (pending && pending.replyAt <= nowMs && !settling) {
+      settling = true;
+      dispatch({ type: 'settle' }, { persist: true }).catch(() => {}).finally(() => { settling = false; });
+      return;
+    }
+    $('quest-status').textContent = pending ? 'Partner reviewing your reply…' : `First firm day · ${returnedTasks(state).length}/6 replies · Open Journal`;
+  }
+  return { open, close, isOpen, tick, embedWriting, releaseWriting, handleDelivered };
 }

@@ -29,6 +29,13 @@ explains coverage and source-review limits.
 Without a Work Phone, a catalog Play button takes you to the office computer.
 With the upgrade, you can open BarMail in any location.
 
+This local build also offers **Canada · TEST PACK**, with 25 questions and five
+email assignments awaiting practitioner review. All 25 are available at every
+level and are excluded from mixed practice. Their answers do not change Ethics,
+gold or streaks. Choose **All mail** or **Writing assignments** to open the five
+emails. Draft, commit, compare the authored guidance, and export your responses
+from a committed email. [Open the practitioner review package](../canada-test/review.html).
+
 ## Move and explore
 
 Click or tap a floor tile to walk. Select a highlighted person or object to walk
@@ -82,6 +89,31 @@ Progress saves automatically in this browser. Continue returns to that save.
 There is no account or cross-device sync. Private browsing, clearing storage or
 using a different hostname can leave you without the previous save. A local-file
 save does not automatically move to the GitHub site.
+
+## Playing online
+
+The firm also runs an invite-only online build on Cloudflare. When you open
+that site, the title screen shows **Play online · invite only**. Signing in
+sends a one-time code to your invited email; nothing else is collected.
+
+- Your online attorney lives on the firm's server, separate from any local
+  save. The first time you join, the creator can start from your local
+  attorney's name and look, but never from local gold, Ethics or history.
+- Gold, Ethics, streaks, upgrades, writing assignments and billable time are
+  settled by the server. If your connection drops mid-action, the action is
+  retried or shown as failed; it is never applied twice.
+- Everyone signed in appears in the same rooms. Walk to the **Associates'
+  Floor** from the main office or the travel menu, sit at an open desk to
+  claim it, and open BarMail or the active files from the desk. The brass
+  plate shows who holds each desk; a status tag above each attorney shows
+  what they are doing, built from game events rather than typed text.
+- **Who's in** (the HUD button or the `O` key) lists everyone online, where
+  they are, their desk and their status. The firm holds ten attorneys.
+- Signing in from a second tab or device moves your attorney there and ends
+  the first session. If your sign-in expires, the game asks you to sign in
+  again; nothing is lost.
+- Chat, the shared billable-hours board and labeled AI agents are not part of
+  this pilot. Sidebar table notes stay private to your account.
 
 Use **BarMail → Email HR · Report a bug** to prepare a report. Review and submit
 it yourself on GitHub; the game sends nothing automatically. Avoid client facts

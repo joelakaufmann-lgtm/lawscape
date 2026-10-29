@@ -11,3 +11,5 @@ media/lawscape-teaser-15s.mp4
 media/lawscape-teaser-poster.jpg
 media/release-0.5/work/
 release/
+.wrangler/
+.dev.vars

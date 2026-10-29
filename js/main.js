@@ -3,8 +3,14 @@
 // ethics minigame, document review, shops, rest, rule research, travel, and
 // disbarment.
 
-import { state, save, load, hasSave, reset,
-         hasUpgrade, maxEthics, healEthics, damageEthics } from './state.js';
+import { state, save, load, hasSave, reset, hasUpgrade, maxEthics, readLocalSeed } from './state.js';
+import { now } from './clock.js';
+import { dispatch, recordStudy, configureProgress, flushStudy, adoptAccountState } from './progress.js';
+import { tipPool, docReviewActive } from './economy.js';
+import { serverPossible, detectServer, fetchSession, goToLogin, createAccountTransport, createPresenceClient } from './online/client.js';
+import { newRoom, applyRoomMessage, playersInZone, deskOccupant } from './online/room.js';
+import { deriveStatus, deskSeats } from './online/protocol.js';
+import { setOnlineStatus, hideOnlineStatus, renderRoster } from './ui/online.js';
 import { ZONES } from './world/zones.js';
 import { PROPS } from './world/props.js';
 import { PAL } from './engine/palette.js';
@@ -17,36 +23,31 @@ import { showDialogue, hideDialogue, dialogueOpen } from './ui/dialogue.js';
 import { createApprenticeshipUI, escapeHtml } from './ui/apprenticeship.js';
 import { pendingAttempt, taskAttempts, capstoneReady } from './apprenticeship.js';
 import { WRITING_TASKS, CAPSTONE } from './data/apprenticeship.js';
-import { canAccessBarMail, practiceInbox, billableMessageOpen } from './data/mail.js';
-import { BAR_DRINKS, orderBarDrink, movementMultiplier, archiveDisbarredRun, readBillableBoard } from './lounge.js';
+import { ALL_MAIL_SCENARIOS, canAccessBarMail, practiceInbox, billableMessageOpen } from './data/mail.js';
+import { BAR_DRINKS, movementMultiplier, archiveDisbarredRun, readBillableBoard } from './lounge.js';
 import { appearanceLook, normalizeAppearance } from './data/appearance.js';
 import { mountAppearanceEditor } from './ui/appearance.js';
 import { mountArcade } from './ui/arcade.js';
-import { SIDEBAR_ROOM, SIDEBAR_TOPICS, sidebarTopic, saveSidebarDraft } from './data/sidebar.js';
-import { SCENARIOS, STREAK_HEAL } from './data/ethics.js';
-import { OFFICE_UPGRADES, APARTMENT_UPGRADES, bonuses } from './data/upgrades.js';
+import { SIDEBAR_ROOM, SIDEBAR_TOPICS, sidebarTopic } from './data/sidebar.js';
+import { OFFICE_UPGRADES, APARTMENT_UPGRADES } from './data/upgrades.js';
 import { RULE_LIBRARY } from './data/rules.js';
 import { PRACTICE_PACKS } from './data/practice-packs.js';
+import { CANADA_PACK } from './data/canada.js';
+import { canadaProgress } from './canada.js';
+import { renderCanadaEmail, canadaRulesHtml } from './ui/canada.js';
 import {
-  COFFEE_ETHICS_RESTORE,
   APARTMENT_FOOD_COST,
-  RAMEN_ETHICS_RESTORE,
-  COOKED_MEAL_ETHICS_RESTORE,
   DOC_REVIEW_CYCLE_MS,
   DOC_REVIEW_REWARD,
   LINDA_TIP_COST,
   RILEY_HINT_COST,
   WHISKEY_ETHICS_DAMAGE,
-  WHISKEY_SLOW_MS,
   MONEYBAGS_SAFE_GOLD,
   MONEYBAGS_ETHICS_DAMAGE,
-  MONEYBAGS_GRACE_PURCHASES,
   LAWYER_ASSISTANCE_PHONE,
   LAWYER_ASSISTANCE_URL,
   formatBillableTime,
-  moneybagsAuditTriggered,
   rileyHintEligible,
-  wrongAnswerDamage,
 } from './data/work.js';
 import {
   GAME_VERSION,
@@ -70,19 +71,29 @@ let npcs = [];
 let hover = null;         // { tiles, label, run } — current mouse target
 let clickFx = null;       // { x, y, at } — OSRS yellow X on click
 let inGame = false;
-const docReview = { active: false, cycleStartedAt: 0 };
+const docReview = { active: false, settling: false };
 const PLAYER_BASE_SPEED = 4;
 let watchReturnPos = null;
-let billableUnsavedMs = 0;
+let claimedDesk = null;   // deskId while seated at an Associates' Floor desk
+let online = null;        // { client, room, remotes: Map<pid, {actor, record}>, status } while playing online
+let creatorMode = 'solo'; // which account the attorney creator will write to
+let lastStatusAt = 0;
+
+// Progress actions resolve through the shared reducer (solo) or the account
+// service (online). Errors carry the player-facing message.
+function act(action, options) {
+  return dispatch(action, options).then((envelope) => { updateHUD(); return envelope; }, (error) => { toast(error.message); throw error; });
+}
 
 const desk = createApprenticeshipUI({
   beforeOpen: () => { closeEmail(); $('panel').classList.add('hidden'); hideDialogue(); stopDocumentReview(false); player?.stop(); },
-  onChange: () => { if (player) player.look = playerLook(); updateHUD(); if (mailMode === 'inbox' && !$('email').classList.contains('hidden')) renderInbox(); },
+  onChange: () => { if (player) player.look = playerLook(); updateHUD(); sendLook(); if (mailMode === 'inbox' && !$('email').classList.contains('hidden')) renderInbox(); },
   onPractice: (pack) => {
     if (!inGame) return;
-    state.practicePack = pack;
-    if (!canAccessBarMail(state)) enterZone('office');
-    save(); openEmail('practice');
+    act({ type: 'set_practice_pack', id: pack }).then(() => {
+      if (!canAccessBarMail(state, !!claimedDesk)) enterZone('office');
+      openEmail(pack === 'canada-test' ? 'all' : 'practice');
+    }).catch(() => {});
   },
   onWriting: (id) => openEmail('writing', id),
   onWritingExit: (next,id) => { closeEmail(); desk.open(next,id); },
@@ -92,6 +103,15 @@ const desk = createApprenticeshipUI({
 function playerLook() {
   return appearanceLook(state, state.apprenticeship.equipped);
 }
+
+// Online presence hooks: solo play ignores them.
+function onlineSitRequest(deskId) {
+  if (!online || !online.client.connected) return false;
+  online.client.sendSit(deskId);
+  toast('Claiming the desk…');
+  return true;
+}
+function onlineStandRequest() { online?.client.sendStand(); }
 
 function currentZone() { return ZONES[state.zone] || ZONES.office; }
 
@@ -120,6 +140,7 @@ function enterZone(id, pos = null) {
   if (docReview.active) stopDocumentReview(false);
   stopWatchingTV();
   state.zone = id;
+  dispatch({ type: 'set_zone', zone: id }, { persist: false }).catch(() => {});
   zone = currentZone();
   const p = pos || zone.spawn;
   state.pos = { x: p.x, y: p.y };
@@ -127,10 +148,12 @@ function enterZone(id, pos = null) {
   player.x = p.x;
   player.y = p.y;
   buildNpcs();
+  applyDeskOccupancy();
   setZoneName(zone.name);
   updateQuickActions();
   hover = null;
   hoverLabel(null);
+  online?.client.sendZone(id, p.x, p.y);
   save();
 }
 
@@ -169,7 +192,7 @@ function targetAt(mx, my) {
           for (let xx = prop.x; xx < prop.x + def.w; xx++) tiles.push({ x: xx, y: yy });
         return {
           tiles,
-          label: prop.interact.label,
+          label: typeof prop.interact.label === 'function' ? prop.interact.label(prop) : prop.interact.label,
           approach: { x: cx, y: cy },
           run: () => runAction(prop.interact.action, prop),
         };
@@ -231,8 +254,14 @@ canvas.addEventListener('click', (e) => {
   }
   const path = findPath(isWalkable, zone.w, zone.h, player.tileX, player.tileY, dest.x, dest.y);
   if (!path) { toast("You can't reach that."); return; }
-  player.setPath(path, run ? () => run() : null);
+  walkTo(path, run ? () => run() : null);
 });
+
+// Every local walk also tells the room where this attorney is heading.
+function walkTo(path, onArrive = null) {
+  player.setPath(path, onArrive);
+  online?.client.sendMove(path);
+}
 
 function overlayOpen() {
   return desk.isOpen() || !$('email').classList.contains('hidden')
@@ -245,15 +274,15 @@ function moveBy(dx, dy) {
   if (['watching', 'sitting'].includes(player.activity)) stopWatchingTV();
   const dest = { x: player.tileX + dx, y: player.tileY + dy };
   if (!isWalkable(dest.x, dest.y)) return;
-  player.setPath([dest]);
+  walkTo([dest]);
 }
 
 function updateQuickActions() {
   const mail = $('btn-mail');
   if (!mail) return;
-  const access = canAccessBarMail(state);
+  const access = canAccessBarMail(state, !!claimedDesk);
   mail.disabled = !access;
-  mail.title = hasUpgrade('work_phone') ? 'Open BarMail on your work phone (B)' : access ? 'Open BarMail on your office computer (B)' : 'Buy the Work Phone to use BarMail outside the office';
+  mail.title = hasUpgrade('work_phone') ? 'Open BarMail on your work phone (B)' : claimedDesk ? 'Open BarMail at your open desk (B)' : access ? 'Open BarMail on your office computer (B)' : 'Buy the Work Phone to use BarMail outside the office';
   const room = $('room-action');
   room.classList.toggle('hidden', !['sidebar', 'courtroom'].includes(state.zone));
   room.textContent = state.zone === 'sidebar' ? 'The Sidebar · Table notes' : 'Talk to Derek Balam';
@@ -261,6 +290,7 @@ function updateQuickActions() {
   $('room-service').textContent = state.zone === 'sidebar' ? 'Order a drink' : 'Sleeping AI judge';
   $('room-board').classList.toggle('hidden', state.zone !== 'sidebar');
   $('room-arcade').classList.toggle('hidden', state.zone !== 'sidebar');
+  $('room-roster').classList.toggle('hidden', !online);
 }
 
 // ---------------------------------------------------------------------------
@@ -278,6 +308,7 @@ function runAction(action, prop = null) {
     case 'wardrobe': openWardrobe(); break;
     case 'sidebar_chat': openSidebar(prop?.topic); break;
     case 'sidebar_sit': sitInSidebar(prop); break;
+    case 'desk_sit': sitAtDesk(prop); break;
     case 'bartender': openBartender(); break;
     case 'high_scores': openHighScores(); break;
     case 'arcade': openArcade(); break;
@@ -285,8 +316,8 @@ function runAction(action, prop = null) {
     case 'flavor_coffee':
       drinkCoffee();
       break;
-    case 'eat_ramen': eatApartmentFood('Ramen Noodles', RAMEN_ETHICS_RESTORE); break;
-    case 'cook_meal': eatApartmentFood('Home-Cooked Meal', COOKED_MEAL_ETHICS_RESTORE); break;
+    case 'eat_ramen': eatApartmentFood('ramen'); break;
+    case 'cook_meal': eatApartmentFood('meal'); break;
     case 'watch_tv': watchTV(); break;
     case 'whiskey': offerWhiskey(); break;
     case 'moneybags_safe': openMoneybagsSafe(); break;
@@ -372,17 +403,6 @@ function lizLines() {
   return lines;
 }
 
-const ETHICS_TIPS = [
-  'Client consent to a conflict usually must be informed and confirmed in writing. A signature without an explanation of material risks is not enough.',
-  'Advance fees belong in trust until earned. Calling money “nonrefundable” does not transform unearned money into the firm’s property.',
-  'Confidentiality is broader than attorney-client privilege. Do not use the two concepts as synonyms.',
-  'With an unrepresented person whose interests may conflict with your client’s, the safest legal advice is: get your own lawyer.',
-  'Candor to the tribunal can require correcting a false statement even when correction hurts the client’s position.',
-  'A subordinate lawyer remains responsible for a clear ethics violation even when a supervisor ordered it.',
-  'Reporting misconduct requires a substantial question about honesty, trustworthiness, or fitness—not every technical rule violation.',
-  'When client and third-party claims to funds conflict, keep the disputed portion separate while promptly releasing any undisputed portion.',
-];
-
 function lindaAside() {
   const lines = [
     'I sure could use a vacation.',
@@ -429,14 +449,10 @@ function talkToLinda(def) {
       {
         label: `Pay ${LINDA_TIP_COST} gold for a tip`,
         fn: () => {
-          if (pendingAttempt(state)) { toast('Wait for the partner reply before making purchases.'); return; }
-          if (state.gold < LINDA_TIP_COST) return;
-          state.gold -= LINDA_TIP_COST;
-          state.tipsPurchased++;
-          save();
-          updateHUD();
-          const tip = ETHICS_TIPS[Math.floor(Math.random() * ETHICS_TIPS.length)];
-          showDialogue({ name: 'Linda Firestone — Ethics Tip', text: tip });
+          act({ type: 'buy_tip' }).then(({ result }) => {
+            const tip = tipPool(state)[result.tipIndex];
+            showDialogue({ name: result.source === 'canada' ? 'Linda — Canada test guidance · review required' : 'Linda Firestone — US-source Ethics Tip', text: tip });
+          }).catch(() => {});
         },
       },
       { label: 'Let her work' },
@@ -452,6 +468,9 @@ function openTravelMenu() {
   const choices = [];
   if (state.zone !== 'office') {
     choices.push({ label: 'Go to the Law Office', fn: () => enterZone('office') });
+  }
+  if (state.zone !== 'associates') {
+    choices.push({ label: 'Go to the Associates’ Floor', fn: () => enterZone('associates') });
   }
   if (state.zone !== 'apartment') {
     choices.push({ label: 'Go to the Apartment', fn: () => enterZone('apartment') });
@@ -482,13 +501,7 @@ function billableStudyActive() {
 
 function trackBillableStudy(dt) {
   if (!billableStudyActive()) return;
-  const elapsedMs = dt * 1000;
-  state.billableStudyMs = (state.billableStudyMs || 0) + elapsedMs;
-  billableUnsavedMs += elapsedMs;
-  if (billableUnsavedMs >= 5_000) {
-    billableUnsavedMs = 0;
-    save();
-  }
+  recordStudy(dt * 1000);
 }
 
 function currentDifficulty() {
@@ -502,7 +515,7 @@ const VALID_PACKS = new Set(PRACTICE_PACKS.map(pack => pack.id));
 let mailMode = 'inbox', mailFolder = 'all', writingTaskId = null, questionAnswered = false;
 
 function openEmail(folder = 'all', taskId = null) {
-  if (!canAccessBarMail(state)) {
+  if (!canAccessBarMail(state, !!claimedDesk)) {
     toast('BarMail is on your office computer. The Work Phone unlocks access everywhere.');
     return;
   }
@@ -510,8 +523,8 @@ function openEmail(folder = 'all', taskId = null) {
   desk.close(); desk.releaseWriting(); hideDialogue(); player?.stop();
   $('panel').classList.add('hidden');
   $('email').classList.remove('hidden');
-  $('email-appname').textContent = hasUpgrade('work_phone') && state.zone !== 'office'
-    ? 'BarMail — Work Phone' : 'BarMail — Office Computer';
+  $('email-appname').textContent = state.zone === 'associates' && claimedDesk ? `BarMail — Open Desk ${claimedDesk}`
+    : hasUpgrade('work_phone') && state.zone !== 'office' ? 'BarMail — Work Phone' : 'BarMail — Office Computer';
   mailFolder = folder;
   mailMode = taskId ? 'writing' : 'inbox';
   writingTaskId = taskId;
@@ -521,35 +534,38 @@ function openEmail(folder = 'all', taskId = null) {
   $('email-inbox').classList.toggle('hidden', !!taskId);
   if (taskId) {
     $('email-writing-body').classList.remove('hidden');
-    desk.embedWriting($('email-writing-body'),taskId);
+    if (CANADA_PACK.emails.some(task => task.id === taskId)) renderCanadaEmail($('email-writing-body'), taskId, state, () => openEmail('all'));
+    else { $('email-writing-body').replaceChildren(); desk.embedWriting($('email-writing-body'),taskId); }
   } else { renderInbox(); $('email-inbox-open').focus(); }
   hoverLabel(null);
 }
 
 function renderInbox() {
-  const pool = practiceInbox(state,SCENARIOS);
+  const pool = practiceInbox(state,ALL_MAIL_SCENARIOS);
+  const isCanada = state.practicePack === 'canada-test';
+  const writingTasks = isCanada ? CANADA_PACK.emails.map(task => ({...task, partner: task.fromName, skill: task.jurisdiction})) : [...WRITING_TASKS,CAPSTONE];
   const showPractice = mailFolder !== 'writing', showWriting = mailFolder !== 'practice';
   const e = escapeHtml;
   $('email-inbox').innerHTML = `<header class="mail-inbox-heading"><div><span class="mail-eyebrow">HARDSELL &amp; FIRESTONE · INTERNAL MAIL</span><h2>${showPractice && showWriting ? 'Your inbox' : showWriting ? 'Writing assignments' : 'Ethics practice inbox'}</h2><p>Open a subject line to read and reply. All senders and correspondence are synthetic.</p></div><span class="mail-device">${hasUpgrade('work_phone') ? 'Work phone connected' : 'Office terminal'}</span></header>`
     + (pendingAttempt(state) ? '<p class="mail-notice">A partner reply is pending. You can read your mail; another graded submission waits for that reply.</p>' : '')
-    + (showWriting ? `<h3 class="mail-group-title">Partner correspondence · Writing</h3><div class="mail-list">${[...WRITING_TASKS,CAPSTONE].map((task) => {
-      const latest = taskAttempts(state,task.id).at(-1);
+    + (isCanada ? '<p class="mail-notice canada-banner"><b>CANADA TEST PACK · Practitioner review required.</b> Ontario, BC and Saskatchewan exercises. All 25 questions are available at every level. No Ethics, gold or streak effects. <a href="canada-test/overview.html" target="_blank" rel="noopener">Review overview</a> · <a href="canada-test/review.html" target="_blank" rel="noopener">Full content and reviewer notes</a></p>' : '')
+    + (showWriting ? `<h3 class="mail-group-title">Partner correspondence · ${isCanada ? '5 Canadian email assignments' : 'Writing'}</h3><div class="mail-list">${writingTasks.map((task) => {
+      const latest = isCanada ? canadaProgress(state).emailAttempts.filter(a => a.taskId === task.id).at(-1) : taskAttempts(state,task.id).at(-1);
       const locked = task.id === 'capstone' && !capstoneReady(state);
-      const status = locked ? 'Complete six replies and two files' : latest?.status === 'pending' ? 'Sent · awaiting partner' : latest ? 'Partner replied' : state.apprenticeship.drafts[task.id] ? 'Draft saved' : 'New assignment';
+      const status = isCanada ? canadaProgress(state).drafts[task.id] ? 'Draft saved' : latest ? 'Committed · authored guidance' : 'Test assignment' : locked ? 'Complete six replies and two files' : latest?.status === 'pending' ? 'Sent · awaiting partner' : latest ? 'Partner replied' : state.apprenticeship.drafts[task.id] ? 'Draft saved' : 'New assignment';
       return `<button type="button" class="mail-row" data-writing="${task.id}" ${locked ? 'disabled' : ''}><span class="mail-sender">${e(task.partner)}</span><span class="mail-subject">${e(task.title)}<small>${e(task.skill)} · ${e(task.prompt.slice(0,105))}…</small></span><span class="mail-status">${status}</span></button>`;
     }).join('')}</div>` : '')
     + (showPractice ? `<h3 class="mail-group-title">Ethics practice · ${pool.levelLabel} · ${pool.unread.length} unanswered</h3><div class="mail-list">${pool.unread.map((s) => `<button type="button" class="mail-row" data-scenario="${e(s.id)}"><span class="mail-sender">${e(s.from)}<small>${e(s.role)}</small></span><span class="mail-subject">${e(s.subject)}<small>${e(s.body.slice(0,95))}…</small></span><span class="mail-status">${s.jurisdiction || (s.sourceType === 'mpre-style' ? 'MPRE-style' : s.sourceType === 'sqe-style' ? 'SQE-style' : 'LawScape original')}</span></button>`).join('')}</div>${!pool.unread.length ? '<p class="mail-notice">You have answered this tier’s mail for this practice pack.</p><button type="button" id="mail-new-round">Start another study round</button>' : ''}` : '');
   $('email-inbox').querySelectorAll('[data-writing]').forEach((row) => row.onclick = () => openEmail('writing',row.dataset.writing));
   $('email-inbox').querySelectorAll('[data-scenario]').forEach((row) => row.onclick = () => openScenario(row.dataset.scenario));
   if ($('mail-new-round')) $('mail-new-round').onclick = () => {
-    const ids = new Set(pool.eligible.map((item) => item.id));
-    state.seen = state.seen.filter((id) => !ids.has(id)); save(); renderInbox();
+    act({ type: 'reset_seen' }).then(() => renderInbox()).catch(() => {});
   };
 }
 
 function openScenario(id) {
-  if (!canAccessBarMail(state)) return;
-  const scenario = practiceInbox(state,SCENARIOS).unread.find((item) => item.id === id);
+  if (!canAccessBarMail(state, !!claimedDesk)) return;
+  const scenario = practiceInbox(state,ALL_MAIL_SCENARIOS).unread.find((item) => item.id === id);
   if (!scenario) return;
   desk.releaseWriting();
   currentScenario = scenario; mailMode = 'practice'; writingTaskId = null; questionAnswered = false;
@@ -594,6 +610,12 @@ function openScenario(id) {
     ? `You need ${RILEY_HINT_COST} gold for Riley to research this rule.`
     : 'Pay Riley to research the relevant rule before you answer.';
   hintEl.classList.toggle('hidden', !canAskRiley);
+  if (s.isTestPack) {
+    sourceEl.textContent = `${s.jurisdiction} · CANADA TEST · practitioner review required`;
+    hintEl.classList.add('hidden');
+    ruleEl.innerHTML = `<details class="canada-rules"><summary>Free rule briefing · source scope</summary>${canadaRulesHtml(s.ruleIds)}</details>`;
+    ruleEl.classList.remove('hidden');
+  }
 
   const wrap = $('email-choices');
   wrap.innerHTML = '';
@@ -602,7 +624,7 @@ function openScenario(id) {
     const btn = document.createElement('button');
     btn.className = 'email-choice';
     btn.textContent = choice.text;
-    btn.onclick = () => answerEmail(choice);
+    btn.onclick = () => answerEmail(s.choices.indexOf(choice));
     wrap.appendChild(btn);
   }
 
@@ -613,54 +635,50 @@ function openScenario(id) {
 }
 
 function buyEthicsHint() {
-  if (pendingAttempt(state)) { toast('Wait for the partner reply before making purchases.'); return; }
   if (!currentScenario || hintPurchasedForCurrent) return;
-  if (!rileyHintEligible(state.upgrades)) {
-    toast('Riley needs both the Paralegal Upgrade and Ethics Treatise Shelf.');
-    return;
-  }
-  if (state.gold < RILEY_HINT_COST) {
-    toast(`You need ${RILEY_HINT_COST} gold for an ethics hint.`);
-    return;
-  }
-  state.gold -= RILEY_HINT_COST;
-  state.hintsPurchased++;
-  hintPurchasedForCurrent = true;
-  save();
-  updateHUD();
-  $('email-hint').classList.add('hidden');
-  $('email-rule').textContent = `Riley’s research: ${currentScenario.rule}`;
-  $('email-rule').classList.remove('hidden');
-  toast(`Riley finds the relevant rule. −${RILEY_HINT_COST} gold.`);
+  const scenario = currentScenario;
+  act({ type: 'buy_hint', scenarioId: scenario.id }).then(({ result }) => {
+    if (currentScenario !== scenario) return;
+    hintPurchasedForCurrent = true;
+    $('email-hint').classList.add('hidden');
+    $('email-rule').textContent = `Riley’s research: ${result.rule}`;
+    $('email-rule').classList.remove('hidden');
+    toast(`Riley finds the relevant rule. −${RILEY_HINT_COST} gold.`);
+  }).catch(() => {});
 }
 
 $('email-hint').addEventListener('click', buyEthicsHint);
 
-function answerEmail(choice) {
+function answerEmail(choiceIndex) {
   if (!currentScenario || questionAnswered) return;
-  if (pendingAttempt(state)) { toast('Wait for the pending partner reply before submitting another answer.'); return; }
-  questionAnswered = true;
   const s = currentScenario;
-  const b = bonuses(state.upgrades);
+  const choice = s.choices[choiceIndex];
+  if (!choice) return;
+  questionAnswered = true;
+  act({ type: 'answer_scenario', scenarioId: s.id, choiceIndex })
+    .then(({ result }) => { if (currentScenario === s) renderScenarioResult(s, choice, result); })
+    .catch(() => { if (currentScenario === s) questionAnswered = false; });
+}
+
+// Pure presentation of a settled answer. Every number comes from the reducer.
+function renderScenarioResult(s, choice, result) {
   const verdictEl = $('email-verdict');
   const explainEl = $('email-explain');
   const deltaEl = $('email-delta');
-  let disbarred = false;
-
+  if (result.testPack) {
+    verdictEl.textContent = result.matchesProposedKey ? 'Matches the proposed answer key.' : 'Compare this choice with the proposed answer key.';
+    verdictEl.className = result.matchesProposedKey ? 'good' : '';
+    const q = CANADA_PACK.questions.find(item => item.id === s.id);
+    explainEl.innerHTML = `<p>${escapeHtml(choice.why)}</p><p><b>Decisive fact:</b> ${escapeHtml(q.decisiveFact)}</p><details><summary>Review every option</summary>${q.options.map(o=>`<p><b>${escapeHtml(o.id)}${o.id===q.answer?' · Proposed answer':''}:</b> ${escapeHtml(o.text)}<br>${escapeHtml(o.explanation)}</p>`).join('')}</details>`;
+    appendScenarioSource(explainEl, s);
+    deltaEl.textContent = `Test practice only · No Ethics, gold or streak effects · ${save() ? 'Saved' : 'Session only — storage unavailable'}`;
+    $('email-replies').classList.add('hidden'); $('email-result').classList.remove('hidden');
+    $('email-continue').textContent = 'Back to Canada inbox';
+    $('email-continue').onclick = () => openEmail(mailFolder);
+    return;
+  }
   $('email-hint').classList.add('hidden');
-  state.casesDone++;
-  if (choice.grade === 'correct') {
-    const earned = Math.round(s.gold * b.goldMult + b.goldFlat);
-    state.gold += earned;
-    state.streak++;
-    state.wrongStreak = 0;
-    state.correctDone++;
-    let healed = 0;
-    if (state.streak >= 2) {
-      const before = state.ethics;
-      healEthics(STREAK_HEAL + b.streakHealBonus);
-      healed = state.ethics - before;
-    }
+  if (result.correct) {
     verdictEl.textContent = '✔ Sound professional judgment.';
     verdictEl.className = 'good';
     const successContext = s.sourceType === 'sqe-style'
@@ -669,40 +687,30 @@ function answerEmail(choice) {
       : 'That is the defensible course — engagement decisions, trust money, and candor calls '
         + 'like this one are exactly where licenses are won and lost.';
     explainEl.textContent = `${s.rule}. ${s.explanation || successContext}`;
-    deltaEl.innerHTML = `<span class="gain">+${earned} gold</span>`
-      + (healed > 0 ? ` &nbsp; <span class="gain">+${healed} Ethics (streak x${state.streak}!)</span>`
-                    : ` &nbsp; <span class="muted">streak x${state.streak} — one more for an Ethics heal</span>`);
+    deltaEl.innerHTML = `<span class="gain">+${result.earned} gold</span>`
+      + (result.healed > 0 ? ` &nbsp; <span class="gain">+${result.healed} Ethics (streak x${result.streak}!)</span>`
+                           : ` &nbsp; <span class="muted">streak x${result.streak} — one more for an Ethics heal</span>`);
   } else {
-    state.wrongStreak++;
-    const dmg = wrongAnswerDamage(state.wrongStreak, hasUpgrade('paralegal'));
-    state.streak = 0;
-    disbarred = damageEthics(dmg);
-    verdictEl.textContent = choice.grade === 'very_wrong'
+    verdictEl.textContent = result.grade === 'very_wrong'
       ? '✖ Serious ethics violation.'
       : '✖ Ethically wrong.';
     verdictEl.className = 'bad';
     explainEl.textContent = `Why you lost Ethics — ${choice.why}`;
-    const rileyNote = hasUpgrade('paralegal') ? ' · Riley cut the damage in half' : '';
-    deltaEl.innerHTML = `<span class="loss">−${dmg} Ethics</span> &nbsp; `
-      + `<span class="muted">wrong-answer streak x${state.wrongStreak}${rileyNote}</span>`;
+    const rileyNote = result.rileyHalved ? ' · Riley cut the damage in half' : '';
+    deltaEl.innerHTML = `<span class="loss">−${result.dmg} Ethics</span> &nbsp; `
+      + `<span class="muted">wrong-answer streak x${result.wrongStreak}${rileyNote}</span>`;
   }
-
-  if (s.sourceUrl) {
-    appendScenarioSource(explainEl, s);
-  }
-
-  if (!state.seen.includes(s.id)) state.seen.push(s.id);
+  if (s.sourceUrl) appendScenarioSource(explainEl, s);
   updateHUD();
-  save();
 
   $('email-replies').classList.add('hidden');
   $('email-result').classList.remove('hidden');
   $('email-continue').onclick = () => {
-    if (disbarred) { closeEmail(); gameOver(); } else { openEmail(mailFolder); }
+    if (result.disbarred) { closeEmail(); gameOver(); } else { openEmail(mailFolder); }
   };
-  if (disbarred) $('email-continue').textContent = 'Face the Disciplinary Judge';
+  if (result.disbarred) $('email-continue').textContent = 'Face the Disciplinary Judge';
   else $('email-continue').textContent = 'Back to inbox';
-  if (disbarred) gameOver(`${DEFAULT_GAMEOVER_TEXT} ${choice.why || ''} ${s.rule}`);
+  if (result.disbarred) gameOver(`${DEFAULT_GAMEOVER_TEXT} ${choice.why || ''} ${s.rule}`);
 }
 
 function appendScenarioSource(container, scenario) {
@@ -739,14 +747,13 @@ function closeEmail() {
   desk.releaseWriting(); mailMode = 'inbox'; writingTaskId = null;
   $('email').classList.add('hidden');
   currentScenario = null;
-  billableUnsavedMs = 0;
+  flushStudy();
   if (inGame) save();
 }
 $('email-close').addEventListener('click', closeEmail);
 $('email-pack').addEventListener('change', (event) => {
-  state.practicePack = VALID_PACKS.has(event.target.value) ? event.target.value : 'mixed';
-  save();
-  openEmail('practice');
+  act({ type: 'set_practice_pack', id: event.target.value })
+    .then(() => openEmail(state.practicePack === 'canada-test' ? 'all' : 'practice')).catch(() => {});
 });
 $('email-inbox-open').addEventListener('click', () => openEmail());
 $('email-back').addEventListener('click', () => openEmail(mailFolder));
@@ -759,10 +766,10 @@ const DEFAULT_GAMEOVER_TEXT = 'Your Ethics reached zero. The Presiding Disciplin
   + 'upgrades are forfeit.';
 
 function gameOver(reason = DEFAULT_GAMEOVER_TEXT) {
-  const archived = archiveDisbarredRun(state);
+  const archived = online ? { recorded: false } : archiveDisbarredRun(state, now());
   desk.releaseWriting();
   writingTaskId = null;
-  const scoreNote = archived.recorded ? ` Your ${formatBillableTime(state.billableStudyMs)} billable time was recorded on the ${archived.persisted ? 'local' : 'session-only'} Sidebar board.` : '';
+  const scoreNote = archived.recorded ? ` Your ${formatBillableTime(state.billableStudyMs)} billable time was recorded on the ${archived.persisted ? 'local' : 'session-only'} Sidebar board.` : online ? ' The firm has recorded the end of this run on your account.' : '';
   stopDocumentReview(false);
   inGame = false;
   desk.close();
@@ -773,13 +780,15 @@ function gameOver(reason = DEFAULT_GAMEOVER_TEXT) {
   hideDialogue();
   $('gameover-text').textContent = reason + scoreNote;
   $('gameover').classList.remove('hidden');
-  reset(); // End this run immediately; closing/reloading cannot revive it.
+  if (online) { releaseDesk(); online.client.sendStatus({ kind: 'idle' }); }
+  else reset(); // End this run immediately; closing/reloading cannot revive it.
 }
 
 $('gameover-restart').addEventListener('click', () => {
   $('gameover').classList.add('hidden');
-  reset();                       // wipe everything — you keep nothing
   $('gameover-text').textContent = DEFAULT_GAMEOVER_TEXT;
+  if (online) { openOnlineCreator(); return; } // a new attorney on the same account keeps nothing
+  reset();                       // wipe everything — you keep nothing
   $('title-screen').classList.remove('hidden');
   refreshTitleButtons();
 });
@@ -804,27 +813,27 @@ $('panel-close').addEventListener('click', () => $('panel').classList.add('hidde
 function openSidebar(topicId = state.sidebar.topic) {
   const topic = sidebarTopic(topicId);
   state.sidebar.topic = topic.id;
-  save();
+  dispatch({ type: 'set_sidebar_draft', topicId: topic.id, text: state.sidebar.drafts[topic.id] || '' }, { coalesce: 500 }).catch(() => {});
   const body = openPanel(`${SIDEBAR_ROOM.title} — Table notes`);
   $('panel-inner').classList.add('sidebar-panel');
   body.innerHTML = `
     <div class="sidebar-banner"><span class="sidebar-mode">LOCAL PREVIEW</span><h2>A place to talk shop.</h2><p>A quiet corner of the firm. Pull up a chair and choose a table.</p></div>
     <div class="sidebar-layout"><aside><h3>Conversation tables</h3><nav class="sidebar-topics" aria-label="Conversation tables">${SIDEBAR_TOPICS.map((item) => `<button type="button" data-topic="${item.id}" aria-pressed="${item.id === topic.id}">${item.label}</button>`).join('')}</nav>
-      <h3>In this local room</h3><p class="sidebar-person"><strong>${escapeHtml(state.name)}</strong><span>You · local player</span></p><p class="sidebar-person"><strong>B.A.R.T.</strong><span>Robot butler · scripted NPC</span></p><p class="sidebar-offline">Multiplayer is not connected. The future Cloudflare pilot is planned for ${SIDEBAR_ROOM.participantLimit} invited people, with clearly labeled AI agents.</p></aside>
+      <h3>${online ? 'In The Sidebar now' : 'In this local room'}</h3><p class="sidebar-person"><strong>${escapeHtml(state.name)}</strong><span>You · ${online ? 'online' : 'local player'}</span></p>${online ? playersInZone(online.room, 'sidebar').map((p) => `<p class="sidebar-person"><strong>${escapeHtml(p.name)}</strong><span>${escapeHtml(p.label || 'In the lounge')}</span></p>`).join('') : ''}<p class="sidebar-person"><strong>B.A.R.T.</strong><span>Robot butler · scripted NPC</span></p><p class="sidebar-offline">${online ? 'Table chat is not part of this pilot. Notes stay private to your account.' : `Shared presence runs on the invite-only online build for ${SIDEBAR_ROOM.participantLimit} people; this local copy is single-player.`}</p></aside>
       <section class="sidebar-conversation" aria-labelledby="sidebar-topic-title"><h3 id="sidebar-topic-title">${topic.label}</h3><p>${topic.prompt}</p>
         <blockquote><span>B.A.R.T. · scripted welcome</span>“No billable clock at this table. Bring a question, a useful observation, or an idea worth testing.”</blockquote>
         <p class="sidebar-empty">No shared messages yet. Your draft stays in this browser.</p>
         <label for="sidebar-draft">Your conversation draft</label><textarea id="sidebar-draft" maxlength="500" rows="4" placeholder="Draft an introduction or a question…" aria-describedby="sidebar-draft-help"></textarea>
         <p id="sidebar-draft-help">Saved drafts are private to this local save. They will not be sent automatically when multiplayer launches.</p>
-        <div class="sidebar-compose-actions"><button type="button" id="sidebar-save-draft">Save draft locally</button><button type="button" disabled title="Cloudflare multiplayer is not connected">Send · coming with multiplayer</button></div>
+        <div class="sidebar-compose-actions"><button type="button" id="sidebar-save-draft">Save draft locally</button><button type="button" disabled title="Chat is not part of the online pilot yet">Send · not in this pilot</button></div>
         <p id="sidebar-draft-status" role="status"></p>
       </section></div>`;
   const draft = $('sidebar-draft');
   draft.value = String(state.sidebar.drafts[topic.id] || '').slice(0, 500);
   const persist = () => {
-    saveSidebarDraft(state, topic.id, draft.value);
-    const saved = save();
-    $('sidebar-draft-status').textContent = saved ? `Saved locally · ${draft.value.length}/500 characters · nothing sent` : 'Kept for this session only · browser storage unavailable · nothing sent';
+    dispatch({ type: 'set_sidebar_draft', topicId: topic.id, text: draft.value }, { coalesce: 500 })
+      .then(() => { $('sidebar-draft-status').textContent = `Saved · ${draft.value.length}/500 characters · nothing sent`; })
+      .catch(() => { $('sidebar-draft-status').textContent = 'Kept for this session only · storage unavailable · nothing sent'; });
   };
   draft.addEventListener('input', persist);
   $('sidebar-save-draft').onclick = persist;
@@ -851,11 +860,10 @@ function openBartender() {
     + BAR_DRINKS.map((drink) => `<article class="row-item"><div class="grow"><h4>${drink.name}</h4><p>${drink.note}</p><p>${drink.slows ? '0 Ethics damage · slow walking for 40 seconds' : 'No effect on Ethics or movement'}</p></div><button type="button" data-drink="${drink.id}" ${state.gold < drink.cost || pendingAttempt(state) ? 'disabled' : ''}>Order · ${drink.cost ? `${drink.cost} gold` : 'free'}</button></article>`).join('')
     + '<p id="bar-order-status" role="status"></p><button id="bar-scores" type="button">View billable-hours board</button>';
   body.querySelectorAll('[data-drink]').forEach((button) => button.onclick = () => {
-    try {
-      const { drink } = orderBarDrink(state,button.dataset.drink);
-      save(); updateHUD(); openBartender();
-      $('bar-order-status').textContent = `${drink.name} served. Ethics unchanged at ${state.ethics}. ${drink.slows ? 'Walking at half speed for 40 seconds.' : 'Enjoy your water.'}`;
-    } catch (error) { $('bar-order-status').textContent = error.message; }
+    dispatch({ type: 'bar_drink', id: button.dataset.drink }).then(({ result }) => {
+      updateHUD(); openBartender();
+      $('bar-order-status').textContent = `${result.name} served. Ethics unchanged at ${state.ethics}. ${result.slows ? 'Walking at half speed for 40 seconds.' : 'Enjoy your water.'}`;
+    }).catch((error) => { $('bar-order-status').textContent = error.message; });
   });
   $('bar-scores').onclick = openHighScores;
 }
@@ -1014,43 +1022,44 @@ function openRuleLibrary() {
 }
 
 function startDocumentReview() {
-  if (state.zone !== 'office') {
+  if (state.zone !== 'office' && !(state.zone === 'associates' && claimedDesk)) {
     toast('The active files are in the main office.');
     return;
   }
   hideDialogue();
-  player.stop();
-  player.activity = 'reviewing';
-  docReview.active = true;
-  docReview.cycleStartedAt = performance.now();
-  $('work-status').classList.remove('hidden');
-  updateDocumentReview(docReview.cycleStartedAt);
-  toast(`Document review started. Each one-minute cycle earns ${DOC_REVIEW_REWARD} gold.`);
+  act({ type: 'doc_review_start' }).then(() => {
+    player.stop();
+    player.activity = 'reviewing';
+    docReview.active = true;
+    $('work-status').classList.remove('hidden');
+    updateDocumentReview(now());
+    toast(`Document review started. Each one-minute cycle earns ${DOC_REVIEW_REWARD} gold.`);
+  }).catch(() => {});
 }
 
 function stopDocumentReview(showMessage = true) {
-  if (!docReview.active) return;
+  if (!docReview.active && !docReviewActive(state)) return;
   docReview.active = false;
   if (player) player.activity = null;
   $('work-status').classList.add('hidden');
+  dispatch({ type: 'doc_review_stop' }).catch(() => {});
   if (showMessage) toast('You close the file and stand up.');
 }
 
-function updateDocumentReview(now) {
+function updateDocumentReview(nowMs) {
   if (!docReview.active) return;
-  let elapsed = now - docReview.cycleStartedAt;
-  while (elapsed >= DOC_REVIEW_CYCLE_MS) {
-    state.gold += DOC_REVIEW_REWARD;
-    state.documentsReviewed++;
-    docReview.cycleStartedAt += DOC_REVIEW_CYCLE_MS;
-    elapsed -= DOC_REVIEW_CYCLE_MS;
-    save();
-    updateHUD();
-    toast(`Document review cycle complete. +${DOC_REVIEW_REWARD} gold.`);
+  const anchor = state.lastDocReviewAt || state.docReviewStartedAt;
+  if (!anchor) return;
+  const elapsed = Math.max(0, nowMs - anchor);
+  if (elapsed >= DOC_REVIEW_CYCLE_MS && !docReview.settling) {
+    docReview.settling = true;
+    act({ type: 'doc_review_cycle' }).then(({ result }) => {
+      if (result.cycles > 0) toast(`Document review cycle complete. +${result.earned} gold.`);
+    }).catch(() => {}).finally(() => { docReview.settling = false; });
   }
-  const remainingMs = Math.max(0, DOC_REVIEW_CYCLE_MS - elapsed);
-  const seconds = Math.ceil(remainingMs / 1000);
-  $('review-progress-fill').style.width = `${Math.min(100, (elapsed / DOC_REVIEW_CYCLE_MS) * 100)}%`;
+  const shown = Math.min(elapsed, DOC_REVIEW_CYCLE_MS);
+  const seconds = Math.ceil((DOC_REVIEW_CYCLE_MS - shown) / 1000);
+  $('review-progress-fill').style.width = `${Math.min(100, (shown / DOC_REVIEW_CYCLE_MS) * 100)}%`;
   $('review-time').textContent = `Next cycle in ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')} · ${state.documentsReviewed} completed`;
 }
 
@@ -1074,36 +1083,24 @@ function openShop(title, catalog) {
       btn.textContent = 'Buy';
       btn.disabled = state.gold < u.cost;
       btn.onclick = () => {
-        if (pendingAttempt(state)) { toast('Wait for the partner reply before making purchases.'); return; }
-        if (state.gold < u.cost) return;
-        const previousMax = maxEthics();
-        state.gold -= u.cost;
-        state.upgrades.push(u.id);
-        const addedEthicsCapacity = maxEthics() - previousMax;
-        if (addedEthicsCapacity > 0) healEthics(addedEthicsCapacity);
-        if (state.moneybagsStolen) {
-          state.moneybagsPurchases = (state.moneybagsPurchases || 0) + 1;
-        }
-        save();
-        updateHUD(); updateQuickActions();
-        if (state.moneybagsStolen && moneybagsAuditTriggered(state.moneybagsPurchases)) {
-          state.ethics = 0;
-          save();
-          updateHUD();
-          gameOver(
-            `Your third purchase after taking Mr. Moneybags’s gold triggered a trust-account audit. `
-            + `The coins were traced from Jim Hardsell’s safe into your spending. The Presiding `
-            + `Disciplinary Judge ordered immediate disbarment. ${u.name} was not worth it.`,
-          );
-          return;
-        }
-        if (state.moneybagsStolen) {
-          const escaped = Math.min(state.moneybagsPurchases, MONEYBAGS_GRACE_PURCHASES);
-          toast(`Purchased: ${u.name}. Nobody has noticed the Moneybags gold — yet. (${escaped}/2)`);
-        } else {
-          toast(`Purchased: ${u.name}`);
-        }
-        openShop(title, catalog);   // re-render with new state
+        btn.disabled = true;
+        act({ type: 'buy_upgrade', id: u.id }).then(({ result }) => {
+          updateQuickActions();
+          if (result.audit) {
+            gameOver(
+              `Your third purchase after taking Mr. Moneybags’s gold triggered a trust-account audit. `
+              + `The coins were traced from Jim Hardsell’s safe into your spending. The Presiding `
+              + `Disciplinary Judge ordered immediate disbarment. ${u.name} was not worth it.`,
+            );
+            return;
+          }
+          if (result.moneybagsPurchases) {
+            toast(`Purchased: ${u.name}. Nobody has noticed the Moneybags gold — yet. (${result.escaped}/2)`);
+          } else {
+            toast(`Purchased: ${u.name}`);
+          }
+          openShop(title, catalog);   // re-render with new state
+        }).catch(() => { btn.disabled = state.gold < u.cost; });
       };
     }
     row.appendChild(btn);
@@ -1134,61 +1131,24 @@ function openRecord() {
 }
 
 function doRest() {
-  const b = bonuses(state.upgrades);
-  const since = Date.now() - state.lastRestAt;
-  if (since < b.restCooldownMs) {
-    const wait = Math.ceil((b.restCooldownMs - since) / 1000);
-    toast(`You're not tired yet. Rest again in ${wait}s.`);
-    return;
-  }
-  if (state.ethics >= maxEthics()) {
-    toast('Your conscience is already spotless. (Ethics is full.)');
-    return;
-  }
-  state.lastRestAt = Date.now();
-  const before = state.ethics;
-  healEthics(b.restHeal);
-  save();
-  updateHUD();
-  toast(`You rest and reflect on your professional obligations. +${state.ethics - before} Ethics.`);
+  act({ type: 'rest' }).then(({ result }) => {
+    toast(`You rest and reflect on your professional obligations. +${result.healed} Ethics.`);
+  }).catch(() => {});
 }
 
 function drinkCoffee() {
-  if (!hasUpgrade('coffee')) {
-    toast('The counter is empty. Buy the Coffee Machine from the furniture catalog first.');
-    return;
-  }
-  if (state.ethics >= maxEthics()) {
-    toast('Your Ethics is already full. Save the coffee for a harder day.');
-    return;
-  }
-  const before = state.ethics;
-  healEthics(COFFEE_ETHICS_RESTORE);
-  save();
-  updateHUD();
-  toast(`You drink a strong cup of coffee. +${state.ethics - before} Ethics.`);
+  act({ type: 'coffee' }).then(({ result }) => {
+    toast(`You drink a strong cup of coffee. +${result.healed} Ethics.`);
+  }).catch(() => {});
 }
 
-function eatApartmentFood(name, ethicsRestore) {
-  if (pendingAttempt(state)) { toast('Wait for the partner reply before making purchases.'); return; }
-  if (state.ethics >= maxEthics()) {
-    toast('Your Ethics is already full. Save the food for a harder day.');
-    return;
-  }
-  if (state.gold < APARTMENT_FOOD_COST) {
-    toast(`You need ${APARTMENT_FOOD_COST} gold for ${name.toLowerCase()}.`);
-    return;
-  }
-  state.gold -= APARTMENT_FOOD_COST;
-  const before = state.ethics;
-  healEthics(ethicsRestore);
-  save();
-  updateHUD();
-  showDialogue({
-    name,
-    text: `You spend ${APARTMENT_FOOD_COST} gold and restore `
-      + `${state.ethics - before} Ethics.`,
-  });
+function eatApartmentFood(item) {
+  act({ type: 'eat', item }).then(({ result }) => {
+    showDialogue({
+      name: result.name,
+      text: `You spend ${APARTMENT_FOOD_COST} gold and restore ${result.healed} Ethics.`,
+    });
+  }).catch(() => {});
 }
 
 function watchTV() {
@@ -1213,6 +1173,43 @@ function stopWatchingTV() {
     player.y = watchReturnPos.y;
   }
   watchReturnPos = null;
+  if (claimedDesk) releaseDesk();
+}
+
+// ---------------------------------------------------------------------------
+// Associates' Floor open desks. Solo play: every desk is free. Online play:
+// the room service owns desk claims and the occupant names on the plates.
+// ---------------------------------------------------------------------------
+function deskProps() { return ZONES.associates.props.filter((prop) => prop.type === 'opendesk'); }
+function deskById(id) { return deskProps().find((prop) => prop.deskId === id) || null; }
+
+function sitAtDesk(prop) {
+  if (!prop || state.zone !== 'associates') return;
+  if (prop.occupant && prop.deskId !== claimedDesk) { toast(`That desk is claimed by ${prop.occupant}.`); return; }
+  if (onlineSitRequest(prop.deskId)) return; // the room service answers with a desk message
+  seatAtDesk(prop);
+}
+
+function seatAtDesk(prop) {
+  if (!prop || state.zone !== 'associates') return;
+  if (docReview.active) stopDocumentReview(false);
+  if (claimedDesk && claimedDesk !== prop.deskId) releaseDesk();
+  if (['watching', 'sitting'].includes(player.activity)) { player.activity = null; watchReturnPos = null; }
+  player.stop();
+  player.x = prop.seat.x; player.y = prop.seat.y; player.facing = 1; player.activity = 'sitting';
+  claimedDesk = prop.deskId;
+  updateQuickActions();
+  showDialogue({ name: `Open desk ${prop.deskId}`, text: 'You settle in at an open desk on the Associates’ Floor. BarMail and the active files are within reach while you are seated.',
+    choices: [{ label: 'Open BarMail', fn: () => openEmail() }, { label: 'Review documents', fn: startDocumentReview }, { label: 'Stand up', fn: stopWatchingTV }],
+  });
+}
+
+function releaseDesk() {
+  if (!claimedDesk) return;
+  const deskId = claimedDesk;
+  claimedDesk = null;
+  onlineStandRequest(deskId);
+  updateQuickActions();
 }
 
 function openMoneybagsSafe() {
@@ -1239,21 +1236,19 @@ function openMoneybagsSafe() {
 }
 
 function takeMoneybagsGold() {
-  if (pendingAttempt(state)) { toast('Your partner has a pending reply. Even Jim can wait five seconds.'); return; }
-  if (state.moneybagsStolen) return;
-  state.moneybagsStolen = true;
-  state.moneybagsPurchases = 0;
-  state.gold += MONEYBAGS_SAFE_GOLD;
-  const disbarred = damageEthics(MONEYBAGS_ETHICS_DAMAGE);
-  save();
-  updateHUD();
-  if (disbarred) {
-    gameOver(
-      'Taking Mr. Moneybags’s client funds exhausted your remaining Ethics. '
-      + 'The trust-account theft resulted in immediate disbarment.',
-    );
-    return;
-  }
+  act({ type: 'take_moneybags' }).then(({ result }) => {
+    if (result.disbarred) {
+      gameOver(
+        'Taking Mr. Moneybags’s client funds exhausted your remaining Ethics. '
+        + 'The trust-account theft resulted in immediate disbarment.',
+      );
+      return;
+    }
+    showMoneybagsAftermath();
+  }).catch(() => {});
+}
+
+function showMoneybagsAftermath() {
   showDialogue({
     name: 'Client Trust Catastrophe',
     text: `You take ${MONEYBAGS_SAFE_GOLD.toLocaleString()} gold and instantly lose `
@@ -1290,28 +1285,15 @@ function offerWhiskey() {
 }
 
 function drinkWhiskey() {
-  state.whiskeyDrinks++;
-  const disbarred = damageEthics(WHISKEY_ETHICS_DAMAGE);
-  save();
-  updateHUD();
-  if (disbarred) {
-    gameOver();
-    return;
-  }
-  showDialogue({
-    name: 'Professional Judgment',
-    text: `The drink slows your movement for 40 seconds and costs ${WHISKEY_ETHICS_DAMAGE} Ethics. `
-      + 'Pressure from a supervisor does not excuse impaired professional judgment.',
-    choices: [
-      {
-        label: 'Walk it off',
-        fn: () => {
-          state.slowUntil = Date.now() + WHISKEY_SLOW_MS; save();
-          toast('Your movement is impaired for 40 seconds.');
-        },
-      },
-    ],
-  });
+  act({ type: 'drink_whiskey' }).then(({ result }) => {
+    if (result.disbarred) { gameOver(); return; }
+    showDialogue({
+      name: 'Professional Judgment',
+      text: `The drink slows your movement for 40 seconds and costs ${WHISKEY_ETHICS_DAMAGE} Ethics. `
+        + 'Pressure from a supervisor does not excuse impaired professional judgment.',
+      choices: [{ label: 'Walk it off', fn: () => toast('Your movement is impaired for 40 seconds.') }],
+    });
+  }).catch(() => {});
 }
 
 function openWardrobe() {
@@ -1406,9 +1388,9 @@ function openHrEmail() {
       return;
     }
     const subjectText = subject.value.trim() || 'No subject (HR expected nothing less)';
-    state.hrEmailsSent = (state.hrEmailsSent || 0) + 1;
-    save();
-    showHrAutoReply(body, findHrCategory(category.value), subjectText, messageText);
+    act({ type: 'hr_email', category: category.value }).then(({ result }) => {
+      showHrAutoReply(body, findHrCategory(category.value), subjectText, messageText, result.ticket);
+    }).catch(() => {});
   };
 
   form.append(categoryLabel, subjectLabel, messageLabel, note, send);
@@ -1416,9 +1398,8 @@ function openHrEmail() {
   subject.focus();
 }
 
-function showHrAutoReply(body, category, subjectText, messageText) {
+function showHrAutoReply(body, category, subjectText, messageText, ticket) {
   body.innerHTML = '';
-  const ticket = String(state.hrEmailsSent || 1).padStart(4, '0');
 
   const reply = document.createElement('div');
   reply.className = 'hr-reply';
@@ -1500,6 +1481,7 @@ $('room-action').addEventListener('click', () => {
 $('room-service').addEventListener('click', () => state.zone === 'sidebar' ? openBartender() : openJudgeStatus());
 $('room-board').addEventListener('click', openHighScores);
 $('room-arcade').addEventListener('click', openArcade);
+$('room-roster').addEventListener('click', openRoster);
 
 $('email').addEventListener('keydown', (event) => {
   if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeEmail(); $('btn-mail').focus(); }
@@ -1537,7 +1519,7 @@ document.addEventListener('keydown', (event) => {
     moveBy(...moves[key]);
   } else if (key === 'j' && !overlayOpen()) {
     desk.open();
-  } else if (key === 'b' && canAccessBarMail(state) && !overlayOpen()) {
+  } else if (key === 'b' && canAccessBarMail(state, !!claimedDesk) && !overlayOpen()) {
     openEmail();
   } else if (key === 'r' && !overlayOpen()) {
     openRecord();
@@ -1545,6 +1527,8 @@ document.addEventListener('keydown', (event) => {
     openTravelMenu();
   } else if ((key === 'h' || key === '?') && !overlayOpen()) {
     openHelp();
+  } else if (key === 'o' && online && !overlayOpen()) {
+    openRoster();
   }
 });
 
@@ -1592,6 +1576,10 @@ function buildCreator() {
 }
 
 $('btn-new').addEventListener('click', () => {
+  leaveOnline();
+  creatorMode = 'solo';
+  $('creator-online-note').classList.add('hidden');
+  $('btn-start').textContent = 'Begin Your Firm Apprenticeship';
   $('title-screen').classList.add('hidden');
   buildCreator();
   $('creator').classList.remove('hidden');
@@ -1600,14 +1588,19 @@ $('btn-new').addEventListener('click', () => {
 $('btn-creator-back').addEventListener('click', () => {
   creatorEditor?.destroy();
   $('creator').classList.add('hidden');
+  if (creatorMode === 'online') leaveOnline();
+  creatorMode = 'solo';
   $('title-screen').classList.remove('hidden');
 });
 
 $('btn-continue').addEventListener('click', () => {
+  leaveOnline();
   if (!load()) { toast('This save could not be loaded. It has not been changed.'); return; }
   $('title-screen').classList.add('hidden');
   startGame();
 });
+
+$('btn-online').addEventListener('click', () => { startOnline(); });
 
 $('btn-reset').addEventListener('click', () => {
   reset();
@@ -1616,18 +1609,23 @@ $('btn-reset').addEventListener('click', () => {
 });
 
 $('btn-start').addEventListener('click', () => {
-  reset();
-  state.name = $('c-name').value.trim() || 'Alex Barrister';
-  state.gender = pick.gender;
-  Object.assign(state, normalizeAppearance(pick));
-  creatorEditor?.destroy();
-  save();
-  $('creator').classList.add('hidden');
-  startGame();
+  const button = $('btn-start');
+  if (creatorMode !== 'online') reset();
+  button.disabled = true;
+  dispatch({ type: 'create_character', name: $('c-name').value, gender: pick.gender, appearance: normalizeAppearance(pick) })
+    .then(() => {
+      creatorEditor?.destroy();
+      $('creator').classList.add('hidden');
+      if (creatorMode === 'online') enterOnlineWorld();
+      else startGame();
+    })
+    .catch((error) => toast(error.message))
+    .finally(() => { button.disabled = false; });
 });
 
 function startGame() {
   if (state.ethics <= 0 || state.runStatus === 'ended') { gameOver(); return; }
+  if (docReviewActive(state)) dispatch({ type: 'doc_review_stop' }).catch(() => {});
   player = new Actor(state.pos.x, state.pos.y,
     playerLook(), { speed: PLAYER_BASE_SPEED });
   zone = currentZone();
@@ -1654,6 +1652,253 @@ function startGame() {
 }
 
 // ---------------------------------------------------------------------------
+// Online firm: Cloudflare Access session, account-owned progress, and live
+// presence of the other invited attorneys.
+// ---------------------------------------------------------------------------
+async function startOnline() {
+  const button = $('btn-online');
+  button.disabled = true;
+  try {
+    const session = await fetchSession();
+    if (session.expired) { goToLogin(); return; }
+    if (!session.ok) { toast(session.network ? 'The firm server is not reachable right now.' : 'The online firm is unavailable right now.'); return; }
+    const transport = createAccountTransport({ onExpired: handleExpiredSession });
+    configureProgress({ mode: 'online', transport, onDelivered: (delivered) => desk.handleDelivered(delivered) });
+    online = { client: null, room: newRoom(), remotes: new Map(), status: 'offline', transport, email: session.data.email };
+    $('title-screen').classList.add('hidden');
+    if (!session.data.hasCharacter || session.data.runStatus === 'ended') { openOnlineCreator(session.data.runStatus === 'ended'); return; }
+    try {
+      adoptAccountState(await transport.fetchState());
+    } catch {
+      toast('Could not load your online attorney. Try again in a moment.');
+      backToTitle();
+      return;
+    }
+    enterOnlineWorld();
+  } finally { button.disabled = false; }
+}
+
+function openOnlineCreator(afterDisbarment = false) {
+  creatorMode = 'online';
+  const seed = readLocalSeed();
+  pick = { ...normalizeAppearance(seed || {}), gender: seed?.gender || 'nonbinary', skin: seed ? seed.skin : 1 };
+  $('c-name').value = seed?.name && seed.name !== 'Alex Barrister' ? seed.name : '';
+  $('creator-online-note').classList.remove('hidden');
+  $('btn-start').textContent = afterDisbarment ? 'Start a new attorney online' : 'Join the firm online';
+  $('title-screen').classList.add('hidden');
+  buildCreator();
+  $('creator').classList.remove('hidden');
+  if (afterDisbarment) toast('Your previous online attorney was disbarred. Nothing carries over.');
+}
+
+function enterOnlineWorld() {
+  if (!online) return;
+  if (!ZONES[state.zone] || state.zone === 'apartment') { /* private zones are fine */ }
+  const spawn = currentZone().spawn;
+  state.pos = { x: spawn.x, y: spawn.y };
+  if (docReviewActive(state)) dispatch({ type: 'doc_review_stop' }).catch(() => {});
+  online.client = createPresenceClient({ onMessage: onRoomMessage, onState: onRoomState });
+  $('creator').classList.add('hidden');
+  $('title-screen').classList.add('hidden');
+  startGame();
+  updateQuickActions();
+  setOnlineStatus('connecting', online.room);
+  online.client.connect();
+}
+
+function leaveOnline() {
+  if (!online) return;
+  online.client?.close();
+  online = null;
+  configureProgress({ mode: 'solo', onDelivered: (delivered) => desk.handleDelivered(delivered) });
+  hideOnlineStatus();
+  creatorMode = 'solo';
+  $('creator-online-note').classList.add('hidden');
+  $('btn-start').textContent = 'Begin Your Firm Apprenticeship';
+}
+
+function backToTitle() {
+  inGame = false;
+  desk.close();
+  stopDocumentReview(false);
+  closeEmail();
+  hideDialogue();
+  $('panel').classList.add('hidden');
+  $('creator').classList.add('hidden');
+  $('hud').classList.add('hidden');
+  $('gameover').classList.add('hidden');
+  leaveOnline();
+  $('title-screen').classList.remove('hidden');
+  refreshTitleButtons();
+}
+
+function handleExpiredSession() {
+  if (!online) return;
+  online.client?.close();
+  inGame = false;
+  desk.close(); closeEmail(); $('panel').classList.add('hidden'); $('hud').classList.add('hidden');
+  setOnlineStatus('expired');
+  showDialogue({ name: 'Online session', text: 'Your sign-in expired. Sign in again with your invited email to keep working at the firm.',
+    choices: [{ label: 'Sign in again', fn: goToLogin }, { label: 'Back to title', fn: backToTitle }] });
+}
+
+function onRoomState(status) {
+  if (!online) return;
+  online.status = status;
+  setOnlineStatus(status, online.room);
+  if (status === 'online') {
+    // (Re)announce where we are and how we look; the snapshot answers first.
+    online.client.sendJoin(state.zone, player.tileX, player.tileY);
+    sendLook();
+    if (claimedDesk) online.client.sendSit(claimedDesk);
+    online.client.resetStatus();
+    lastStatusAt = 0;
+  } else if (status === 'replaced' || status === 'full') {
+    inGame = false;
+    desk.close(); closeEmail(); $('panel').classList.add('hidden'); $('hud').classList.add('hidden'); hideDialogue();
+    showDialogue({ name: 'Online session',
+      text: status === 'replaced' ? 'This attorney signed in from another tab or device, so this one stepped out of the firm.' : 'The firm is full right now (ten attorneys). Try again in a little while.',
+      choices: [{ label: 'Back to title', fn: backToTitle }] });
+  } else if (status === 'expired') {
+    handleExpiredSession();
+  }
+}
+
+function onRoomMessage(msg) {
+  if (!online) return;
+  const effects = applyRoomMessage(online.room, msg);
+  for (const effect of effects) applyRoomEffect(effect);
+}
+
+function remoteActor(pid) {
+  const record = online.room.players[pid];
+  if (!record) { online.remotes.delete(pid); return null; }
+  let remote = online.remotes.get(pid);
+  if (!remote) {
+    remote = { pid, actor: new Actor(record.x, record.y, remoteLook(record), { speed: PLAYER_BASE_SPEED }), record, name: record.name, label: record.label };
+    online.remotes.set(pid, remote);
+  }
+  remote.record = record; remote.name = record.name; remote.label = record.label;
+  return remote;
+}
+
+function remoteLook(record) {
+  const look = record.look || {};
+  return appearanceLook(look, Array.isArray(look.equipped) ? look.equipped : []);
+}
+
+function applyRoomEffect(effect) {
+  switch (effect.type) {
+    case 'reset':
+      online.remotes.clear();
+      for (const pid of Object.keys(online.room.players)) { const r = remoteActor(pid); if (r) r.actor.activity = r.record.activity; }
+      applyDeskOccupancy();
+      setOnlineStatus('online', online.room);
+      break;
+    case 'spawn':
+    case 'teleport': {
+      const r = remoteActor(effect.pid);
+      if (!r) break;
+      r.actor.stop(); r.actor.x = r.record.x; r.actor.y = r.record.y; r.actor.activity = r.record.activity;
+      if (effect.type === 'spawn') setOnlineStatus('online', online.room);
+      break;
+    }
+    case 'despawn':
+      online.remotes.delete(effect.pid);
+      setOnlineStatus('online', online.room);
+      break;
+    case 'walk': {
+      const r = remoteActor(effect.pid);
+      if (!r) break;
+      const first = r.record.path[0];
+      if (first && Math.hypot(r.actor.x - first.x, r.actor.y - first.y) > 2) { r.actor.x = first.x; r.actor.y = first.y; }
+      r.actor.activity = null;
+      r.actor.setPath(r.record.path.map((step) => ({ x: step.x, y: step.y })));
+      break;
+    }
+    case 'pose': {
+      const r = remoteActor(effect.pid);
+      if (!r) break;
+      r.actor.activity = r.record.activity;
+      if (r.record.desk) { const seat = deskSeats()[r.record.desk]; if (seat) { r.actor.stop(); r.actor.x = seat.x; r.actor.y = seat.y; } }
+      break;
+    }
+    case 'look': {
+      const r = remoteActor(effect.pid);
+      if (r) r.actor.look = remoteLook(r.record);
+      break;
+    }
+    case 'desks':
+      applyDeskOccupancy();
+      break;
+    case 'ack':
+      if (effect.t === 'sit') {
+        const prop = deskById(effect.deskId);
+        if (prop && claimedDesk !== effect.deskId) seatAtDesk(prop);
+      }
+      break;
+    case 'error':
+      if (effect.code === 'full') onRoomState('full');
+      else if (effect.code === 'desk_taken') toast('Someone just took that desk.');
+      else if (effect.code === 'rate') toast('Slow down a little.');
+      else if (effect.code === 'bad_move') online.client.sendJoin(state.zone, player.tileX, player.tileY);
+      break;
+    default: break;
+  }
+}
+
+// Brass nameplates and hover labels read from the room's desk registry.
+function applyDeskOccupancy() {
+  for (const prop of deskProps()) {
+    const holder = online ? deskOccupant(online.room, prop.deskId) : null;
+    prop.occupant = holder ? (holder.pid === online.room.me?.pid ? state.name : holder.name) : (claimedDesk === prop.deskId ? state.name : null);
+  }
+}
+
+function sendLook() {
+  if (!online?.client?.connected) return;
+  online.client.sendLook(normalizeAppearance(state), state.apprenticeship.equipped);
+}
+
+function statusContext() {
+  const panelOpen = !$('panel').classList.contains('hidden');
+  return {
+    reviewing: docReview.active,
+    mailOpen: !$('email').classList.contains('hidden'),
+    scenarioOpen: !!currentScenario,
+    pack: state.practicePack,
+    journalOpen: desk.isOpen() || (mailMode === 'writing' && !!writingTaskId),
+    taskId: mailMode === 'writing' ? writingTaskId : null,
+    rulesOpen: panelOpen && $('panel-title').textContent.includes('Rule Library'),
+    seated: !!claimedDesk,
+    activity: player?.activity || null,
+    zone: state.zone,
+  };
+}
+
+// Advance other attorneys' actors and publish our own status every two seconds.
+function tickOnline(dt) {
+  const remotes = [];
+  for (const remote of online.remotes.values()) {
+    remote.actor.speed = PLAYER_BASE_SPEED;
+    remote.actor.update(dt);
+    if (remote.record.zone === state.zone) remotes.push(remote);
+  }
+  const t = performance.now();
+  if (online.client?.connected && t - lastStatusAt > 2000) {
+    lastStatusAt = t;
+    online.client.sendStatus(deriveStatus(statusContext()));
+  }
+  return remotes;
+}
+
+function openRoster() {
+  if (!online) return;
+  const body = openPanel('Who’s in the firm');
+  renderRoster(body, online.room, { name: state.name, zone: state.zone, desk: claimedDesk, label: online.room.meLabel });
+}
+
+// ---------------------------------------------------------------------------
 // Game loop
 // ---------------------------------------------------------------------------
 let lastT = performance.now();
@@ -1669,31 +1914,32 @@ function schedule() {
   }, 100);
 }
 
-function loop(now) {
+function loop(frameNow) {
   clearTimeout(fallbackId);
-  const dt = Math.min(0.05, (now - lastT) / 1000);
-  lastT = now;
+  const dt = Math.min(0.05, (frameNow - lastT) / 1000);
+  lastT = frameNow;
 
   if (inGame) {
     desk.tick();
-    player.speed = PLAYER_BASE_SPEED * movementMultiplier(state);
+    player.speed = PLAYER_BASE_SPEED * movementMultiplier(state, now());
     player.update(dt);
-    updateDocumentReview(now);
+    updateDocumentReview(now());
     trackBillableStudy(dt);
     state.pos = { x: player.tileX, y: player.tileY };
-    const t = now / 1000;
-    renderer.render(zone, player, npcs, hover, t);
-    drawClickFx(now);
-    drawMinimap(zone, player, isWalkable);
+    const t = frameNow / 1000;
+    const remotes = online ? tickOnline(dt) : [];
+    renderer.render(zone, player, npcs, hover, t, remotes);
+    drawClickFx(frameNow);
+    drawMinimap(zone, player, isWalkable, remotes);
     updateHUD();
   }
   schedule();
 }
 
 // OSRS-style yellow X where you clicked, fading out.
-function drawClickFx(now) {
+function drawClickFx(frameNow) {
   if (!clickFx) return;
-  const age = now - clickFx.at;
+  const age = frameNow - clickFx.at;
   if (age > 500) { clickFx = null; return; }
   const ctx = renderer.ctx;
   const s = gridToScreen(clickFx.x, clickFx.y);
@@ -1709,14 +1955,35 @@ function drawClickFx(now) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
 }
 
-window.addEventListener('beforeunload', () => { if (inGame) save(); });
+window.addEventListener('beforeunload', () => {
+  if (!inGame) return;
+  if (online) flushStudy({ beacon: true }); else save();
+});
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState !== 'visible' && inGame) save();
+  if (document.visibilityState === 'visible' || !inGame) return;
+  if (online) flushStudy({ beacon: true }); else save();
 });
 
+configureProgress({ mode: 'solo', onDelivered: (delivered) => desk.handleDelivered(delivered) });
 refreshTitleButtons();
 document.documentElement.dataset.lawscapeReady = 'true';
 schedule();
+
+// The online firm only exists when this page is served by the LawScape
+// Worker. GitHub Pages and file:// copies stay single-player.
+if (serverPossible()) {
+  detectServer().then((up) => {
+    if (!up) return;
+    $('btn-online').classList.remove('hidden');
+    $('online-note').classList.remove('hidden');
+    const params = new URLSearchParams(location.search);
+    if (params.get('online') === '1') {
+      params.delete('online');
+      history.replaceState(null, '', `${location.pathname}${params.size ? `?${params}` : ''}${location.hash}`);
+      startOnline();
+    }
+  });
+}
 
 // Debug hook (harmless in production; used by tests).
 window.LS = {
@@ -1730,11 +1997,13 @@ window.LS = {
   openMoneybagsSafe,
   get docReview() { return { ...docReview }; },
   get inGame() { return inGame; },
+  get online() { return online; },
+  get claimedDesk() { return claimedDesk; },
 };
 
 // Another tab must not continue spending or reviving an out-of-date character.
 window.addEventListener('storage', (event) => {
-  if (event.key !== 'lawscape_save_v2' || !inGame) return;
+  if (event.key !== 'lawscape_save_v2' || !inGame || online) return;
   inGame = false;
   desk.close();
   stopDocumentReview(false);

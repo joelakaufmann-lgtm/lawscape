@@ -22,6 +22,7 @@ const requiredIds = [
   'c-appearance', 'c-gender', 'c-name', 'room-action',
   'email-inbox', 'email-inbox-open', 'email-writing-body', 'email-back',
   'room-tools', 'room-service', 'room-board', 'room-arcade', 'movement-status',
+  'btn-online', 'online-note', 'online-status', 'room-roster', 'creator-online-note',
 ];
 
 for (const id of requiredIds) {

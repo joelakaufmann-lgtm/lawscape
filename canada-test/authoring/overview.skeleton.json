@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "legaldesign.build.v4",
+  "brief": {
+    "title": "",
+    "reader": "",
+    "action": "",
+    "purpose": "other",
+    "message": "",
+    "spine": "containment",
+    "situation": "laptop",
+    "form": "one-page",
+    "sources": [],
+    "assumptions": [],
+    "gaps": []
+  },
+  "style": {
+    "source": "loxoto",
+    "ref": null
+  },
+  "composition": {
+    "strategy": "composed",
+    "shape": "",
+    "rationale": "",
+    "sections": [],
+    "templateRef": null
+  },
+  "overview": {
+    "sectionId": "",
+    "contextUnitIds": [],
+    "questionUnitId": "",
+    "answerUnitId": "",
+    "topics": []
+  },
+  "claims": [],
+  "units": [],
+  "evidence": []
+}

@@ -10,7 +10,7 @@ and improve your office while protecting your Ethics.
 ![An attorney exploring the LawScape office](media/demo-30s/captures/office-full.png)
 
 Free to play. No account, installation or API key required. The current release
-is **0.6.0**, with the expanded avatar creator, all seven locations, and California
+is **0.7.0**, with the expanded avatar creator, all seven locations, and California
 and New York practice. Prefer a quick look first? [Watch the 30-second demo](media/lawscape-demo-30s.mp4).
 
 ## Your first five minutes
@@ -43,8 +43,12 @@ will not see every question at once. Every original question remains included.
 
 The fictional **State of Juris apprenticeship** adds six writing assignments,
 two synthetic document files and one connected capstone. These activities are
-separate from the question count. Canada and full jurisdiction-specific firm
-curricula remain planned. [See coverage, sources and review status](docs/JURISDICTIONS.md).
+separate from the question count. This local build also contains a **Canada test
+pack: 25 additional questions and five emails**, with practitioner review pending.
+Canada is opt-in, outside mixed practice, and has no Ethics, gold or streak effects.
+Full continuing-matter curricula remain planned.
+[Open the Canada review package](canada-test/review.html) or
+[see coverage, sources and review status](docs/JURISDICTIONS.md).
 
 ## Before you start
 
@@ -55,8 +59,15 @@ rest help restore Ethics.
 
 The fictional apprenticeship awards study gold without Ethics damage. Its
 checklist choices receive authored feedback; your written prose is saved for
-self-comparison, not graded by live AI. Sidebar notes are local. Shared chat,
-multiplayer and live courtroom hearings are future work.
+self-comparison, not graded by live AI. Sidebar notes are local.
+
+An invite-only **online firm** runs on Cloudflare: invited players sign in with
+an emailed code, keep their attorney on the server, and see each other walk,
+claim open desks and work on the shared Associates' Floor. The GitHub Pages
+copy and the file you open from disk stay single-player. See
+[Playing online](docs/PLAYING.md#playing-online) and the
+[operator runbook](docs/ONLINE.md). Shared chat and live courtroom hearings
+are still future work.
 
 LawScape is unofficial educational practice, not legal advice or official bar
 exam content. Read the jurisdiction and source note on each question.

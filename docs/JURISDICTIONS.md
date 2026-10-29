@@ -29,10 +29,14 @@ two synthetic files and one capstone. It uses supplied office policies and
 authored checklist feedback. These activities are not included in the 171-question
 total and do not imply a reviewed real-jurisdiction firm curriculum.
 
-Full jurisdiction-specific firm curricula remain future work. **Canada is
-planned**, with province-specific source and reviewer requirements; it is not
-currently a selectable question pack. Use the request form below the in-game
-catalog to save a local proposal, then optionally review and submit it on GitHub.
+Full jurisdiction-specific firm curricula remain future work. **Canada · TEST
+PACK** is selectable in this local test build: 25 additional questions and five
+email assignments covering Ontario, BC and Saskatchewan. It requires Canadian
+practitioner review and is excluded from mixed practice. No Canadian answer
+changes Ethics, gold, streaks or the released-question tiers. See the
+[Canada review package](../canada-test/review.html). This local test has not been
+published to the live site. Use the request form below the catalog for other
+jurisdiction proposals.
 
 ## Sources and reference material
 

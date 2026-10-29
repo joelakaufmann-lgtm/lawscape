@@ -5,10 +5,10 @@ import { ZONES } from '../js/world/zones.js';
 import { PROPS } from '../js/world/props.js';
 import { findPath } from '../js/engine/pathfind.js';
 
-test('the local world contains seven playable zones including The Sidebar', () => {
+test('the local world contains eight playable zones including The Sidebar and the Associates’ Floor', () => {
   assert.deepEqual(
     Object.keys(ZONES),
-    ['office', 'corner_office', 'linda_office', 'conference_room', 'courtroom', 'sidebar', 'apartment'],
+    ['office', 'corner_office', 'linda_office', 'conference_room', 'courtroom', 'sidebar', 'associates', 'apartment'],
   );
 });
 
@@ -24,7 +24,7 @@ test('the main office connects the requested workspaces and filing cabinet', () 
   const office = ZONES.office;
   assert.deepEqual(
     office.portals.filter((portal) => portal.to).map((portal) => portal.to),
-    ['corner_office', 'linda_office', 'conference_room'],
+    ['corner_office', 'linda_office', 'associates', 'conference_room'],
   );
   const filingStation = office.props.find(
     (prop) => prop.type === 'filingstation' && prop.interact?.action === 'doc_review',
@@ -114,7 +114,7 @@ test('Derek Balam is the courtroom bailiff with an interactive role and badge', 
 });
 
 test('the new lounge and courtroom interactions are reachable from their entrances', () => {
-  for (const zone of [ZONES.sidebar, ZONES.courtroom]) {
+  for (const zone of [ZONES.sidebar, ZONES.courtroom, ZONES.associates]) {
     const walk = (x, y) => x > 0 && y > 0 && x < zone.w && y < zone.h && zone.tile(x,y) !== 'x'
       && !zone.props.some((prop) => { const def = PROPS[prop.type]; return def.solid && x >= prop.x && x < prop.x+def.w && y >= prop.y && y < prop.y+def.h; });
     assert.ok(walk(zone.spawn.x,zone.spawn.y), `${zone.id} spawn`);

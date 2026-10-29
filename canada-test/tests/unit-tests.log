@@ -1,0 +1,325 @@
+
+> lawscape@0.6.0 test
+> node --test tests/*.test.mjs && npm run check
+
+TAP version 13
+# Subtest: appearance migration preserves existing styles and defaults all genders to trousers
+ok 1 - appearance migration preserves existing styles and defaults all genders to trousers
+  ---
+  duration_ms: 2.029458
+  type: 'test'
+  ...
+# Subtest: custom colors and accessories map consistently to the world and preview
+ok 2 - custom colors and accessories map consistently to the world and preview
+  ---
+  duration_ms: 0.218416
+  type: 'test'
+  ...
+# Subtest: all hair, beard, outfit and pose branches render finite coordinates with balanced canvas state
+ok 3 - all hair, beard, outfit and pose branches render finite coordinates with balanced canvas state
+  ---
+  duration_ms: 261.061958
+  type: 'test'
+  ...
+# Subtest: local lounge drafts stay separate per topic, are bounded, and migrate with appearance
+ok 4 - local lounge drafts stay separate per topic, are bounded, and migrate with appearance
+  ---
+  duration_ms: 0.755583
+  type: 'test'
+  ...
+# Subtest: six assignments and two six-document synthetic files have resolvable source/rubric anchors
+ok 5 - six assignments and two six-document synthetic files have resolvable source/rubric anchors
+  ---
+  duration_ms: 0.98825
+  type: 'test'
+  ...
+# Subtest: commit snapshots a draft, delays reward, limits pending work and issues gold exactly once
+ok 6 - commit snapshots a draft, delays reward, limits pending work and issues gold exactly once
+  ---
+  duration_ms: 1.367958
+  type: 'test'
+  ...
+# Subtest: empty or incomplete attempts cannot be committed and capstone is gated
+ok 7 - empty or incomplete attempts cannot be committed and capstone is gated
+  ---
+  duration_ms: 0.194458
+  type: 'test'
+  ...
+# Subtest: authored choices, not keywords in prose, determine study gold
+ok 8 - authored choices, not keywords in prose, determine study gold
+  ---
+  duration_ms: 0.823459
+  type: 'test'
+  ...
+# Subtest: one improved revision earns a bounded bonus and preserves original correspondence
+ok 9 - one improved revision earns a bounded bonus and preserves original correspondence
+  ---
+  duration_ms: 0.587125
+  type: 'test'
+  ...
+# Subtest: document review rewards supported anchors, penalizes blanket flagging and pays once
+ok 10 - document review rewards supported anchors, penalizes blanket flagging and pays once
+  ---
+  duration_ms: 0.576917
+  type: 'test'
+  ...
+# Subtest: the complete first-day arc unlocks and pays the capstone, with separate cosmetic spending
+ok 11 - the complete first-day arc unlocks and pays the capstone, with separate cosmetic spending
+  ---
+  duration_ms: 0.708458
+  type: 'test'
+  ...
+# Subtest: a pending attempt resumes after save/load without duplicate rewards
+ok 12 - a pending attempt resumes after save/load without duplicate rewards
+  ---
+  duration_ms: 1.029417
+  type: 'test'
+  ...
+# Subtest: ended and stale character attempts cannot award rewards; reset discards all apprenticeship progress
+ok 13 - ended and stale character attempts cannot award rewards; reset discards all apprenticeship progress
+  ---
+  duration_ms: 0.532916
+  type: 'test'
+  ...
+# Subtest: legacy saves migrate additively, retain identity/economy and reject future schemas
+ok 14 - legacy saves migrate additively, retain identity/economy and reject future schemas
+  ---
+  duration_ms: 0.646
+  type: 'test'
+  ...
+# Subtest: jurisdiction requests de-duplicate explicit aliases, distinguish UK systems and never claim submission
+ok 15 - jurisdiction requests de-duplicate explicit aliases, distinguish UK systems and never claim submission
+  ---
+  duration_ms: 0.8025
+  type: 'test'
+  ...
+# Subtest: Canada content has 25 distinct questions, five complete emails and reachable authority references
+ok 16 - Canada content has 25 distinct questions, five complete emails and reachable authority references
+  ---
+  duration_ms: 6.467917
+  type: 'test'
+  ...
+# Subtest: Canada is opt-in and every question is reachable without altering the legacy difficulty ladder
+ok 17 - Canada is opt-in and every question is reachable without altering the legacy difficulty ladder
+  ---
+  duration_ms: 1.502459
+  type: 'test'
+  ...
+# Subtest: Canada duplicate answers, all wrong choices and repeat rounds cannot change character rewards or Ethics
+ok 18 - Canada duplicate answers, all wrong choices and repeat rounds cannot change character rewards or Ethics
+  ---
+  duration_ms: 1.202041
+  type: 'test'
+  ...
+# Subtest: email commits preserve originals, remain ungraded and survive revisions without rewards
+ok 19 - email commits preserve originals, remain ungraded and survive revisions without rewards
+  ---
+  duration_ms: 0.541542
+  type: 'test'
+  ...
+# Subtest: old saves migrate, Canada selections persist, and changed content archives rather than regrades
+ok 20 - old saves migrate, Canada selections persist, and changed content archives rather than regrades
+  ---
+  duration_ms: 0.912084
+  type: 'test'
+  ...
+# Subtest: downloaded source receipts match the exact original bytes
+ok 21 - downloaded source receipts match the exact original bytes
+  ---
+  duration_ms: 5.91725
+  type: 'test'
+  ...
+# Subtest: ethics scenario identifiers are unique and every scenario is playable
+ok 22 - ethics scenario identifiers are unique and every scenario is playable
+  ---
+  duration_ms: 3.386625
+  type: 'test'
+  ...
+# Subtest: difficulty tiers and both exam-style practice packs are available
+ok 23 - difficulty tiers and both exam-style practice packs are available
+  ---
+  duration_ms: 0.762208
+  type: 'test'
+  ...
+# Subtest: the treatise library includes Nevada, Arizona, and the California reference bundle
+ok 24 - the treatise library includes Nevada, Arizona, and the California reference bundle
+  ---
+  duration_ms: 0.212667
+  type: 'test'
+  ...
+# Subtest: office economy values match the player-facing launch rules
+ok 25 - office economy values match the player-facing launch rules
+  ---
+  duration_ms: 0.123125
+  type: 'test'
+  ...
+# Subtest: billable time formatting and the Moneybags audit threshold are exact
+ok 26 - billable time formatting and the Moneybags audit threshold are exact
+  ---
+  duration_ms: 0.199709
+  type: 'test'
+  ...
+# Subtest: upgrade prices and removed upgrades match the revised catalogs
+ok 27 - upgrade prices and removed upgrades match the revised catalogs
+  ---
+  duration_ms: 0.144458
+  type: 'test'
+  ...
+# Subtest: beta wrong-answer damage escalates 30/45/60 and Riley halves every tier
+ok 28 - beta wrong-answer damage escalates 30/45/60 and Riley halves every tier
+  ---
+  duration_ms: 0.253375
+  type: 'test'
+  ...
+# Subtest: Email HR formats a prefilled GitHub issue and keeps the no-backend promise
+ok 29 - Email HR formats a prefilled GitHub issue and keeps the no-backend promise
+  ---
+  duration_ms: 0.162875
+  type: 'test'
+  ...
+# Subtest: reset keeps a stable state reference and restores a new attorney
+ok 30 - reset keeps a stable state reference and restores a new attorney
+  ---
+  duration_ms: 0.478416
+  type: 'test'
+  ...
+# Subtest: ethics health remains within its allowed range
+ok 31 - ethics health remains within its allowed range
+  ---
+  duration_ms: 0.460167
+  type: 'test'
+  ...
+# Subtest: kitchen and Liz chair upgrades each add ten max Ethics
+ok 32 - kitchen and Liz chair upgrades each add ten max Ethics
+  ---
+  duration_ms: 0.19825
+  type: 'test'
+  ...
+# Subtest: all 118 released questions retain their content and identifiers after relocation
+ok 33 - all 118 released questions retain their content and identifiers after relocation
+  ---
+  duration_ms: 2.134709
+  type: 'test'
+  ...
+# Subtest: California and New York remain isolated at every tier, with readable sources and explanations
+ok 34 - California and New York remain isolated at every tier, with readable sources and explanations
+  ---
+  duration_ms: 23.292667
+  type: 'test'
+  ...
+# Subtest: new pack selection and answer history survive existing save migration and reload
+ok 35 - new pack selection and answer history survive existing save migration and reload
+  ---
+  duration_ms: 1.534666
+  type: 'test'
+  ...
+# Subtest: Sidebar alcohol costs no Ethics, slows for 40 seconds and cannot be ordered elsewhere
+ok 36 - Sidebar alcohol costs no Ethics, slows for 40 seconds and cannot be ordered elsewhere
+  ---
+  duration_ms: 1.489875
+  type: 'test'
+  ...
+# Subtest: work phone replaces the old office upgrade without losing progression, and slow effects survive reload
+ok 37 - work phone replaces the old office upgrade without losing progression, and slow effects survive reload
+  ---
+  duration_ms: 2.1495
+  type: 'test'
+  ...
+# Subtest: a terminal run is archived once, sorted into a bounded board, and its score survives the character wipe
+ok 38 - a terminal run is archived once, sorted into a bounded board, and its score survives the character wipe
+  ---
+  duration_ms: 0.943333
+  type: 'test'
+  ...
+# Subtest: practice inbox exposes source subjects, filters packs, excludes answered mail and counts only open messages
+ok 39 - practice inbox exposes source subjects, filters packs, excludes answered mail and counts only open messages
+  ---
+  duration_ms: 0.495208
+  type: 'test'
+  ...
+# Subtest: detailed furniture and robot characters render valid geometry with and without upgrades
+ok 40 - detailed furniture and robot characters render valid geometry with and without upgrades
+  ---
+  duration_ms: 13.904375
+  type: 'test'
+  ...
+# Subtest: findPath routes around blocked tiles
+ok 41 - findPath routes around blocked tiles
+  ---
+  duration_ms: 1.691208
+  type: 'test'
+  ...
+# Subtest: findPath reports unreachable destinations
+ok 42 - findPath reports unreachable destinations
+  ---
+  duration_ms: 0.193917
+  type: 'test'
+  ...
+# Subtest: adjacentTile chooses a reachable nearby interaction tile
+ok 43 - adjacentTile chooses a reachable nearby interaction tile
+  ---
+  duration_ms: 0.145291
+  type: 'test'
+  ...
+# Subtest: the local world contains seven playable zones including The Sidebar
+ok 44 - the local world contains seven playable zones including The Sidebar
+  ---
+  duration_ms: 1.524958
+  type: 'test'
+  ...
+# Subtest: every zone prop has a drawable definition
+ok 45 - every zone prop has a drawable definition
+  ---
+  duration_ms: 0.294208
+  type: 'test'
+  ...
+# Subtest: the main office connects the requested workspaces and filing cabinet
+ok 46 - the main office connects the requested workspaces and filing cabinet
+  ---
+  duration_ms: 0.201
+  type: 'test'
+  ...
+# Subtest: partner offices and conference room contain their defining fixtures
+ok 47 - partner offices and conference room contain their defining fixtures
+  ---
+  duration_ms: 0.169167
+  type: 'test'
+  ...
+# Subtest: the City View Apartment upgrade adds its wall window and sofa without a television
+ok 48 - the City View Apartment upgrade adds its wall window and sofa without a television
+  ---
+  duration_ms: 0.273875
+  type: 'test'
+  ...
+# Subtest: apartment food, wardrobe, and clock fixtures match their upgraded layout
+ok 49 - apartment food, wardrobe, and clock fixtures match their upgraded layout
+  ---
+  duration_ms: 0.168917
+  type: 'test'
+  ...
+# Subtest: Derek Balam is the courtroom bailiff with an interactive role and badge
+ok 50 - Derek Balam is the courtroom bailiff with an interactive role and badge
+  ---
+  duration_ms: 0.358625
+  type: 'test'
+  ...
+# Subtest: the new lounge and courtroom interactions are reachable from their entrances
+ok 51 - the new lounge and courtroom interactions are reachable from their entrances
+  ---
+  duration_ms: 13.139042
+  type: 'test'
+  ...
+1..51
+# tests 51
+# suites 0
+# pass 51
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 369.869209
+
+> lawscape@0.6.0 check
+> node scripts/check.mjs
+
+Static browser checks passed.
