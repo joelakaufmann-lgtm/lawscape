@@ -1,0 +1,323 @@
+{
+  "packVersion": "canada-0.1.0-review",
+  "notice": "Local practice responses, not practitioner approval or AI grading.",
+  "version": "canada-0.1.0-review",
+  "digest": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645",
+  "round": 2,
+  "questionAttempts": [
+    {
+      "questionId": "CA-ON-01",
+      "optionId": "A",
+      "expectedOptionId": "B",
+      "matchesProposedKey": false,
+      "round": 1,
+      "at": 1790662394685,
+      "version": "canada-0.1.0-review",
+      "digest": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645"
+    },
+    {
+      "questionId": "CA-ON-02",
+      "optionId": "A",
+      "expectedOptionId": "D",
+      "matchesProposedKey": false,
+      "round": 1,
+      "at": 1790662394853,
+      "version": "canada-0.1.0-review",
+      "digest": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645"
+    },
+    {
+      "questionId": "CA-ON-03",
+      "optionId": "B",
+      "expectedOptionId": "A",
+      "matchesProposedKey": false,
+      "round": 1,
+      "at": 1790662395718,
+      "version": "canada-0.1.0-review",
+      "digest": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645"
+    },
+    {
+      "questionId": "CA-ON-04",
+      "optionId": "A",
+      "expectedOptionId": "C",
+      "matchesProposedKey": false,
+      "round": 1,
+      "at": 1790662395886,
+      "version": "canada-0.1.0-review",
+      "digest": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645"
+    },
+    {
+      "questionId": "CA-ON-05",
+      "optionId": "A",
+      "expectedOptionId": "B",
+      "matchesProposedKey": false,
+      "round": 1,
+      "at": 1790662396052,
+      "version": "canada-0.1.0-review",
+      "digest": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645"
+    },
+    {
+      "questionId": "CA-REF-01",
+      "optionId": "A",
+      "expectedOptionId": "C",
+      "matchesProposedKey": false,
+      "round": 1,
+      "at": 1790662396220,
+      "version": "canada-0.1.0-review",
+      "digest": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645"
+    },
+    {
+      "questionId": "CA-REF-02",
+      "optionId": "B",
+      "expectedOptionId": "A",
+      "matchesProposedKey": false,
+      "round": 1,
+      "at": 1790662396386,
+      "version": "canada-0.1.0-review",
+      "digest": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645"
+    },
+    {
+      "questionId": "CA-REF-03",
+      "optionId": "A",
+      "expectedOptionId": "D",
+      "matchesProposedKey": false,
+      "round": 1,
+      "at": 1790662396552,
+      "version": "canada-0.1.0-review",
+      "digest": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645"
+    },
+    {
+      "questionId": "CA-REF-04",
+      "optionId": "A",
+      "expectedOptionId": "B",
+      "matchesProposedKey": false,
+      "round": 1,
+      "at": 1790662396720,
+      "version": "canada-0.1.0-review",
+      "digest": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645"
+    },
+    {
+      "questionId": "CA-REF-05",
+      "optionId": "A",
+      "expectedOptionId": "C",
+      "matchesProposedKey": false,
+      "round": 1,
+      "at": 1790662396886,
+      "version": "canada-0.1.0-review",
+      "digest": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645"
+    },
+    {
+      "questionId": "CA-REC-01",
+      "optionId": "A",
+      "expectedOptionId": "D",
+      "matchesProposedKey": false,
+      "round": 1,
+      "at": 1790662397053,
+      "version": "canada-0.1.0-review",
+      "digest": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645"
+    },
+    {
+      "questionId": "CA-REC-02",
+      "optionId": "B",
+      "expectedOptionId": "A",
+      "matchesProposedKey": false,
+      "round": 1,
+      "at": 1790662397219,
+      "version": "canada-0.1.0-review",
+      "digest": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645"
+    },
+    {
+      "questionId": "CA-REC-03",
+      "optionId": "A",
+      "expectedOptionId": "B",
+      "matchesProposedKey": false,
+      "round": 1,
+      "at": 1790662397386,
+      "version": "canada-0.1.0-review",
+      "digest": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645"
+    },
+    {
+      "questionId": "CA-REC-04",
+      "optionId": "A",
+      "expectedOptionId": "C",
+      "matchesProposedKey": false,
+      "round": 1,
+      "at": 1790662397552,
+      "version": "canada-0.1.0-review",
+      "digest": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645"
+    },
+    {
+      "questionId": "CA-REC-05",
+      "optionId": "A",
+      "expectedOptionId": "D",
+      "matchesProposedKey": false,
+      "round": 1,
+      "at": 1790662397722,
+      "version": "canada-0.1.0-review",
+      "digest": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645"
+    },
+    {
+      "questionId": "CA-SK-01",
+      "optionId": "B",
+      "expectedOptionId": "A",
+      "matchesProposedKey": false,
+      "round": 1,
+      "at": 1790662397886,
+      "version": "canada-0.1.0-review",
+      "digest": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645"
+    },
+    {
+      "questionId": "CA-SK-02",
+      "optionId": "A",
+      "expectedOptionId": "B",
+      "matchesProposedKey": false,
+      "round": 1,
+      "at": 1790662398052,
+      "version": "canada-0.1.0-review",
+      "digest": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645"
+    },
+    {
+      "questionId": "CA-SK-03",
+      "optionId": "A",
+      "expectedOptionId": "C",
+      "matchesProposedKey": false,
+      "round": 1,
+      "at": 1790662398218,
+      "version": "canada-0.1.0-review",
+      "digest": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645"
+    },
+    {
+      "questionId": "CA-SK-04",
+      "optionId": "A",
+      "expectedOptionId": "D",
+      "matchesProposedKey": false,
+      "round": 1,
+      "at": 1790662398387,
+      "version": "canada-0.1.0-review",
+      "digest": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645"
+    },
+    {
+      "questionId": "CA-SK-05",
+      "optionId": "B",
+      "expectedOptionId": "A",
+      "matchesProposedKey": false,
+      "round": 1,
+      "at": 1790662398553,
+      "version": "canada-0.1.0-review",
+      "digest": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645"
+    },
+    {
+      "questionId": "CA-UND-01",
+      "optionId": "A",
+      "expectedOptionId": "B",
+      "matchesProposedKey": false,
+      "round": 1,
+      "at": 1790662398718,
+      "version": "canada-0.1.0-review",
+      "digest": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645"
+    },
+    {
+      "questionId": "CA-UND-02",
+      "optionId": "A",
+      "expectedOptionId": "C",
+      "matchesProposedKey": false,
+      "round": 1,
+      "at": 1790662398886,
+      "version": "canada-0.1.0-review",
+      "digest": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645"
+    },
+    {
+      "questionId": "CA-UND-03",
+      "optionId": "A",
+      "expectedOptionId": "D",
+      "matchesProposedKey": false,
+      "round": 1,
+      "at": 1790662399052,
+      "version": "canada-0.1.0-review",
+      "digest": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645"
+    },
+    {
+      "questionId": "CA-UND-04",
+      "optionId": "B",
+      "expectedOptionId": "A",
+      "matchesProposedKey": false,
+      "round": 1,
+      "at": 1790662399218,
+      "version": "canada-0.1.0-review",
+      "digest": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645"
+    },
+    {
+      "questionId": "CA-UND-05",
+      "optionId": "A",
+      "expectedOptionId": "B",
+      "matchesProposedKey": false,
+      "round": 1,
+      "at": 1790662399385,
+      "version": "canada-0.1.0-review",
+      "digest": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645"
+    }
+  ],
+  "drafts": {},
+  "emailAttempts": [
+    {
+      "id": "CA-EMAIL-ON:1",
+      "taskId": "CA-EMAIL-ON",
+      "text": "Subject: Tomorrow’s LTB hearing — assignment and notice\n\nI recommend that Priya represent the tenant. The file confirms her current licence, authorized scope, preparation and availability, and the client has instructed her to act. We should record that assignment and confirm tomorrow’s hearing arrangements with her and the client.\n\nRiley can help organize the hearing papers and take notes in the agreed support role. Riley should not make submissions for the tenant: the record expressly states that no representation exemption applies. Priya’s licence cannot be used as Riley’s authorization.\n\nThe application did not identify Priya, and I cannot find notice of her appointment. I will arrange written notification to the LTB and the other parties, then retain the notification record and check for any hearing directions. If an availability problem arises, I will raise it promptly so we can address representation lawfully rather than assume an adjournment.\n\nPlease confirm that this is the staffing plan you want implemented.",
+      "committedAt": 1790662399786,
+      "version": "canada-0.1.0-review",
+      "digest": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645",
+      "proseAssessed": false,
+      "feedbackType": "authored-self-comparison"
+    },
+    {
+      "id": "CA-EMAIL-REF:1",
+      "taskId": "CA-EMAIL-REF",
+      "text": "Subject: Proposed specialist referral and your instructions\n\nYour licensing dispute would benefit from a lawyer with the specialist experience described in our discussion. I propose referring you to the identified BC specialist for that reason; this referral is not being made because of a conflict.\n\nThe specialist has proposed a $3,000 fee for the defined work. That total would be the same whether or not a referral fee is paid. If you agree, the specialist would pay our firm $300 from that amount for the referral. It would not be an additional $300 charge to you.\n\nWe have not treated your consent as given. Please let me know whether you understand and agree to this arrangement, or whether you would prefer the available option with no referral payment. You may also ask questions or discuss another suitable lawyer.\n\nOnce we have your instructions, we can confirm the engagement and arrange an authorized handoff. No referral payment or file transfer has occurred.",
+      "committedAt": 1790662399968,
+      "version": "canada-0.1.0-review",
+      "digest": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645",
+      "proseAssessed": false,
+      "feedbackType": "authored-self-comparison"
+    },
+    {
+      "id": "CA-EMAIL-REC:1",
+      "taskId": "CA-EMAIL-REC",
+      "text": "Subject: Tomorrow’s meeting — we can use written notes\n\nYes, the meeting can go ahead without recording. We will keep the recording and transcription functions off and take manual notes instead. Thank you for letting us know your preference; audio is not required for this meeting.\n\nI will confirm that arrangement with anyone assisting us. If another lawyer joins, we will explain how the meeting is being documented. If a recording is proposed later, we will raise it before any capture begins and discuss the proposal with the relevant participants rather than switch it on unexpectedly.\n\nAny proposed use of an outside transcription service would also need separate consideration of confidentiality and information handling. Telling participants about recording would not, by itself, settle those questions. No information has been sent to such a service.\n\nPlease attend at the scheduled time. Let me know if there is anything else about the meeting arrangements you would like us to address.",
+      "committedAt": 1790662400104,
+      "version": "canada-0.1.0-review",
+      "digest": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645",
+      "proseAssessed": false,
+      "feedbackType": "authored-self-comparison"
+    },
+    {
+      "id": "CA-EMAIL-SK:1",
+      "taskId": "CA-EMAIL-SK",
+      "text": "Subject: Your French-language representation and trial request\n\nI confirm that you wish to receive the required legal services and have your criminal trial in French. Your ability to converse in English does not change that instruction. I am not able to conduct this representation competently in French, so I propose discussing the retainer with the available French-speaking Saskatchewan criminal lawyer, with your approval.\n\nThere is also a separate court step. On the supplied facts, the section 530(1) application should be made no later than the appearance at which your trial date is set. That appearance is five days away. We need to arrange responsibility for the application promptly; retaining a French-speaking lawyer will not itself produce an order.\n\nPlease confirm whether you approve the proposed handoff. We will coordinate the immediate steps, verify the application’s filing and court status, and confirm the arrangements with you. At present, the file contains neither the application nor an order.",
+      "committedAt": 1790662400236,
+      "version": "canada-0.1.0-review",
+      "digest": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645",
+      "proseAssessed": false,
+      "feedbackType": "authored-self-comparison"
+    },
+    {
+      "id": "CA-EMAIL-UND:1",
+      "taskId": "CA-EMAIL-UND",
+      "text": "Subject: $12,000 trust condition — release is not yet authorized\n\nThe required written confirmation has not arrived, so the condition we accepted does not presently permit release. The client’s request does not change that condition. Our unanswered variation request is also not an agreement.\n\nI recommend that we keep the funds held under the existing terms, explain the outstanding step to the client, and follow up with the lawyer who imposed the condition. If an appropriate variation is agreed, we should confirm its precise terms in writing before acting on it. This record does not establish a separate right to return the funds or cancel the commitment ourselves.\n\nNo breach has occurred on the supplied facts. If we discover one, we should preserve an accurate record, address remediation and assess the reporting duty for an unconsented, unwaived breach, including the confidentiality and privilege qualification. We should not assume that later performance alone erases the issue or permits unrestricted disclosure.\n\nPlease confirm who will handle the follow-up.",
+      "committedAt": 1790662400370,
+      "version": "canada-0.1.0-review",
+      "digest": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645",
+      "proseAssessed": false,
+      "feedbackType": "authored-self-comparison"
+    },
+    {
+      "id": "CA-EMAIL-ON:2",
+      "taskId": "CA-EMAIL-ON",
+      "text": "Subject: Tomorrow’s LTB hearing — assignment and notice\n\nI recommend that Priya represent the tenant. The file confirms her current licence, authorized scope, preparation and availability, and the client has instructed her to act. We should record that assignment and confirm tomorrow’s hearing arrangements with her and the client.\n\nRiley can help organize the hearing papers and take notes in the agreed support role. Riley should not make submissions for the tenant: the record expressly states that no representation exemption applies. Priya’s licence cannot be used as Riley’s authorization.\n\nThe application did not identify Priya, and I cannot find notice of her appointment. I will arrange written notification to the LTB and the other parties, then retain the notification record and check for any hearing directions. If an availability problem arises, I will raise it promptly so we can address representation lawfully rather than assume an adjournment.\n\nPlease confirm that this is the staffing plan you want implemented.\n\nQA revision.",
+      "committedAt": 1790662400536,
+      "version": "canada-0.1.0-review",
+      "digest": "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645",
+      "proseAssessed": false,
+      "feedbackType": "authored-self-comparison"
+    }
+  ],
+  "archives": []
+}

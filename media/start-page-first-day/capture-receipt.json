@@ -1,0 +1,181 @@
+{
+  "capturedAt": "2026-09-28T16:11:19.607Z",
+  "gameVersion": "0.6.0",
+  "viewport": {
+    "width": 1440,
+    "height": 900,
+    "deviceScaleFactor": 1.5
+  },
+  "officeUpgrades": [
+    "monitor",
+    "subscription",
+    "liz_chair",
+    "houseplants",
+    "paralegal",
+    "work_phone",
+    "artwork"
+  ],
+  "apartmentUpgrades": [
+    "mattress",
+    "coffee",
+    "wardrobe_rack",
+    "homedesk",
+    "kitchen",
+    "cityview"
+  ],
+  "captures": [
+    {
+      "file": "office-upgraded.png",
+      "sha256": "07b29e742f4aab1c00e4ee07ff490c7b41a6c9ffb6992290176ffcf104b669e2",
+      "zone": "office",
+      "allOfficeUpgrades": true,
+      "allApartmentUpgrades": true
+    },
+    {
+      "file": "office-upgraded-detail.png",
+      "sha256": "91f510a64d87d67ef2722659fbf6fed45de237269d2c2c77ba16a132ace3cbb8",
+      "zone": "office",
+      "clip": {
+        "x": 382,
+        "y": 124,
+        "width": 868,
+        "height": 576
+      },
+      "note": "Direct screenshot of the rendered room; UI outside this rectangle is not included."
+    },
+    {
+      "file": "apartment-upgraded.png",
+      "sha256": "c8721125ce0e11c852bc66e003e9283163aebdd1ac6902c6254417b7bccf8d68",
+      "zone": "apartment",
+      "allOfficeUpgrades": true,
+      "allApartmentUpgrades": true
+    },
+    {
+      "file": "apartment-upgraded-detail.png",
+      "sha256": "26aa39810b759fb4425eabf796fde799e32a62101cf2e40b8e93a7634a0abcb6",
+      "zone": "apartment",
+      "clip": {
+        "x": 446,
+        "y": 172,
+        "width": 644,
+        "height": 464
+      },
+      "note": "Direct screenshot of the rendered room; UI outside this rectangle is not included."
+    },
+    {
+      "file": "jim-office.png",
+      "sha256": "b2bbc2646acd409f8f6f352365fe46a68b466d5bf186b1bc4af14cb39116f29f",
+      "zone": "corner_office",
+      "allOfficeUpgrades": true,
+      "allApartmentUpgrades": true
+    },
+    {
+      "file": "jim-office-detail.png",
+      "sha256": "71774a7663bfd1c886cd5c4da0dce3a28b857c4121095c151a5a1b1c225b0fa1",
+      "zone": "corner_office",
+      "clip": {
+        "x": 478,
+        "y": 172,
+        "width": 612,
+        "height": 448
+      },
+      "note": "Direct screenshot of the rendered room; UI outside this rectangle is not included."
+    },
+    {
+      "file": "linda-office.png",
+      "sha256": "84c30b1bf5246eda6a837a3af006b5fcb29c76123cd54e84a6d1630c239837bb",
+      "zone": "linda_office",
+      "allOfficeUpgrades": true,
+      "allApartmentUpgrades": true
+    },
+    {
+      "file": "linda-office-detail.png",
+      "sha256": "d35626d54c9d50cb0311dec3ce0b0c5bd5630c97edbb04662985ba423e37de3d",
+      "zone": "linda_office",
+      "clip": {
+        "x": 510,
+        "y": 188,
+        "width": 580,
+        "height": 432
+      },
+      "note": "Direct screenshot of the rendered room; UI outside this rectangle is not included."
+    },
+    {
+      "file": "conference-room.png",
+      "sha256": "2a3d2dc83fc6167bdac575d1b6f515fe61e65c16a8445a6eb3a3c3a2a33ad587",
+      "zone": "conference_room",
+      "allOfficeUpgrades": true,
+      "allApartmentUpgrades": true
+    },
+    {
+      "file": "conference-room-detail.png",
+      "sha256": "43d32161ef47260295f67bfbf262fd0423ea580468627d470c15f4e6e8a1930e",
+      "zone": "conference_room",
+      "clip": {
+        "x": 478,
+        "y": 156,
+        "width": 676,
+        "height": 480
+      },
+      "note": "Direct screenshot of the rendered room; UI outside this rectangle is not included."
+    },
+    {
+      "file": "courtroom.png",
+      "sha256": "2e8b1a5b6d194b7abc66c4cf01d0f35227c333d6025e286569250f91abf34ed1",
+      "zone": "courtroom",
+      "allOfficeUpgrades": true,
+      "allApartmentUpgrades": true
+    },
+    {
+      "file": "courtroom-detail.png",
+      "sha256": "70f6db79ff22ce71dd00da7efbb8a7413cd028e2f481a334c64303a0f92da52e",
+      "zone": "courtroom",
+      "clip": {
+        "x": 414,
+        "y": 124,
+        "width": 804,
+        "height": 544
+      },
+      "note": "Direct screenshot of the rendered room; UI outside this rectangle is not included."
+    },
+    {
+      "file": "sidebar.png",
+      "sha256": "e4c4563146b81e80d6f5f3a120ab6b89b6f8f3d9ecb483f8a033b8b7f84c3348",
+      "zone": "sidebar",
+      "allOfficeUpgrades": true,
+      "allApartmentUpgrades": true
+    },
+    {
+      "file": "sidebar-detail.png",
+      "sha256": "479c8c0e804bab7c8bd58db3e6e2b0252d011d315702807451d5b0266b490a2b",
+      "zone": "sidebar",
+      "clip": {
+        "x": 350,
+        "y": 108,
+        "width": 868,
+        "height": 576
+      },
+      "note": "Direct screenshot of the rendered room; UI outside this rectangle is not included."
+    },
+    {
+      "file": "barmail.png",
+      "sha256": "f0bc36718bb54890cb9fcfe418811fba16158ce444f7423b67796c1d72f14ce1"
+    },
+    {
+      "file": "ethics-dilemma.png",
+      "sha256": "bb36143799759682ee94ff7e5fcd880d78b8c11c2c901e202065ea2f30dfdf06"
+    },
+    {
+      "file": "evidence.png",
+      "sha256": "0f765417a05b0022b5b5ae22e14adf4d6ebb4ddaf4b7553877716a226c1f7718"
+    },
+    {
+      "file": "disbarred.png",
+      "sha256": "bb5cc836d1b351c7c2be68443be7af1b362050cab6b437fd408cec5e400d5fa6",
+      "trigger": "ai_brief very_wrong choice at 1 Ethics",
+      "runSaveCleared": true
+    }
+  ],
+  "errors": [],
+  "note": "Actual current local game screens, isolated temporary browser with synthetic Alex Barrister save. All upgrades are seeded solely for demonstration. No personal save accessed. Game over is triggered through an actual wrong answer in this isolated save."
+}

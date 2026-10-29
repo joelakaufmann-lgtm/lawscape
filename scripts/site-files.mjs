@@ -23,6 +23,14 @@ export const SITE_FILES = [
   'css/style.css', 'js/lawscape.bundle.js', 'assets/og-lawscape.png',
   'media/lawscape-demo-30s.mp4', 'media/lawscape-demo-30s-poster.jpg',
   'media/demo-30s/captures/office-full.png',
+  'canada-test/overview.html', 'canada-test/review.html', 'canada-test/pack.json',
+  'canada-test/README.md', 'canada-test/QUESTIONS.md', 'canada-test/EMAILS.md', 'canada-test/SOURCES.md', 'canada-test/QA.md',
+  'canada-test/sources/receipt.json',
+  'canada-test/sources/ON-LTB.html.source', 'canada-test/sources/ON-LTB.txt',
+  'canada-test/sources/BC-3.html.source', 'canada-test/sources/BC-3.txt',
+  'canada-test/sources/BC-7.html.source', 'canada-test/sources/BC-7.txt',
+  'canada-test/sources/CA-530.html.source', 'canada-test/sources/CA-530.txt',
+  'canada-test/sources/SK-CODE.pdf', 'canada-test/sources/SK-CODE.txt',
 ];
 
 export async function listFiles(root, relative = '') {

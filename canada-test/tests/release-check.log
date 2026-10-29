@@ -1,0 +1,35 @@
+
+> lawscape@0.6.0 release:check
+> node scripts/check-release.mjs
+
+Static browser checks passed.
+{
+  "version": "0.6.0",
+  "commit": "06265cb20a48183d16bb029246566e3e0fa1a8f7",
+  "files": 50,
+  "zones": [
+    "office",
+    "corner_office",
+    "linda_office",
+    "conference_room",
+    "courtroom",
+    "sidebar",
+    "apartment"
+  ],
+  "scenarios": 171,
+  "avatars": {
+    "hairStyles": 16,
+    "hairColors": 18,
+    "facialHair": 7
+  },
+  "writingAssignments": 6,
+  "syntheticFiles": 2,
+  "documents": 12,
+  "canadaTest": {
+    "version": "canada-0.1.0-review",
+    "questions": 25,
+    "emailAssignments": 5,
+    "practitionerReview": "pending"
+  }
+}
+Release package checks passed.

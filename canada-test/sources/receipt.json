@@ -1,0 +1,57 @@
+[
+  {
+    "id": "ON-LTB",
+    "url": "https://tribunalsontario.ca/documents/ltb/Practice%20Directions/Practice%20Direction%20on%20Representation%20before%20the%20LTB.html",
+    "finalUrl": "https://tribunalsontario.ca/documents/ltb/Practice%20Directions/Practice%20Direction%20on%20Representation%20before%20the%20LTB.html",
+    "file": "ON-LTB.html.source",
+    "bytes": 15305,
+    "sha256": "0bb6124efeb08605d8d810df0ec45ebce7fafba492375e2ccb01505fde626e19",
+    "retrievedAt": "2026-09-29T05:16:30.927599+00:00",
+    "contentType": "text/html",
+    "status": "retrieved; practitioner review pending"
+  },
+  {
+    "id": "BC-3",
+    "url": "https://www.lawsociety.bc.ca/for-lawyers/act-rules-and-code/code-of-professional-conduct/chapter-3-%E2%80%93-relationship-to-clients/",
+    "finalUrl": "https://www.lawsociety.bc.ca/for-lawyers/act-rules-and-code/code-of-professional-conduct/chapter-3-%E2%80%93-relationship-to-clients/",
+    "file": "BC-3.html.source",
+    "bytes": 384443,
+    "sha256": "4c7b95fa80d9350940d182e2d4dec607bf71321fd4b8119396ff49510598b13d",
+    "retrievedAt": "2026-09-29T05:16:31.224344+00:00",
+    "contentType": "text/html; charset=utf-8",
+    "status": "retrieved; practitioner review pending"
+  },
+  {
+    "id": "BC-7",
+    "url": "https://www.lawsociety.bc.ca/for-lawyers/act-rules-and-code/code-of-professional-conduct/chapter-7-%E2%80%93-relationship-to-the-society-and-other-lawyers/",
+    "finalUrl": "https://www.lawsociety.bc.ca/for-lawyers/act-rules-and-code/code-of-professional-conduct/chapter-7-%E2%80%93-relationship-to-the-society-and-other-lawyers/",
+    "file": "BC-7.html.source",
+    "bytes": 258725,
+    "sha256": "1e795ed98fe94cbad820ee46162634be659a0b1284f2405436762b31d9a95afb",
+    "retrievedAt": "2026-09-29T05:16:31.400540+00:00",
+    "contentType": "text/html; charset=utf-8",
+    "status": "retrieved; practitioner review pending"
+  },
+  {
+    "id": "SK-CODE",
+    "url": "https://www.lawsociety.sk.ca/wp-content/uploads/CodeOfProfessionalConduct.pdf",
+    "finalUrl": "https://www.lawsociety.sk.ca/wp-content/uploads/CodeOfProfessionalConduct.pdf",
+    "file": "SK-CODE.pdf",
+    "bytes": 938619,
+    "sha256": "d1700988e384e1345db6ff22a2aae10a4b1de69b490de2766a2b81ee8e1711fa",
+    "retrievedAt": "2026-09-29T05:16:32.731518+00:00",
+    "contentType": "application/pdf",
+    "status": "retrieved; practitioner review pending"
+  },
+  {
+    "id": "CA-530",
+    "url": "https://laws-lois.justice.gc.ca/eng/acts/c-46/section-530.html",
+    "finalUrl": "https://laws-lois.justice.gc.ca/eng/acts/c-46/section-530.html",
+    "file": "CA-530.html.source",
+    "bytes": 111287,
+    "sha256": "82609194add3582aac87e0ce8e0bbc596a2c381f44dddbceb039c44f78860c36",
+    "retrievedAt": "2026-09-29T05:16:31.151259+00:00",
+    "contentType": "text/html",
+    "status": "retrieved; practitioner review pending"
+  }
+]

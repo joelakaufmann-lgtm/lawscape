@@ -1,0 +1,43 @@
+{
+  "page": "planning/start-page-first-day.html",
+  "viewports": [
+    {
+      "width": 1440,
+      "noOverflow": true,
+      "all11ImagesLoad": true,
+      "all11LightboxesPass": true
+    },
+    {
+      "width": 1024,
+      "noOverflow": true,
+      "all11ImagesLoad": true,
+      "all11LightboxesPass": true
+    },
+    {
+      "width": 768,
+      "noOverflow": true,
+      "all11ImagesLoad": true,
+      "all11LightboxesPass": true
+    },
+    {
+      "width": 390,
+      "noOverflow": true,
+      "all11ImagesLoad": true,
+      "all11LightboxesPass": true
+    },
+    {
+      "width": 320,
+      "noOverflow": true,
+      "all11ImagesLoad": true,
+      "all11LightboxesPass": true
+    }
+  ],
+  "checks": [
+    "Previous/next, keyboard arrows, wrapping, zoom, fit, close",
+    "All section links resolve",
+    "Four links to existing local game"
+  ],
+  "errors": [],
+  "requests": [],
+  "status": "passed"
+}
