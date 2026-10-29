@@ -23,7 +23,7 @@ export function saveDraft(player, taskId, draft) {
   return true;
 }
 
-export function commitWriting(player, taskId, now = Date.now()) {
+export function commitWriting(player, taskId, now) {
   const task = taskById(taskId), draft = player.apprenticeship.drafts[taskId];
   if (!activeRun(player)) throw new Error('This character run has ended.');
   if (!task || !draft) throw new Error('Write a draft first.');
@@ -51,7 +51,7 @@ export function commitWriting(player, taskId, now = Date.now()) {
 
 // Authored checklist assessment only. Free text is preserved for self-comparison,
 // never keyword graded. Rewards are local study gold, not an online credential.
-export function settleReplies(player, now = Date.now()) {
+export function settleReplies(player, now) {
   if (!activeRun(player)) return [];
   const delivered = [];
   for (const attempt of player.apprenticeship.attempts) {
@@ -75,7 +75,7 @@ export function settleReplies(player, now = Date.now()) {
   return delivered;
 }
 
-export function submitReview(player, packId, selected, notes, now = Date.now()) {
+export function submitReview(player, packId, selected, notes, now) {
   if (!activeRun(player)) throw new Error('This character run has ended.');
   if (pendingAttempt(player)) throw new Error('Wait for your partner’s reply before committing another reward.');
   const pack = DOCUMENT_PACKS.find((item) => item.id === packId);

@@ -1,0 +1,36 @@
+// LawScape online Worker. One Worker serves the static build (./dist, produced
+// by `npm run build`) plus /api/* and /ws, backed by two SQLite-backed Durable
+// Object classes (Workers Free plan compatible).
+//
+// Operator setup (see docs/ONLINE.md):
+//   - ACCESS_TEAM_DOMAIN: your Cloudflare Zero Trust team domain, e.g. "example.cloudflareaccess.com".
+//   - ACCESS_AUD: the Application Audience (AUD) tag of the Access application covering
+//     <host>/api and <host>/ws. Either fill it in below or keep it out of the repo with
+//     `npx wrangler secret put ACCESS_AUD` (a secret overrides the empty var).
+//   Leave both empty for local development; never put the dev identity e-mail here (it belongs
+//   in the gitignored .dev.vars file, see .dev.vars.example).
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "lawscape",
+  "main": "server/worker.mjs",
+  "compatibility_date": "2026-10-29",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*", "/ws"]
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "FIRM", "class_name": "FirmRoom" },
+      { "name": "ACCOUNT", "class_name": "Account" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["FirmRoom", "Account"] }
+  ],
+  "vars": {
+    "ACCESS_TEAM_DOMAIN": "",
+    "ACCESS_AUD": ""
+  },
+  "observability": { "enabled": true }
+}

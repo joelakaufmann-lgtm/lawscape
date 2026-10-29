@@ -1,5 +1,6 @@
-// Room/topic IDs are stable attachment points for the future room service.
-// No networking, fabricated presence, agent execution or chat transport exists here.
+// Room/topic IDs are stable attachment points for the room service. Live
+// presence comes from js/online/*; table chat is not part of the pilot, so no
+// chat transport or agent execution exists here.
 export const SIDEBAR_ROOM = { id: 'sidebar', title: 'The Sidebar', mode: 'local-preview', participantLimit: 10 };
 export const SIDEBAR_TOPICS = [
   { id: 'commons', label: 'The commons', prompt: 'Meet the other attorneys and introduce the work you enjoy practicing.' },

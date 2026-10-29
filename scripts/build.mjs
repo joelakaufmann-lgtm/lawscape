@@ -19,7 +19,7 @@ function resolveId(fromId, request) {
 }
 
 function exportedNames(source) {
-  return [...source.matchAll(/\bexport\s+(?:const|let|class|function)\s+([A-Za-z_$][\w$]*)/g)]
+  return [...source.matchAll(/\bexport\s+(?:const|let|class|async\s+function|function)\s+([A-Za-z_$][\w$]*)/g)]
     .map((match) => match[1]);
 }
 
@@ -42,7 +42,7 @@ async function collectModule(id) {
 
   const names = exportedNames(source);
   source = source.replace(
-    /\bexport\s+(const|let|class|function)\s+([A-Za-z_$][\w$]*)/g,
+    /\bexport\s+(const|let|class|async\s+function|function)\s+([A-Za-z_$][\w$]*)/g,
     '$1 $2',
   );
 

@@ -1,0 +1,5 @@
+# Copy to .dev.vars (gitignored) for `npm run online:dev`.
+# With ACCESS_AUD empty in wrangler.jsonc, requests to localhost / 127.0.0.1 / [::1]
+# are treated as this player; `?dev_email=someone@example.com` on /api/* or /ws
+# overrides it so a smoke test can act as several players.
+DEV_IDENTITY_EMAIL=dev@example.com

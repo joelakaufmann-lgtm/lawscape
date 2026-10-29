@@ -3,6 +3,8 @@
 
 import { state, maxEthics } from '../state.js';
 import { formatBillableTime } from '../data/work.js';
+import { now } from '../clock.js';
+import { displayedBillableMs } from '../progress.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -20,8 +22,8 @@ export function updateHUD() {
   streakEl.querySelector('b').textContent = `x${state.streak}`;
   streakEl.classList.toggle('hot', state.streak >= 2);
 
-  $('stat-billable').querySelector('b').textContent = formatBillableTime(state.billableStudyMs);
-  const remaining = Math.max(0, Math.ceil((state.slowUntil - Date.now()) / 1000));
+  $('stat-billable').querySelector('b').textContent = formatBillableTime(displayedBillableMs());
+  const remaining = Math.max(0, Math.ceil((state.slowUntil - now()) / 1000));
   const movement = $('movement-status');
   movement.classList.toggle('hidden', !remaining);
   movement.textContent = remaining ? `Slow walking · ${remaining}s` : '';
@@ -52,7 +54,7 @@ export function hoverLabel(text, x, y) {
   el.classList.remove('hidden');
 }
 
-export function drawMinimap(zone, player, walkable) {
+export function drawMinimap(zone, player, walkable, remotes = []) {
   const canvas = $('minimap');
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#f3e9d2';
@@ -76,6 +78,12 @@ export function drawMinimap(zone, player, walkable) {
   for (const portal of zone.portals) {
     ctx.beginPath();
     ctx.arc(ox + (portal.x + 0.5) * s, oy + (portal.y + 0.5) * s, Math.max(2.5, s * 0.6), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.fillStyle = '#3f5d4b';
+  for (const remote of remotes) {
+    ctx.beginPath();
+    ctx.arc(ox + (remote.actor.x + 0.5) * s, oy + (remote.actor.y + 0.5) * s, Math.max(2.5, s * 0.55), 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.fillStyle = '#6e2436';

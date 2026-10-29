@@ -7,7 +7,7 @@ export const BAR_DRINKS = [
   { id: 'water', name: 'Sparkling water', cost: 0, note: 'Complimentary. No movement or Ethics effect.', slows: false },
 ];
 
-export function orderBarDrink(player, id, now = Date.now()) {
+export function orderBarDrink(player, id, now) {
   const drink = BAR_DRINKS.find((item) => item.id === id);
   if (!drink || player.zone !== 'sidebar' || player.runStatus === 'ended' || player.ethics <= 0) throw new Error('Drinks are served in The Sidebar during an active run.');
   if (player.apprenticeship.attempts.some((a) => a.status === 'pending')) throw new Error('Wait for your partner reply before making purchases.');
@@ -19,7 +19,7 @@ export function orderBarDrink(player, id, now = Date.now()) {
   return { drink, ethicsDamage: 0, slowUntil: player.slowUntil || 0 };
 }
 
-export function movementMultiplier(player, now = Date.now()) { return player.slowUntil > now ? 0.5 : 1; }
+export function movementMultiplier(player, now) { return player.slowUntil > now ? 0.5 : 1; }
 
 const BOARD_KEY = 'lawscape_billable_board_v1';
 let sessionBoard = [];
@@ -37,7 +37,7 @@ export function readBillableBoard() {
   const unique = new Map([...sessionBoard,...unsavedEntries].map((entry) => [entry.runId,entry]));
   return [...unique.values()].sort((a,b) => b.billableMs-a.billableMs || a.endedAt-b.endedAt).slice(0,10);
 }
-export function archiveDisbarredRun(player, now = Date.now()) {
+export function archiveDisbarredRun(player, now) {
   if (player.ethics > 0 && player.runStatus !== 'ended') return { recorded: false, persisted: false };
   const entries = readBillableBoard();
   if (entries.some((entry) => entry.runId === player.runId)) return { recorded: false, duplicate: true };

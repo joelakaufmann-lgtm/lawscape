@@ -1,5 +1,23 @@
 # LawScape changelog
 
+## 0.7.0 — October 29, 2026
+
+- Added an invite-only online firm on Cloudflare: Access email sign-in, a
+  Worker serving the site plus `/api` and `/ws`, an Account Durable Object
+  that owns each player's progress, and a FirmRoom Durable Object that
+  broadcasts live presence. See `docs/ONLINE.md`.
+- Added the shared **Associates' Floor**: eight claimable open desks with
+  brass nameplates, BarMail and document review from a claimed desk, and a
+  "Who's in" roster with status tags.
+- Other attorneys now appear in every firm room (not the apartment) with
+  name tags; the minimap plots them.
+- Moved every progress rule into a shared reducer (`js/economy.js`,
+  `js/actions.js`) that solo play applies locally and the online account
+  service applies with its own clock. A replay test proves the solo economy
+  is unchanged. Save schema is now 6 (older saves load unchanged).
+- Document review now keeps its cadence across saves and reloads; the
+  Associates' Floor is also a solo bonus room.
+
 ## 0.6.0 — September 27, 2026
 
 - Added 20 original California questions and 33 New York questions, bringing

@@ -1,12 +1,13 @@
 # LawScape Roadmap
 
-Updated September 27, 2026 · Release 0.6.0 · Direction: Astra Plan v1.4
+Updated October 29, 2026 · Release 0.7.0 · Direction: Astra Plan v1.4
 
 Legal learning should be fun, including learning how attorneys in different
 jurisdictions approach the same dilemma. LawScape puts that learning inside
 an original classic RPG: inspect the record, make a judgment, send a useful
-reply, and build a practice. The next major work is live grading and a small
-Cloudflare multiplayer pilot. Neither is active in this local release.
+reply, and build a practice. Release 0.7.0 ships the invite-only Cloudflare
+pilot (presence, the Associates' Floor and server-owned progress); live grading
+and room chat are the next major work. The local release stays single-player.
 
 ## Available now — local firm apprenticeship
 
@@ -71,7 +72,47 @@ systems), select dated primary sources, author original dilemmas, review the
 answer key and test feedback before marking a pack available. Expand beyond this
 incomplete snapshot as LegalQuants join or identify missing jurisdictions.
 The present question packs remain distinct from full jurisdiction-specific firm curricula.
-Canada remains a planned province-specific expansion.
+Canada now has a local test pack; practitioner approval and a full continuing-matter curriculum remain pending.
+
+## Planned — Canada: professional responsibility and practice skills
+
+**Status: local test implemented; Canadian practitioner review pending.** The
+pilot adds 25 multiple-choice questions and five email assignments to BarMail,
+with a [complete review package](canada-test/review.html) and
+[HTML overview](canada-test/overview.html). It uses Ontario, British Columbia
+and Saskatchewan settings, explicit roles and forums, and linked primary sources.
+It remains an unreviewed pilot, not comprehensive Canadian coverage or a public
+release. Test responses have no Ethics, gold or streak effects and stay outside
+mixed practice. The continuing-matter engine remains future work.
+
+- **25 multiple-choice ethics questions in the local test:** across the
+  proposal's five topics—Ontario staffing and professional roles; BC referrals,
+  recording notice, and undertakings/trust conditions; and Saskatchewan language
+  rights. Include explanations, plausible alternatives, and fact variations.
+- **Five email assignments in the local test:** one per topic, approximately
+  100–200 words each, with fictional records, sample replies and proposed human
+  review rubrics. Drafts, committed replies and revisions are retained locally.
+  Authored guidance supports self-comparison; no AI grades the prose. Expansion
+  to 5–10 assignments and connected follow-up correspondence remains planned.
+- **Continuing practice files:** connect quick questions and written advice to
+  later decisions and consequences. Preserve the proposal's province-specific
+  rules, meaningful inquiry, defensible alternatives, and explanatory debriefs.
+- **A developed Canadian identity:** build regional office settings, varied
+  characters, Canadian spelling, appropriate English/French context, and local
+  visual details with contributor input. Go beyond maple syrup and familiar
+  symbols while retaining the game's office humour and professional pressure.
+
+Milestones: confirm provincial scope, contributors, sources, and reviewers →
+author and review the question bank and emails → integrate the continuing files
+and Canadian setting → pilot with Canadian practitioners and learners. Track
+each content format separately. Further provinces and territories follow their
+own scoping and review; do not reuse one province's answer as a national rule.
+
+Acceptance: qualified review of each exercise's facts, authorities, answer key
+or rubric, alternatives, and feedback; testing of implemented interactions and
+saved progress; and learner feedback on clarity, usefulness, and cultural detail.
+See the [Canadian integration feedback](planning/canada-integration-feedback.md)
+for the proposed curriculum and design direction.
 
 ## Next — live grading of written work
 
@@ -109,18 +150,24 @@ jobs, reloads, timeouts, invalid citations, tampered run IDs, provider outages
 and ended runs; explicit identification of authored versus live feedback. No
 API key, grading secret, or authoritative reward computation in the browser.
 
-## Next — ten-person Cloudflare multiplayer pilot
+## Shipped in 0.7.0 — ten-person Cloudflare multiplayer pilot
 
-Start with ten individually invited human accounts and one shared **Sidebar**
-room. The private offices and local apprenticeship can remain solo while the
-room service is validated. This is a proposed architecture, not deployed code.
+Ten individually invited accounts share every firm room plus the new
+**Associates' Floor**; only the apartment stays private. The browser renders
+avatars, name tags, desk plates and the roster; the Worker verifies Cloudflare
+Access sign-ins; one FirmRoom Durable Object owns membership, positions, desks
+and ordered broadcasts; one Account Durable Object per email owns progress
+through the shared reducer with an idempotent action ledger. Operator steps,
+quotas and rollback live in [docs/ONLINE.md](docs/ONLINE.md). Still open from
+the original pilot scope: room chat, the shared billable-hours board, and
+labeled AI agents. The table below records the deployed responsibilities.
 
 | Component | Planned responsibility |
 | --- | --- |
 | Browser | Render avatars, interpolation, room roster, topic chat and reconnect state; request actions |
 | Worker | Validate individual sessions, invites and incoming payloads; route room and grading requests |
 | Durable Object for the room | Authoritative room membership, positions, topic membership and ordered WebSocket broadcasts |
-| D1 | Accounts, run/attempt records, receipts, progression and moderation records with explicit retention rules |
+| Account Durable Object (SQLite) | One per invited email: character document, idempotent action ledger, ended-run records. D1 is deferred until retention and moderation records need it |
 | Grading service | Provider access, validated feedback and idempotent settlement, separate from public chat |
 
 Cloudflare documents [Durable Object WebSocket servers with hibernation](https://developers.cloudflare.com/durable-objects/examples/websocket-hibernation-server/),
@@ -129,16 +176,16 @@ Cloudflare documents [Durable Object WebSocket servers with hibernation](https:/
 These support the proposed service boundaries; authentication, persistence and
 recovery behavior still need implementation and end-to-end testing.
 
-- Use individual invite approvals and emailed login codes, not a shared
-  password. Choose the delivery/authentication service during the online build.
+- Done: Cloudflare Access one-time email PINs on `/api` and `/ws`, with the
+  invited emails listed in the Access policy. No shared password.
 - Show human display names and customized avatars, room capacity, actual
   presence, reconnect status and message delivery state. Never simulate online
   people. Validate identity and movement on the server; restrict customization
   to the supported appearance schema.
-- Wire the existing stable topic IDs (`commons`, `evidence`, `writing`,
+- Next: wire the existing stable topic IDs (`commons`, `evidence`, `writing`,
   `agents`) to shared chat. Bound message length and rate, render untrusted text
   safely, support mute/block/report and moderator removal, and decide chat
-  retention before the first invitation. No automatic export of local drafts.
+  retention before enabling it. No automatic export of local drafts.
 - Add **clearly labeled AI agents** as a separate, opt-in phase of the same
   room: identify the owning human, display an AI badge, and permit controlled
   agent-to-human and agent-to-agent conversation at the agents table. Give
@@ -151,9 +198,9 @@ recovery behavior still need implementation and end-to-end testing.
   terminal events. Decide how visible activity, idle sessions, reconnects and
   overlapping tabs affect credited time; audit abuse before ranking players.
   Do not import editable local times as verified multiplayer scores.
-- Persist rewards server-side; local saves may seed appearance, never trusted
-  gold or assessment history. Record terminal runs server-side and start each
-  replacement character with no retained inventory or progression.
+- Done: rewards persist server-side through the shared reducer; local saves
+  seed only name and appearance. Terminal runs are recorded on the account and
+  a replacement character starts with nothing.
 
 Acceptance: ten distinct invited sessions; entry/exit and full-room handling;
 reconnect after suspension; server restart and duplicate-message behavior;
@@ -164,7 +211,9 @@ procedure. Public deployment follows the reviewed private pilot.
 ## Following — jurisdiction packs, court, and art
 
 - **Global Law Firm:** reviewed packs for California, Nevada and Arizona first,
-  followed by contributor-supported jurisdictions. Each task carries its own
+  followed by contributor-supported jurisdictions, including the planned
+  [Canada pilot](#planned--canada-professional-responsibility-and-practice-skills).
+  Each task carries its own
   legal system and version; England & Wales stays distinct from Scotland and
   Northern Ireland. Publish a reviewed-pack catalog and moderated request queue.
 - **AI judge agents and court simulation:** wake the current judge only after

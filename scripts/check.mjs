@@ -21,7 +21,8 @@ const requiredIds = [
   'apprenticeship', 'desk-body', 'desk-close', 'btn-journal', 'quest-status', 'email-writing',
   'c-appearance', 'c-gender', 'c-name', 'room-action',
   'email-inbox', 'email-inbox-open', 'email-writing-body', 'email-back',
-  'room-tools', 'room-service', 'room-board', 'movement-status',
+  'room-tools', 'room-service', 'room-board', 'room-arcade', 'movement-status',
+  'btn-online', 'online-note', 'online-status', 'room-roster', 'creator-online-note',
 ];
 
 for (const id of requiredIds) {

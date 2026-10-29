@@ -34,15 +34,15 @@ test('work phone replaces the old office upgrade without losing progression, and
   const store=storage();
   try {
     store.set('lawscape_save_v2',JSON.stringify({schemaVersion:4,zone:'sidebar',upgrades:['office_window','work_phone','monitor'],gold:444,ethics:90,billableStudyMs:60000,slowUntil:Date.now()+40000}));
-    assert.equal(load(),true);assert.equal(state.schemaVersion,5);assert.deepEqual(state.upgrades,['work_phone','monitor']);
-    assert.equal(state.gold,444);assert.equal(state.billableStudyMs,60000);assert.equal(movementMultiplier(state),.5);
+    assert.equal(load(),true);assert.equal(state.schemaVersion,6);assert.deepEqual(state.upgrades,['work_phone','monitor']);
+    assert.equal(state.gold,444);assert.equal(state.billableStudyMs,60000);assert.equal(movementMultiplier(state,Date.now()),.5);
     assert.equal(canAccessBarMail(state),true);
     assert.equal(OFFICE_UPGRADES.find((item)=>item.id==='work_phone').cost,2000);
     for(const zone of Object.keys(ZONES)) {
       assert.equal(canAccessBarMail({...freshState(),zone}),zone==='office');
       assert.equal(canAccessBarMail({...freshState(),zone,upgrades:['work_phone']}),true);
     }
-    save();assert.equal(load(),true);assert.equal(movementMultiplier(state),.5);
+    save();assert.equal(load(),true);assert.equal(movementMultiplier(state,Date.now()),.5);
   } finally { delete globalThis.localStorage; }
 });
 

@@ -25,3 +25,20 @@ jobs:
         run: npm run build
       - name: Validate deployable package
         run: npm run release:check
+
+  online-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install pinned tooling
+        run: npm ci
+      - name: Build portable site
+        run: npm run build
+      - name: Dry-run the online Worker bundle
+        run: npm run online:check

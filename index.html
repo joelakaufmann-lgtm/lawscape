@@ -31,6 +31,7 @@
         <span class="stat" id="stat-billable" title="Billable study time — visible time inside open questions, writing assignments and feedback">⏱ <b>0:00:00</b></span>
       </div>
       <div id="hud-zone">Your Law Office</div>
+      <div id="online-status" class="hidden" role="status" aria-live="polite"></div>
       <div id="hud-buttons" aria-label="Quick actions">
         <button id="btn-journal" class="hud-action" aria-label="Open apprenticeship journal" aria-keyshortcuts="J"><span aria-hidden="true">✎</span><span>Journal</span></button>
         <button id="btn-mail" class="hud-action" aria-label="Open BarMail" aria-keyshortcuts="B"><span aria-hidden="true">✉</span><span>BarMail</span></button>
@@ -41,7 +42,7 @@
       <canvas id="minimap" width="150" height="120"></canvas>
       <div id="control-hint">Click or tap to walk · WASD/Arrows move · B opens BarMail</div>
       <button id="quest-status" type="button">First firm day · Open Journal</button>
-      <div id="room-tools"><button id="room-action" class="hidden" type="button">Table notes</button><button id="room-service" class="hidden" type="button">Bartender</button><button id="room-board" class="hidden" type="button">High scores</button></div>
+      <div id="room-tools"><button id="room-action" class="hidden" type="button">Table notes</button><button id="room-service" class="hidden" type="button">Bartender</button><button id="room-board" class="hidden" type="button">High scores</button><button id="room-arcade" class="hidden" type="button">Arcade</button><button id="room-roster" class="hidden" type="button" aria-keyshortcuts="O">Who’s in</button></div>
       <div id="movement-status" class="hidden" role="status"></div>
     </div>
 
@@ -94,6 +95,7 @@
               <option value="sqe">England &amp; Wales SQE Ethics</option>
               <option value="mpre">US MPRE</option>
               <option value="juris">LawScape original dilemmas</option>
+              <option value="canada-test">Canada · TEST PACK · 25 questions + 5 emails</option>
             </select>
           </label>
           <button id="email-hr-open" type="button" title="Report a bug or complain about the working conditions of this virtual law firm">✍ Email HR · Report a bug</button>
@@ -153,6 +155,7 @@
         <h1>LawScape</h1>
         <p class="tagline">Read the file. Make the call. Build your practice.</p>
         <p class="title-mission">A new way to learn legal ethics.<br><span>171 questions, including California and New York. Choose your practice in Firm jurisdictions.</span></p>
+        <p class="canada-banner">Local Canada test build · 25 additional questions + 5 emails · Practitioner review required.<br><a href="canada-test/review.html" target="_blank" rel="noopener">Open the Canada review package</a></p>
         <div class="title-features" aria-label="Game features">
           <span><b>6</b> writing assignments</span>
           <span><b>2</b> synthetic matters</span>
@@ -160,6 +163,8 @@
         </div>
         <button id="btn-new" class="primary">Create an Attorney</button>
         <button id="btn-continue" class="hidden">Continue Your Practice</button>
+        <button id="btn-online" class="hidden">Play online · invite only</button>
+        <p id="online-note" class="hidden online-note">Online play keeps a separate attorney on the firm’s server and needs an invited email. Your local save is untouched.</p>
         <details class="how-to">
           <summary>How to play</summary>
           <p>Start with Journal for a guided assignment, or BarMail in your office for a quick ethics question. Choose a jurisdiction, read the facts and feedback, then explore. <a href="docs/PLAYING.html" target="_blank" rel="noopener">Read the player guide</a>.</p>
@@ -170,7 +175,7 @@
         <p class="disclaimer">LawScape is a fictional educational game. It is not legal advice
         and does not create an attorney-client relationship. US and England-and-Wales rules
         are simplified for gameplay — always read the operative text.</p>
-        <p class="hr-note">Version <span id="game-version">0.6.0</span> · Beta — spotted a bug? <a href="https://github.com/joelakaufmann-lgtm/lawscape/issues" target="_blank" rel="noopener">Email HR · Report a bug</a>. Review your report on GitHub before submitting.</p>
+        <p class="hr-note">Version <span id="game-version">0.7.0</span> · Beta — spotted a bug? <a href="https://github.com/joelakaufmann-lgtm/lawscape/issues" target="_blank" rel="noopener">Email HR · Report a bug</a>. Review your report on GitHub before submitting.</p>
       </div>
     </div>
 
@@ -181,7 +186,7 @@
         <div class="brand-eyebrow">HARDSELL &amp; FIRESTONE · NEW ASSOCIATE</div>
         <h2>Create Your Attorney</h2>
         <p class="creator-intro">Make this attorney yours. Preview every choice standing, walking or seated.</p>
-        <div class="career-strip"><strong>Firm apprenticeship · Available</strong><span>In-house · Planned</span><span>Government · Planned</span></div>
+        <div class="career-strip"><strong>Firm apprenticeship · Available</strong><span id="creator-online-note" class="hidden">Online floor · Invite only</span><span>In-house · Planned</span><span>Government · Planned</span></div>
         <div class="creator-identity">
           <label for="c-name">Name<input id="c-name" type="text" maxlength="24" placeholder="Alex Barrister"></label>
           <div><span class="field-label">Gender</span><div id="c-gender" class="pill-row" role="group" aria-label="Gender"></div></div>

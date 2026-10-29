@@ -8,6 +8,7 @@ import path from 'node:path';
 import { SITE_FILES, listFiles } from './site-files.mjs';
 import { ZONES } from '../js/world/zones.js';
 import { SCENARIOS } from '../js/data/ethics.js';
+import { CANADA_SCENARIOS, CANADA_PACK } from '../js/data/canada.js';
 import { HAIR_STYLES, HAIR_COLORS, FACIAL_HAIR } from '../js/data/appearance.js';
 import { WRITING_TASKS, DOCUMENT_PACKS } from '../js/data/apprenticeship.js';
 import { RULE_LIBRARY } from '../js/data/rules.js';
@@ -60,7 +61,7 @@ for (const match of (await read('css/style.css')).matchAll(/url\(['"]?([^)'"\s]+
 for (const set of RULE_LIBRARY) {
   for (const resource of set.resources || []) await checkLink(resource.href, 'index.html', dist);
 }
-for (const scenario of SCENARIOS) {
+for (const scenario of [...SCENARIOS, ...CANADA_SCENARIOS]) {
   if (scenario.localSourceFile) await checkLink(scenario.localSourceFile, 'index.html', dist);
 }
 for (const file of ['README.md', 'CONTRIBUTING.md', 'ROADMAP.md', 'docs/README.md', 'docs/BUILD.md', 'docs/DEPLOYMENT.md', 'docs/PLAYING.md', 'docs/JURISDICTIONS.md', 'content/README.md',
@@ -71,7 +72,7 @@ for (const file of ['docs/PLAYING.html', 'docs/JURISDICTIONS.html']) {
   for (const match of (await read(file)).matchAll(/(?:src|href)="([^"]+)"/g)) await checkLink(match[1], file, dist);
 }
 const bundle = await read('js/lawscape.bundle.js');
-for (const module of ['js/entities/actor.js', 'js/entities/robots.js', 'js/ui/appearance.js', 'js/world/zones.js', 'js/apprenticeship.js', 'js/lounge.js']) {
+for (const module of ['js/entities/actor.js', 'js/entities/robots.js', 'js/ui/appearance.js', 'js/world/zones.js', 'js/apprenticeship.js', 'js/lounge.js', 'js/economy.js', 'js/actions.js', 'js/progress.js', 'js/clock.js']) {
   assert.ok(bundle.includes(`"${module}": (exports, require)`), `Missing game module: ${module}`);
 }
 console.log(JSON.stringify({ version, commit: manifest.commit, files: manifest.files.length + 1,
@@ -79,5 +80,6 @@ console.log(JSON.stringify({ version, commit: manifest.commit, files: manifest.f
   avatars: { hairStyles: HAIR_STYLES.length, hairColors: HAIR_COLORS.length, facialHair: FACIAL_HAIR.length },
   writingAssignments: WRITING_TASKS.length, syntheticFiles: DOCUMENT_PACKS.length,
   documents: DOCUMENT_PACKS.reduce((n, pack) => n + pack.documents.length, 0),
+  canadaTest: { version: CANADA_PACK.version, questions: CANADA_SCENARIOS.length, emailAssignments: CANADA_PACK.emails.length, practitionerReview: 'pending' },
 }, null, 2));
 console.log('Release package checks passed.');
