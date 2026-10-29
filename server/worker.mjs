@@ -52,7 +52,7 @@ async function handleApi(request, env, ctx, url, identity) {
   const route = `${request.method} ${url.pathname}`;
   const { email } = identity;
 
-  if (route === 'GET /api/login') return Response.redirect(new URL('/?online=1', url).toString(), 302);
+  if (route === 'GET /api/login') return Response.redirect(new URL('/game?online=1', url).toString(), 302);
   if (route === 'GET /api/me') return relay(await accountFor(env, email).fetch(internal('/internal/me', email)));
   if (route === 'GET /api/account/state') return relay(await accountFor(env, email).fetch(internal('/internal/state', email)));
 

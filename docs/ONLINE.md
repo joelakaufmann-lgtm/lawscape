@@ -51,7 +51,7 @@ e-mails you put on the Access policy can play online.
 The Worker verifies every `/api/*` and `/ws` request with
 `jwtVerify(token, <team>/cdn-cgi/access/certs, { issuer, audience })` and uses the
 lower-cased `email` claim as the player's identity. `/api/health` is public;
-`/api/login` just redirects to `/?online=1` after Access has done its job; `/api/logout`
+`/api/login` just redirects to `/game?online=1` after Access has done its job; `/api/logout`
 redirects to `/cdn-cgi/access/logout`.
 
 ## Local development
@@ -122,7 +122,7 @@ exporting the accounts first.
 
 - Invite: add the e-mail to the Access policy (Zero Trust → Access → Applications →
   LawScape → Policies → Allow → Emails). The player opens `<host>/api/login`, enters the
-  e-mail, pastes the PIN and lands on `/?online=1`.
+  e-mail, pastes the PIN and lands on `/game?online=1`.
 - Remove: delete the e-mail from the policy and, if you want them out immediately,
   Zero Trust → **My Team → Users → Revoke** (their session cookie stops verifying). Their
   Account DO stays in place; to wipe it, deploy a one-off handler or use

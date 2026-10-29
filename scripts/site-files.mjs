@@ -3,7 +3,7 @@ import path from 'node:path';
 
 // Only these public resources may enter the GitHub Pages artifact.
 export const SITE_FILES = [
-  'index.html', 'LICENSE', '.nojekyll',
+  'index.html', 'game.html', 'assets/start-page', 'LICENSE', '.nojekyll',
   'docs/PLAYING.md', 'docs/JURISDICTIONS.md',
   'docs/PLAYING.html', 'docs/JURISDICTIONS.html',
   'content/questions/mpre/MPRE_Associate_Email_Scenarios.md',

@@ -34,7 +34,8 @@ live manifest and game again after rollback.
 
 ## Existing saves
 
-The URL and `lawscape_save_v2` browser-storage key remain unchanged. The game's
+The homepage is `index.html`; the playable game is `game.html` on the same origin.
+The `lawscape_save_v2` browser-storage key remains unchanged. The game's
 additive migration preserves existing supported saves. Saves made on a local
 file, another hostname or another browser do not automatically transfer to
 GitHub Pages. If an old page is cached, reload the page before playing.
