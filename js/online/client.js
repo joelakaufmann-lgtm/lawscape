@@ -28,7 +28,7 @@ export async function detectServer() {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
   try {
-    const response = await fetch(url('api/health'), { signal: controller.signal, cache: 'no-store', credentials: 'same-origin' });
+    const response = await fetch(url('health'), { signal: controller.signal, cache: 'no-store', credentials: 'same-origin' });
     if (!response.ok) return false;
     const data = await response.json();
     return data?.online === true;

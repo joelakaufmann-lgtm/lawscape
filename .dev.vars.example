@@ -1,5 +1,7 @@
 # Copy to .dev.vars (gitignored) for `npm run online:dev`.
-# With ACCESS_AUD empty in wrangler.jsonc, requests to localhost / 127.0.0.1 / [::1]
-# are treated as this player; `?dev_email=someone@example.com` on /api/* or /ws
-# overrides it so a smoke test can act as several players.
+# ACCESS_AUD= (empty) overrides the production value in wrangler.jsonc so that
+# requests to localhost / 127.0.0.1 / [::1] are treated as DEV_IDENTITY_EMAIL;
+# `?dev_email=someone@example.com` on /api/* or /ws overrides it so a smoke test
+# can act as several players. Production never reads this file.
+ACCESS_AUD=
 DEV_IDENTITY_EMAIL=dev@example.com

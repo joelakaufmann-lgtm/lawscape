@@ -17,7 +17,7 @@
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*", "/ws"]
+    "run_worker_first": ["/api/*", "/ws", "/health"]
   },
   "durable_objects": {
     "bindings": [
@@ -29,8 +29,8 @@
     { "tag": "v1", "new_sqlite_classes": ["FirmRoom", "Account"] }
   ],
   "vars": {
-    "ACCESS_TEAM_DOMAIN": "",
-    "ACCESS_AUD": ""
+    "ACCESS_TEAM_DOMAIN": "dry-dust-26a4.cloudflareaccess.com",
+    "ACCESS_AUD": "175d13a57b51a2a954434984482dda00e6b3fdb2a124d73561ed1049d9304a4a"
   },
   "observability": { "enabled": true }
 }

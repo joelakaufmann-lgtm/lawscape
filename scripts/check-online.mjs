@@ -17,7 +17,10 @@ const failures = [];
 
 const config = await readFile(path.join(root, 'wrangler.jsonc'), 'utf8');
 if (/DEV_IDENTITY_EMAIL/.test(config)) failures.push('wrangler.jsonc must not define DEV_IDENTITY_EMAIL (it belongs in the gitignored .dev.vars).');
-if (!/"run_worker_first"\s*:\s*\[\s*"\/api\/\*"\s*,\s*"\/ws"\s*\]/.test(config)) failures.push('wrangler.jsonc must route /api/* and /ws to the Worker before static assets.');
+const workerFirst = config.match(/"run_worker_first"\s*:\s*\[([^\]]*)\]/)?.[1] || '';
+for (const route of ['/api/*', '/ws', '/health']) {
+  if (!workerFirst.includes(`"${route}"`)) failures.push(`wrangler.jsonc must list "${route}" in assets.run_worker_first so the Worker answers it before static assets.`);
+}
 
 try {
   if (!(await stat(path.join(root, 'dist', 'index.html'))).isFile()) throw new Error();

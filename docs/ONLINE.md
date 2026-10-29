@@ -40,9 +40,10 @@ e-mails you put on the Access policy can play online.
    Tag**.
 5. Configure the Worker:
    - `wrangler.jsonc` → `vars.ACCESS_TEAM_DOMAIN = "<team>.cloudflareaccess.com"`.
-   - Either `vars.ACCESS_AUD = "<aud tag>"` in `wrangler.jsonc`, or keep it out of the
-     repository with `npx wrangler secret put ACCESS_AUD` (a secret overrides the empty
-     var). The dev bypass is disabled the moment `ACCESS_AUD` is non-empty.
+   - `vars.ACCESS_AUD = "<aud tag>"` in `wrangler.jsonc`. The AUD tag is not a secret
+     (it appears in every Access login URL), and keeping it in the repo means a plain
+     redeploy reproduces production. The dev bypass is disabled the moment
+     `ACCESS_AUD` is non-empty, which is why `.dev.vars` blanks it for local runs.
 6. Optional: Access → Applications → LawScape → **Settings → Cookies**: enable
    *HTTP Only* and *Binding cookie*. Leave *SameSite* at Lax so the `CF_Authorization`
    cookie is sent on the WebSocket upgrade (browsers cannot add headers to upgrades, so
@@ -50,7 +51,9 @@ e-mails you put on the Access policy can play online.
 
 The Worker verifies every `/api/*` and `/ws` request with
 `jwtVerify(token, <team>/cdn-cgi/access/certs, { issuer, audience })` and uses the
-lower-cased `email` claim as the player's identity. `/api/health` is public;
+lower-cased `email` claim as the player's identity. `/health` is public (it sits outside
+the two Access paths so the title screen can detect the server before login; `/api/health`
+answers the same for local tooling);
 `/api/login` just redirects to `/game?online=1` after Access has done its job; `/api/logout`
 redirects to `/cdn-cgi/access/logout`.
 
@@ -61,7 +64,8 @@ cp .dev.vars.example .dev.vars      # DEV_IDENTITY_EMAIL=dev@example.com
 npm run online:dev                  # builds ./dist, then `wrangler dev` on http://localhost:8787
 ```
 
-With `ACCESS_AUD` empty and `DEV_IDENTITY_EMAIL` set, requests to `localhost`,
+`.dev.vars` sets `ACCESS_AUD=` (empty), which overrides the production value from
+`wrangler.jsonc` for `wrangler dev` only. With `ACCESS_AUD` empty and `DEV_IDENTITY_EMAIL` set, requests to `localhost`,
 `127.0.0.1` or `[::1]` are treated as that player with no login. `?dev_email=` on any
 `/api/*` or `/ws` URL overrides the identity so several players can be simulated:
 

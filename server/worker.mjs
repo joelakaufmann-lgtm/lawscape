@@ -110,7 +110,9 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    if (url.pathname === '/api/health') return json({ ok: true, online: true, v: 1 });
+    // /health sits outside the Access-protected paths so the title screen can detect
+    // the server before anyone logs in; /api/health stays for local tooling.
+    if (url.pathname === '/health' || url.pathname === '/api/health') return json({ ok: true, online: true, v: 1 });
     if (url.pathname === '/api/logout') return Response.redirect(new URL('/cdn-cgi/access/logout', url).toString(), 302);
 
     if (url.pathname === '/ws' || url.pathname.startsWith('/api/')) {

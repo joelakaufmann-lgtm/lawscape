@@ -68,7 +68,7 @@ const sockets = [];
 async function connect(who) { const s = await open(who); sockets.push(s); return s; }
 
 await check('health is public', async () => {
-  const res = await fetch(`${BASE}/api/health`);
+  const res = await fetch(`${BASE}/health`);
   expect(res.status === 200, `status ${res.status}`);
   expect(res.headers.get('content-type')?.includes('application/json'), 'json content type');
   const body = await res.json();
