@@ -89,6 +89,30 @@ test('difficulty tiers and both exam-style practice packs are available', () => 
   );
 });
 
+test('the treatise library also bundles New York, the FLSC Model Code and the SRA Standards verbatim', () => {
+  const newYork = RULE_LIBRARY.find((set) => set.id === 'newyork');
+  const canada = RULE_LIBRARY.find((set) => set.id === 'canada');
+  const sra = RULE_LIBRARY.find((set) => set.id === 'englandwales');
+  assert.equal(newYork.rules.length, 60);
+  assert.equal(newYork.rules.filter((rule) => rule.text.length > 0).length, 57);
+  assert.ok(newYork.rules.filter((rule) => !rule.text).every((rule) => rule.title === '[Reserved]'));
+  assert.match(newYork.rules.find((rule) => rule.number === '1.15').text, /must not misappropriate such funds/);
+  assert.equal(canada.rules.length, 159);
+  assert.ok(canada.rules.every((rule) => rule.text.length > 0 && /^\d\.\d+-\d+/.test(rule.number)));
+  assert.match(canada.rules.find((rule) => rule.number === '3.4-1').text, /^A lawyer must not act or continue to act for a client where there is a conflict of interest/);
+  assert.match(canada.rules.find((rule) => rule.number === '3.4-1').text, /Commentary/);
+  assert.equal(sra.rules.length, 99);
+  assert.equal(sra.rules.filter((rule) => rule.number.startsWith('Principle')).length, 7);
+  assert.match(sra.rules.find((rule) => rule.number === 'Code 1.4').text, /You do not mislead or attempt to mislead/);
+  assert.ok(sra.rules.filter((rule) => rule.number.startsWith('Firms Code')).length > 20);
+  for (const set of [newYork, canada, sra]) {
+    assert.ok(set.tabLabel && set.citation && set.officialUrl && set.snapshot && set.note, set.id);
+    assert.ok(set.rules.every((rule) => rule.url && rule.title), set.id);
+    assert.equal(new Set(set.rules.map((rule) => rule.number)).size, set.rules.length, `${set.id} numbers are unique`);
+    for (const resource of set.resources) assert.ok(resource.href.startsWith('content/references/'));
+  }
+});
+
 test('the treatise library includes Nevada, Arizona, and the California reference bundle', () => {
   const nevada = RULE_LIBRARY.find((set) => set.id === 'nevada');
   const arizona = RULE_LIBRARY.find((set) => set.id === 'arizona');
@@ -153,7 +177,8 @@ test('upgrade prices and removed upgrades match the revised catalogs', () => {
   assert.equal(office.houseplants.cost, 500);
   assert.equal(office.paralegal.cost, 2000);
   assert.equal(office.work_phone.cost, 2000);
-  assert.equal(office.artwork.cost, 2000);
+  assert.equal(office.snack_fridge.cost, 2000);
+  assert.equal(office.artwork, undefined, 'the dot painting was replaced by the snack fridge in 0.9.0');
   assert.equal(office.seating, undefined);
   assert.equal(office.conference, undefined);
   assert.equal(apartment.coffee.cost, 500);

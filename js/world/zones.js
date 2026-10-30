@@ -42,6 +42,7 @@ export const ZONES = {
         interact: { label: 'Filing Cabinet — Review Documents', action: 'doc_review' } },
       { type: 'paralegaldesk', x: 1, y: 8 },
       { type: 'paralegaldesk', x: 9, y: 8, visible: () => hasUpgrade('paralegal') },
+      { type: 'officechair', x: 9, y: 9, visible: () => hasUpgrade('paralegal') },
       // Liz sits at the screen side of her desk. The chair is broken until the
       // "Chair for Liz Loza" upgrade replaces it.
       { type: 'officechair', x: 1, y: 9, broken: () => !hasUpgrade('liz_chair') },
@@ -49,7 +50,8 @@ export const ZONES = {
         interact: { label: 'Espresso Machine — +5 Ethics, sobers you up', action: 'espresso' } },
       { type: 'plant', x: 1, y: 6, visible: () => hasUpgrade('houseplants') },
       { type: 'plant', x: 4, y: 1, visible: () => hasUpgrade('houseplants') },
-      { type: 'dotpainting', x: 8, y: 0, visible: () => hasUpgrade('artwork') },
+      { type: 'fridge', x: 12, y: 3, stocked: () => true, visible: () => hasUpgrade('snack_fridge'),
+        interact: { label: 'Snack Fridge — grab a snack (+8 Ethics)', action: 'snack' } },
     ],
     portals: [
       { x: 13, y: 2, label: 'Jim Hardsell’s Corner Office', to: 'corner_office' },
@@ -62,7 +64,7 @@ export const ZONES = {
       { id: 'secretary', name: 'Liz Loza, Secretary', x: 1, y: 9, seated: true,
         look: { suit: '#6e2436', gender: 'female', skin: 2, hair: 1, hairStyle: 3, eye: 2 },
         icon: 'dot', talk: 'secretary' },
-      { id: 'paralegal', name: 'Riley Readsalot, Paralegal', x: 10, y: 7,
+      { id: 'paralegal', name: 'Riley Readsalot, Paralegal', x: 9, y: 9, seated: true,
         look: { suit: '#3f5d4b', gender: 'nonbinary', skin: 2, hair: 4, hairStyle: 2, eye: 2 },
         icon: 'dot', talk: 'paralegal',
         visible: () => hasUpgrade('paralegal') },
@@ -89,7 +91,6 @@ export const ZONES = {
       { type: 'officechair', x: 4, y: 2 },
       { type: 'clientchair', x: 3, y: 5, facing: 'n' },
       { type: 'clientchair', x: 6, y: 5, facing: 'n' },
-      { type: 'plant', x: 2, y: 6 },
       { type: 'safe', x: 1, y: 5, empty: () => state.moneybagsStolen,
         interact: { label: 'Mr. Hardsell’s Safe — Client Gold', action: 'moneybags_safe' } },
       { type: 'barcart', x: 8, y: 1,
@@ -314,8 +315,11 @@ export const ZONES = {
       return 'w';
     },
     props: [
-      { type: 'bed', x: 1, y: 1, tier: () => (hasUpgrade('mattress') ? 1 : 0),
+      // The Better Mattress swaps the single bed for a 2×2 queen (kitchenette/stove pattern).
+      { type: 'bed', x: 1, y: 1, visible: () => !hasUpgrade('mattress'),
         interact: { label: 'Bed — Rest (restore Ethics)', action: 'rest' } },
+      { type: 'bigbed', x: 1, y: 1, visible: () => hasUpgrade('mattress'),
+        interact: { label: 'Queen Bed — Rest (restore Ethics)', action: 'rest' } },
       { type: 'kitchenette', x: 5, y: 1, visible: () => !hasUpgrade('kitchen'),
         interact: { label: 'Ramen Noodles — 5 gold / +5 Ethics', action: 'eat_ramen' } },
       { type: 'stove', x: 5, y: 1, visible: () => hasUpgrade('kitchen'),

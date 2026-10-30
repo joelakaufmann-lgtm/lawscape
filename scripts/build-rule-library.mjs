@@ -14,7 +14,88 @@ const arizonaPath = path.join(
 );
 const californiaDir = path.join(projectRoot, 'content/references/california');
 const californiaPath = path.join(californiaDir, 'rpc.md');
+// Verbatim extracts committed under content/references (see each file's header).
+const newYorkPath = path.join(projectRoot, 'content/references/new-york/rpc.md');
+const flscPath = path.join(projectRoot, 'content/references/canada/flsc-model-code.md');
+const sraPath = path.join(projectRoot, 'content/references/england-wales/sra-standards.md');
 const outputPath = path.join(projectRoot, 'js/data/rules.js');
+
+// Markdown extracts: a heading per rule, text until the next heading.
+function sectionsOf(markdown, headingPattern, stopPattern) {
+  const matches = [...markdown.matchAll(headingPattern)];
+  return matches.map((match, index) => {
+    const start = match.index + match[0].length;
+    const next = matches[index + 1]?.index ?? markdown.length;
+    let body = markdown.slice(start, next);
+    const stop = stopPattern ? body.search(stopPattern) : -1;
+    if (stop >= 0) body = body.slice(0, stop);
+    return { match, text: body.replace(/\n{3,}/g, '\n\n').trim() };
+  });
+}
+
+// New York: `## Rule 1.15: Title` per rule, 22 NYCRR Part 1200.
+function parseNewYork(source) {
+  const url = 'https://www.nycourts.gov/rules/jointappellate/';
+  return sectionsOf(source, /^## Rule (\d+\.\d+): (.+)$/gm, /^#\s/m).map(({ match, text }) => ({
+    number: match[1], title: match[2].trim().replace(/^\[Reserved\.?\]$/i, '[Reserved]'), text, url,
+  }));
+}
+
+// FLSC Model Code: `# Chapter N`, `## 3.4 Conflicts`, `### 3.4-1` rules with
+// Commentary kept under the rule. The card title is the section plus the most
+// recent bold sub-heading above the rule, e.g. "Conflicts · Duty to Avoid Conflicts of Interest".
+function parseFlsc(source) {
+  const url = 'https://flsc.ca/what-we-do/model-code-of-professional-conduct/';
+  const rules = [];
+  let section = '', sub = '';
+  for (const line of source.split('\n')) {
+    const sectionMatch = line.match(/^## (\d\.\d+) (.+)$/);
+    if (sectionMatch) { section = sectionMatch[2].trim(); sub = ''; continue; }
+    const subMatch = line.match(/^\*\*([^*]+)\*\*$/);
+    if (subMatch && subMatch[1] !== 'Commentary') { sub = subMatch[1].trim(); continue; }
+    const ruleMatch = line.match(/^### (\d\.\d+-\d+(?:\.\d+)?)$/);
+    if (ruleMatch) rules.push({ number: ruleMatch[1], title: sub && sub !== section ? `${section} · ${sub}` : section, text: '', url });
+  }
+  const bodies = sectionsOf(source, /^### (\d\.\d+-\d+(?:\.\d+)?)$/gm, /^(#{1,2})\s/m);
+  for (const { match, text } of bodies) {
+    const rule = rules.find((item) => item.number === match[1] && !item.text);
+    if (rule) rule.text = text.replace(/^\*\*Commentary\*\*$/m, 'Commentary').replace(/^\*\*([^*]+)\*\*$/gm, '$1');
+  }
+  return rules;
+}
+
+// SRA: seven Principles, then the Code of Conduct for Solicitors and the Code
+// for Firms, each `## <section> <title>` with `### n.m` paragraphs.
+function parseSra(source) {
+  const urls = {
+    Principles: 'https://www.sra.org.uk/solicitors/standards-regulations/principles/',
+    Solicitors: 'https://www.sra.org.uk/solicitors/standards-regulations/code-conduct-solicitors/',
+    Firms: 'https://www.sra.org.uk/solicitors/standards-regulations/code-conduct-firms/',
+  };
+  const rules = [];
+  let part = 'Principles', section = '';
+  const lines = source.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^# SRA Principles/.test(line)) part = 'Principles';
+    else if (/^# SRA Code of Conduct for Solicitors/.test(line)) part = 'Solicitors';
+    else if (/^# SRA Code of Conduct for Firms/.test(line)) part = 'Firms';
+    const principle = line.match(/^## Principle (\d): (.+)$/);
+    if (principle) {
+      const text = lines.slice(i + 1).join('\n').split(/\n#/)[0].trim();
+      rules.push({ number: `Principle ${principle[1]}`, title: principle[2].trim(), text, url: urls.Principles });
+      continue;
+    }
+    const sectionMatch = line.match(/^## (\d+) (.+)$/);
+    if (sectionMatch) { section = sectionMatch[2].replace(/\s*\([^)]*\)\s*$/, '').trim(); continue; }
+    const para = line.match(/^### (\d+\.\d+)$/);
+    if (para) {
+      const text = lines.slice(i + 1).join('\n').split(/\n#/)[0].trim();
+      rules.push({ number: `${part === 'Firms' ? 'Firms Code' : 'Code'} ${para[1]}`, title: section, text, url: urls[part] });
+    }
+  }
+  return rules;
+}
 
 function normalizeRuleText(text) {
   return text
@@ -138,7 +219,7 @@ async function fileExists(filePath) {
 }
 
 async function buildRuleLibrary() {
-  const sourcePaths = [nevadaPath, arizonaPath, californiaPath];
+  const sourcePaths = [nevadaPath, arizonaPath, californiaPath, newYorkPath, flscPath, sraPath];
   const sourceAvailability = await Promise.all(sourcePaths.map(fileExists));
   const missingSources = sourcePaths.filter((_, index) => !sourceAvailability[index]);
 
@@ -156,11 +237,9 @@ async function buildRuleLibrary() {
     return;
   }
 
-  const [nevadaSource, arizonaSource, californiaSource] = await Promise.all([
-    readFile(nevadaPath, 'utf8'),
-    readFile(arizonaPath, 'utf8'),
-    readFile(californiaPath, 'utf8'),
-  ]);
+  const [nevadaSource, arizonaSource, californiaSource, newYorkSource, flscSource, sraSource] = await Promise.all(
+    sourcePaths.map((filePath) => readFile(filePath, 'utf8')),
+  );
 
   const library = [
   {
@@ -218,9 +297,48 @@ async function buildRuleLibrary() {
       },
     ],
   },
+  {
+    id: 'newyork',
+    tabLabel: 'New York RPC',
+    title: 'New York Rules of Professional Conduct',
+    citation: 'N.Y. R. Prof. Conduct',
+    snapshot: 'Verbatim rule text as amended through July 1, 2026 (NYSBA republication of 22 NYCRR Part 1200), retrieved October 30, 2026',
+    officialUrl: 'https://www.nycourts.gov/rules/jointappellate/',
+    note: 'The operative rules are the joint rules of the Appellate Divisions. The bundled text omits the NYSBA Preamble, Scope and Comments. Check the court’s amendments page for changes after July 1, 2026.',
+    rules: parseNewYork(newYorkSource),
+    resources: [
+      { title: 'New York Rules of Professional Conduct (verbatim extract)', description: 'Rules 1.0 to 8.5 with source and retrieval notes.', href: 'content/references/new-york/rpc.md' },
+    ],
+  },
+  {
+    id: 'canada',
+    tabLabel: 'FLSC Model Code',
+    title: 'Federation of Law Societies of Canada — Model Code of Professional Conduct',
+    citation: 'Model Code',
+    snapshot: 'Verbatim 2024 Model Code (rules and Commentary), retrieved October 30, 2026',
+    officialUrl: 'https://flsc.ca/what-we-do/model-code-of-professional-conduct/',
+    note: 'Each provincial and territorial law society adopts the Model Code with its own variations. Confirm the governing law society’s code before relying on a rule.',
+    rules: parseFlsc(flscSource),
+    resources: [
+      { title: 'FLSC Model Code of Professional Conduct (verbatim extract)', description: 'Chapters 1 to 7 with Commentary.', href: 'content/references/canada/flsc-model-code.md' },
+    ],
+  },
+  {
+    id: 'englandwales',
+    tabLabel: 'SRA Standards',
+    title: 'SRA Standards and Regulations (England & Wales)',
+    citation: 'SRA',
+    snapshot: 'Verbatim SRA Principles and Codes of Conduct in effect from April 11, 2025, retrieved October 30, 2026',
+    officialUrl: 'https://www.sra.org.uk/solicitors/standards-regulations/',
+    note: 'The SRA Principles, the Code of Conduct for Solicitors, RELs, RFLs and RSLs, and the Code of Conduct for Firms. SRA guidance and warning notices are not bundled; the SRA pages are the operative source.',
+    rules: parseSra(sraSource),
+    resources: [
+      { title: 'SRA Standards and Regulations (verbatim extract)', description: 'Principles, Solicitors Code and Firms Code.', href: 'content/references/england-wales/sra-standards.md' },
+    ],
+  },
   ];
 
-  const output = `// Generated from the local Ethics Agents authoring corpus.
+  const output = `// Generated from the local Ethics Agents authoring corpus and the verbatim extracts under content/references.
 // Run npm run rules:build to refresh after those source files change.
 
 export const RULE_LIBRARY = ${JSON.stringify(library, null, 2)};

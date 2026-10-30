@@ -189,6 +189,37 @@ function workstation(ctx,ox,oy,prop={},executive=false) {
   if(prop.phone?.()) surface(ctx,ox,oy,1.06,.35,lift+5,()=>{roundRect(ctx,0,0,7,12,1.5,'#1d2931');roundRect(ctx,.8,1,5.4,9,1,'#6fa7a9');ctx.fillStyle='#d8e5db';ctx.fillRect(2,3,3,1);ctx.fillRect(2,5,3,1);});
 }
 
+// Bed art shared by the single bed and the queen. `depth` is the footprint depth
+// in tiles along v; the headboard spans the full width at the west end.
+function drawBed(ctx,ox,oy,{ depth, quilt, panel, pillows, throw: throwColor }) {
+  const near=depth-.3, far=-.35;
+  for(const [u,v] of [[-.36,far+.05],[1.28,far+.05],[-.36,near-.06],[1.28,near-.06]])box(ctx,ox,oy,u,v,.08,.08,5,'#4f3420');
+  box(ctx,ox,oy,-.4,far,1.8,near-far+.05,8,'#66503e',5);           // frame
+  box(ctx,ox,oy,-.34,far+.05,1.68,near-far-.05,9,'#e8e1cf',13);     // mattress
+  box(ctx,ox,oy,-.4,near,1.8,.06,16,'#5a3b29',5);                   // footboard rail (south edge)
+  // quilt over the foot two-thirds, with a turned-down fold near the pillows
+  const qv=far+.03, qd=near-far-.08;
+  box(ctx,ox,oy,.2,qv,1.18,qd,3,quilt,20);
+  box(ctx,ox,oy,.2,near-.05,1.18,.05,10,shade(quilt,-.05),12);
+  box(ctx,ox,oy,.2,qv,.14,qd,1,shade(quilt,.12),23);
+  surface(ctx,ox,oy,.36,qv,23.5,()=>{const h=qd*32;for(let x=4;x<32;x+=7)stroke(ctx,[[x,1],[x,h-1]],'#ffffff22',.6);for(let y=4;y<h;y+=7)stroke(ctx,[[0,y],[32,y]],'#00000018',.6);});
+  if(throwColor)box(ctx,ox,oy,.9,qv+.1,.48,qd-.2,1.5,throwColor,23.5);
+  // pillows along the headboard
+  const span=near-far-.1, pw=Math.min(.3,(span-.06*(pillows-1))/pillows);
+  for(let i=0;i<pillows;i++){const v=far+.05+i*(pw+.06);box(ctx,ox,oy,-.28,v,.38,pw,4,'#d8d0bc',22);box(ctx,ox,oy,-.27,v+.01,.36,pw-.02,1.5,'#f4efe3',25);}
+  // headboard: two turned posts with finials and a tall padded panel between them
+  for(const v of [far-.05,near-.04]){box(ctx,ox,oy,-.5,v,.1,.1,42,'#5a3b29');const f=p(ox,oy,-.45,v+.05);ball(ctx,f.x,f.y-45,2.4,'#8a6a4a');}
+  box(ctx,ox,oy,-.49,far+.05,.07,near-far-.1,34,'#5a3b29',4);
+  box(ctx,ox,oy,-.49,far+.02,.08,near-far-.04,2.5,'#7a5a3e',36);     // top rail
+  faceU(ctx,ox,oy,-.42,near-.05,6,()=>{
+    const w=(near-far-.1)*32;
+    roundRect(ctx,1.5,-30,w-3,25,3,panel);
+    ctx.strokeStyle='#00000033';ctx.lineWidth=.6;ctx.strokeRect(3,-28.5,w-6,22);
+    for(let x=6;x<w-3;x+=6.5)for(const y of [-23,-15]){ctx.fillStyle='#00000040';ctx.beginPath();ctx.arc(x,y,.8,0,Math.PI*2);ctx.fill();ctx.fillStyle='#ffffff30';ctx.fillRect(x-.6,y-1.6,1.2,.6);}
+    ctx.fillStyle='#ffffff14';ctx.fillRect(2.5,-29,w-5,2);
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Prop registry. w/h = tile footprint, solid = blocks walking.
 // `interactLabel` marks clickable resource nodes (main.js wires the actions).
@@ -531,20 +562,15 @@ export const PROPS = {
       ctx.fillRect(ox + 3, oy - 32, 2, 3);
     },
   },
-  dotpainting: {
-    w: 2, h: 1, solid: false, noShadow: true,
-    draw(ctx, ox, oy) {
-      // Gallery-framed minimalist canvas hung on the wall plane.
-      face(ctx, ox, oy, -.25, .5, 0, () => {
-        ctx.fillStyle = '#00000038'; ctx.fillRect(3, -66, 42, 34);
-        frame(ctx, 2, -68, 40, 32, 2.2, PAL.brass);
-        ctx.fillStyle = '#efe9da'; ctx.fillRect(2, -68, 40, 32);
-        ctx.fillStyle = '#faf8f0'; ctx.fillRect(5, -65, 34, 26);
-        ctx.fillStyle = PAL.ink; ctx.beginPath(); ctx.arc(22, -52, 5, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#ffffff55'; ctx.beginPath(); ctx.moveTo(26, -68); ctx.lineTo(42, -68); ctx.lineTo(42, -55); ctx.closePath(); ctx.fill();
-        ctx.fillStyle = PAL.brass; ctx.fillRect(16, -32, 12, 2.4);
-      });
-    },
+  // Beds. The head is the west (u = -.4) end. `bed` is the starter single;
+  // `bigbed` is the 2×2 queen the Better Mattress upgrade swaps in.
+  bed: {
+    w:2,h:1,solid:true,
+    draw(ctx,ox,oy) { drawBed(ctx,ox,oy,{ depth:.7, quilt:'#888979', panel:'#6b5a4a', pillows:2 }); },
+  },
+  bigbed: {
+    w:2,h:2,solid:true,
+    draw(ctx,ox,oy) { drawBed(ctx,ox,oy,{ depth:1.7, quilt:'#3d5870', panel:'#2f4459', pillows:3, throw:'#b8912f' }); },
   },
   caseboard: {
     w: 2, h: 1, solid: true,
@@ -844,30 +870,6 @@ export const PROPS = {
   },
 
   // ---- Apartment -------------------------------------------------------------
-  bed: {
-    w:2,h:1,solid:true,
-    draw(ctx,ox,oy,prop) {
-      const tier=typeof prop.tier==='function'?prop.tier():0;
-      const quilt=tier?'#3d5870':'#888979';
-      for(const [u,v] of [[-.36,-.3],[1.28,-.3],[-.36,.24],[1.28,.24]])box(ctx,ox,oy,u,v,.08,.08,5,'#4f3420');
-      box(ctx,ox,oy,-.4,-.35,1.8,.7,8,'#66503e',5);
-      box(ctx,ox,oy,-.34,-.3,1.68,.6,9,'#e8e1cf',13);
-      // quilt drapes over the foot and the near side
-      box(ctx,ox,oy,.2,-.32,1.18,.66,3,quilt,20);
-      box(ctx,ox,oy,.2,.3,1.18,.05,10,shade(quilt,-.05),12);
-      box(ctx,ox,oy,.2,-.32,.14,.66,1,shade(quilt,.12),23);
-      surface(ctx,ox,oy,.36,-.3,23.5,()=>{for(let x=4;x<32;x+=7)stroke(ctx,[[x,1],[x,19]],'#ffffff22',.6);for(let y=4;y<20;y+=7)stroke(ctx,[[0,y],[32,y]],'#00000018',.6);});
-      // two pillows
-      for(const v of [-.26,.02]){box(ctx,ox,oy,-.28,v,.38,.26,4,'#d8d0bc',22);box(ctx,ox,oy,-.27,v+.01,.36,.24,1.5,'#f4efe3',25);}
-      // upholstered headboard
-      box(ctx,ox,oy,-.48,-.4,.1,.8,40,'#5a3b29');
-      faceU(ctx,ox,oy,-.38,.4,4,()=>{
-        roundRect(ctx,2,-34,21.6,24,3,tier?'#2f4459':'#6b5a4a');
-        for(const x of [7,12.8,18.6])for(const y of [-28,-20])ctx.fillStyle='#00000040',ctx.beginPath(),ctx.arc(x,y,.8,0,Math.PI*2),ctx.fill();
-        ctx.fillStyle='#ffffff14';ctx.fillRect(3,-33,19.6,2);
-      });
-    },
-  },
   coffeemachine: {
     w: 1, h: 1, solid: true,
     draw(ctx, ox, oy, prop, t) {
@@ -968,20 +970,40 @@ export const PROPS = {
       surface(ctx, ox, oy, -.3, -.2, 31.5, () => { roundRect(ctx, 0, 0, 16, 11, 1.5, '#b88a58'); for (const [x, y] of [[4,4],[7,6],[10,3],[11,7]]) { ctx.fillStyle = '#5f8d4e'; ctx.beginPath(); ctx.arc(x, y, 1.4, 0, Math.PI*2); ctx.fill(); } });
     },
   },
+  // `stocked:()=>true` draws the office snack fridge: the door is propped open
+  // on a shelf of fruit, yoghurt and a sandwich.
   fridge: {
     w: 1, h: 1, solid: true,
-    draw(ctx, ox, oy) {
+    draw(ctx, ox, oy, prop) {
+      const stocked = typeof prop?.stocked === 'function' ? prop.stocked() : false;
       box(ctx, ox, oy, -.32, -.28, .64, .56, 3, '#3a3d40');
       box(ctx, ox, oy, -.34, -.3, .68, .6, 56, '#dcdad3', 3);
       face(ctx, ox, oy, -.34, .3, 3, () => {
         stroke(ctx, [[1, -37], [20.8, -37]], '#9a958c', .9);
         stroke(ctx, [[1, -37.8], [20.8, -37.8]], '#ffffffaa', .5);
         roundRect(ctx, 17, -52, 1.6, 11, .8, '#8f8a80'); roundRect(ctx, 17, -34, 1.6, 15, .8, '#8f8a80');
-        // a magnet-held note and a postcard
-        ctx.fillStyle = '#f3e9d2'; ctx.fillRect(4, -30, 7, 8); pin(ctx, 7.5, -29.5, '#c0392b');
-        ctx.fillStyle = '#5b87a6'; ctx.fillRect(6, -48, 6, 4.5); pin(ctx, 9, -48, '#b8912f');
+        if (stocked) {
+          // Open lower door: a lit interior with two shelves of snacks.
+          ctx.fillStyle = '#eef3f2'; ctx.fillRect(1, -35, 15.5, 31);
+          ctx.fillStyle = '#c9d2cf'; ctx.fillRect(1, -21, 15.5, 1); ctx.fillRect(1, -9, 15.5, 1);
+          ctx.fillStyle = '#d64545'; ctx.beginPath(); ctx.arc(4, -24, 2.2, 0, Math.PI * 2); ctx.fill(); // apple
+          ctx.fillStyle = '#e8b63c'; ctx.beginPath(); ctx.ellipse(9, -24, 3, 1.6, -.5, 0, Math.PI * 2); ctx.fill(); // banana
+          ctx.fillStyle = '#f4efe3'; ctx.fillRect(12, -27, 3.5, 5); ctx.fillStyle = '#6e2436'; ctx.fillRect(12, -27, 3.5, 1.4); // yoghurt
+          ctx.fillStyle = '#e9d2a2'; ctx.fillRect(2.5, -14, 7, 4); ctx.fillStyle = '#3f5d4b'; ctx.fillRect(2.5, -12.6, 7, 1); // sandwich
+          ctx.fillStyle = '#5b87a6'; ctx.fillRect(11, -16, 4, 6); ctx.fillStyle = '#ffffff66'; ctx.fillRect(11.6, -15, 1, 4); // juice
+          ctx.fillStyle = '#ffffff55'; ctx.fillRect(1, -35, 15.5, 2);
+        } else {
+          // a magnet-held note and a postcard
+          ctx.fillStyle = '#f3e9d2'; ctx.fillRect(4, -30, 7, 8); pin(ctx, 7.5, -29.5, '#c0392b');
+          ctx.fillStyle = '#5b87a6'; ctx.fillRect(6, -48, 6, 4.5); pin(ctx, 9, -48, '#b8912f');
+        }
         ctx.fillStyle = '#ffffff22'; ctx.fillRect(1.5, -55, 2, 52);
       });
+      if (stocked) {
+        // The open door, swung toward the camera, with a sticky note on it.
+        box(ctx, ox, oy, .3, .3, .36, .06, 32, '#d3d1ca', 3);
+        face(ctx, ox, oy, .3, .36, 3, () => { ctx.fillStyle = '#f6e27a'; ctx.fillRect(2, -24, 6, 6); ctx.fillStyle = '#8b7a3a'; ctx.fillRect(3, -22, 4, .7); ctx.fillRect(3, -20, 3, .7); });
+      }
     },
   },
   wallclock: {

@@ -33,12 +33,14 @@ const source = await readFile(sourcePath, 'utf8');
 const answerRows = new Map();
 
 for (const line of source.split('\n')) {
-  const match = line.match(/^\|\s*(\d+)\s*\|\s*([A-D])\s*\|\s*([^|]+)\|\s*([^|]+)\|$/);
+  // | Question | Answer | Primary authority | Core reason | Explanation |
+  const match = line.match(/^\|\s*(\d+)\s*\|\s*([A-D])\s*\|\s*([^|]+)\|\s*([^|]+)\|\s*([^|]+)\|$/);
   if (match) {
     answerRows.set(Number(match[1]), {
       answer: match[2],
       authority: match[3].trim(),
       reason: match[4].trim(),
+      explanation: match[5].trim(),
     });
   }
 }
@@ -84,6 +86,9 @@ const scenarios = headings.map((heading, index) => {
   if (!answer || choices.length !== 4) {
     throw new Error(`Question ${number} could not be paired with four choices and its answer key.`);
   }
+  if (answer.explanation.length < 40) {
+    throw new Error(`Question ${number} needs an Explanation column in the answer key.`);
+  }
 
   const difficulty = difficultyFor(number);
   return {
@@ -101,6 +106,7 @@ const scenarios = headings.map((heading, index) => {
     body,
     gold: difficulty === 1 ? 35 : difficulty === 2 ? 45 : 60,
     rule: answer.authority,
+    explanation: answer.explanation,
     choices: choices.map((choice) => choice.letter === answer.answer
       ? { grade: 'correct', text: choice.text }
       : {

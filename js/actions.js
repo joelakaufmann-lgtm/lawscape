@@ -10,12 +10,12 @@ import { orderBarDrink } from './lounge.js';
 import { saveSidebarDraft } from './data/sidebar.js';
 import {
   answerScenario, buyHint, buyTip, buyUpgrade, docReviewStart, docReviewCycle, docReviewStop,
-  rest, drinkCoffee, drinkEspresso, eat, takeMoneybags, drinkWhiskey, sendHrEmail, studyTick, resetSeen,
+  rest, drinkCoffee, drinkEspresso, eatSnack, eat, takeMoneybags, drinkWhiskey, sendHrEmail, studyTick, resetSeen,
   arcadeInsertCoin, arcadeStartRound, adoptPet, setPracticePack, setZone, setAppearance, createCharacter,
 } from './economy.js';
 
 const HANDLERS = {
-  answer_scenario: (p, a) => answerScenario(p, a.scenarioId, a.choiceIndex),
+  answer_scenario: (p, a, ctx) => answerScenario(p, a.scenarioId, a.choiceIndex, ctx),
   buy_hint: (p, a) => buyHint(p, a.scenarioId),
   buy_tip: (p, _a, ctx) => buyTip(p, ctx),
   buy_upgrade: (p, a) => buyUpgrade(p, a.id),
@@ -25,6 +25,7 @@ const HANDLERS = {
   rest: (p, _a, ctx) => rest(p, ctx),
   coffee: (p) => drinkCoffee(p),
   espresso: (p, _a, ctx) => drinkEspresso(p, ctx),
+  snack: (p, _a, ctx) => eatSnack(p, ctx),
   eat: (p, a) => eat(p, a.item),
   arcade_play: (p) => arcadeInsertCoin(p),
   arcade_round: (p) => arcadeStartRound(p),

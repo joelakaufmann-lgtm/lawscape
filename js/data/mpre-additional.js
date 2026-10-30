@@ -15,6 +15,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "NovaGrid, a current firm client, offered me an opportunity to buy shares directly from the company. The price and terms are fair. I fully described the transaction and my role in a document the CEO understood. I orally told the CEO that independent legal advice would be a good idea and gave her two weeks to obtain it. She declined and signed a written consent to the essential terms and to my role in the deal.\n\nI did not put my advice about consulting independent counsel in writing. May I complete the purchase?",
     "gold": 40,
     "rule": "ABA Model Rule 1.8(a)",
+    "explanation": "Rule 1.8(a) permits a business transaction with a client only if the terms are fair and fully disclosed in writing, the client is advised in writing of the desirability of independent counsel, and the client gives informed consent in a signed writing. The oral advice to seek counsel leaves one safeguard unmet, so the purchase cannot proceed until it is given in writing; client sophistication and fair terms do not excuse the gap.",
     "choices": [
       {
         "grade": "wrong",
@@ -50,6 +51,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "My father has offered to pay your firm's fees for my criminal defense. I consent to that arrangement, but I want to remain the client and make all decisions about my case. Please do not give him confidential information or let him direct the strategy.\n\nCan the firm accept payment on those terms?",
     "gold": 40,
     "rule": "ABA Model Rule 1.8(f)",
+    "explanation": "Rule 1.8(f) allows the firm to accept the father's payment because Leo gives informed consent, the father will not interfere with the lawyer's judgment or the relationship, and confidentiality will be protected. Paying the bill does not make the father a client or entitle him to strategy updates, and the rule does not require that payment come only from the person represented.",
     "choices": [
       {
         "grade": "wrong",
@@ -85,6 +87,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "We represent three tenants injured in the same apartment fire. The defendant has offered one global settlement. I told each client the total amount, the claims included, and the exact amount each tenant would receive. Each client separately agreed by telephone.\n\nThe offer expires tonight. May I accept it based on their oral approvals?",
     "gold": 40,
     "rule": "ABA Model Rule 1.8(g)",
+    "explanation": "Rule 1.8(g) requires each of the three tenants to give informed consent in a writing signed by the client, after disclosure of all claims and each person's share, before the lawyer accepts an aggregate settlement. Telephone approvals are not signed writings, the requirement applies whether or not the shares are equal, and an expiring offer does not relax it.",
     "choices": [
       {
         "grade": "wrong",
@@ -120,6 +123,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "Two years ago, you represented HarborTech while negotiating and drafting its long-term supply agreement with Meridian Parts. HarborTech is no longer a client.\n\nMeridian now wants us to sue HarborTech to rescind that same agreement based on facts connected to its negotiation. HarborTech's interests would be materially adverse, and HarborTech refuses to consent.\n\nMay you represent Meridian?",
     "gold": 40,
     "rule": "ABA Model Rule 1.9(a)",
+    "explanation": "Rescinding the very supply agreement you negotiated for HarborTech is the same matter, and Meridian's interests are materially adverse, so Rule 1.9(a) bars the representation without HarborTech's informed consent confirmed in writing. Duties to a former client survive the end of the relationship, and the bar does not depend on proving you remember a specific confidence.",
     "choices": [
       {
         "grade": "correct",
@@ -155,6 +159,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "I had a short consultation with a potential plaintiff and limited the discussion to information reasonably necessary to decide whether we could take the case. We declined. The information I received could nevertheless be significantly harmful to that person in the same dispute.\n\nThe defendant later asked another team at our firm to handle the case. The firm immediately screened me from the matter, assigned me no part of its fee, and promptly sent written notice of the screen to the prospective client.\n\nNeither side has consented. May the other team proceed?",
     "gold": 40,
     "rule": "ABA Model Rule 1.18(d)(2)",
+    "explanation": "Rule 1.18(d)(2) lets the firm proceed because the consultation was limited to what was reasonably necessary to decide whether to take the case, the lawyer was timely screened, receives no part of the fee, and the prospective client got prompt written notice. Those safeguards substitute for consent, so neither a blanket firm-wide bar nor a signed waiver is required.",
     "choices": [
       {
         "grade": "wrong",
@@ -190,6 +195,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "A solo lawyer referred a products-liability case to us. The client signed a writing approving a 20/80 division of the fee, including the share each firm would receive. The total contingent fee is reasonable.\n\nThe referring lawyer will perform no work and refuses to assume joint responsibility for the case. May we still divide the fee as agreed?",
     "gold": 40,
     "rule": "ABA Model Rule 1.5(e)",
+    "explanation": "Rule 1.5(e) permits lawyers in different firms to divide a fee only in proportion to the services each performs or where each assumes joint responsibility, together with client agreement confirmed in writing and a reasonable total fee. The referring lawyer will do no work and refuses joint responsibility, so the client's signed approval cannot by itself make the 20/80 split permissible.",
     "choices": [
       {
         "grade": "wrong",
@@ -225,6 +231,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "We received a $60,000 settlement for a client and placed it in trust. A medical provider asserts a legally plausible $10,000 lien against the recovery. The client disputes the lien and demands all $60,000 immediately.\n\nThe other $50,000 is not disputed. What should we do while the lien dispute is resolved?",
     "gold": 40,
     "rule": "ABA Model Rule 1.15(e)",
+    "explanation": "Rule 1.15(e) requires the disputed $10,000 to stay in trust until the client and the medical provider resolve their competing claims, while the undisputed $50,000 must be delivered promptly. Paying everything to the client ignores the plausible lien, paying the provider ignores the client's dispute, and holding all $60,000 wrongly withholds funds the client is clearly owed.",
     "choices": [
       {
         "grade": "wrong",
@@ -260,6 +267,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "One of our lawyers saw a news report identifying a stranger who was injured in a train collision. Hoping to obtain a contingent-fee case, the lawyer went to the stranger's hospital room and offered to represent her. The victim had no prior family, personal, business, or professional relationship with the lawyer.\n\nWas the in-person contact proper?",
     "gold": 40,
     "rule": "ABA Model Rule 7.3(b)",
+    "explanation": "Rule 7.3(b) prohibits live person-to-person solicitation when a significant motive is pecuniary gain and the person contacted is not a lawyer, a family member, a close friend or a prior client. Walking into a stranger's hospital room with a contingent-fee pitch is the paradigm violation; the absence of coercion and the hospital setting are beside the point.",
     "choices": [
       {
         "grade": "correct",
@@ -295,6 +303,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "We represent a plaintiff suing a manufacturer over a plant explosion. We know the manufacturer is represented in the matter.\n\nThe manufacturer's current safety director supervised the response to the explosion, regularly consults with company counsel about the lawsuit, and has authority to bind the company regarding safety issues. Without seeking company counsel's consent, one of our lawyers emailed the director directly to request an interview about the explosion.\n\nWas that contact proper?",
     "gold": 40,
     "rule": "ABA Model Rule 4.2",
+    "explanation": "The safety director supervised the response, regularly consults company counsel about the suit, and can bind the company on safety issues, so Rule 4.2 treats her as a constituent of the represented organization whom the lawyer may not contact about the matter without counsel's consent. An interview request about the explosion is a communication about the subject of the representation.",
     "choices": [
       {
         "grade": "wrong",
@@ -330,6 +339,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "A former client filed a disciplinary grievance accusing me of abandoning his case and lying about work performed. Confidential information in our file disproves those allegations.\n\nMay I disclose portions of the file in my response to disciplinary authorities?",
     "gold": 40,
     "rule": "ABA Model Rule 1.6(b)(5)",
+    "explanation": "Rule 1.6(b)(5) permits disclosure to the extent the lawyer reasonably believes necessary to respond to allegations in any proceeding concerning the representation, so the partner may use file material that disproves the abandonment and lying claims. Confidentiality is not absolute after the representation ends, but the grievance does not waive the whole file; only what is needed to respond may be revealed.",
     "choices": [
       {
         "grade": "wrong",
@@ -365,6 +375,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "During a civil trial, our client testified to a material fact. He has now privately admitted that the testimony was false, and I know the admission is true. I urged him to correct the testimony, but he refused.\n\nThe proceeding is still pending. What must I do?",
     "gold": 55,
     "rule": "ABA Model Rule 3.3(a)(3), (c)",
+    "explanation": "Rule 3.3(a)(3) requires a lawyer who comes to know that a client's material testimony was false to take reasonable remedial measures, including disclosure to the tribunal if necessary, and Rule 3.3(c) makes that duty override confidentiality while the proceeding continues. Silence, silent withdrawal, or waiting for the other side to notice all leave the false evidence uncorrected.",
     "choices": [
       {
         "grade": "wrong",
@@ -400,6 +411,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "The laptop used by our former sales director contains emails relevant to the lawsuit you are handling for us. We have a legal duty to preserve them. The messages will hurt our position, and no one has specifically requested the laptop yet.\n\nCan your litigation team arrange to factory-reset it under our routine equipment-retirement policy?",
     "gold": 55,
     "rule": "ABA Model Rule 3.4(a)",
+    "explanation": "Rule 3.4(a) prohibits unlawfully destroying or concealing material with potential evidentiary value and assisting a client in doing so; the company already has a duty to preserve the emails, so a factory reset under a routine policy is spoliation. A specific discovery request is not the trigger, and the laptop's former user is irrelevant.",
     "choices": [
       {
         "grade": "correct",
@@ -435,6 +447,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "Our client wants to file a counterclaim solely to increase the opponent's costs and force a cheap settlement. After investigating the facts and law, we have found no nonfrivolous basis for the claim and no good-faith argument to change existing law.\n\nThe client insists that we file it anyway. What should we do?",
     "gold": 55,
     "rule": "ABA Model Rule 3.1",
+    "explanation": "Rule 3.1 forbids asserting a claim with no nonfrivolous basis in fact or law and no good-faith argument for changing existing law, so the firm must refuse the counterclaim even though the client insists. The client controls objectives but not whether the lawyer files frivolous pleadings, and labeling the claim uncertain or citing settlement pressure does not supply the missing basis.",
     "choices": [
       {
         "grade": "wrong",
@@ -470,6 +483,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "A partner instructed our private investigator to telephone a plaintiff whom we know is represented in the matter. The investigator was told to pose as a neutral industry researcher, avoid mentioning our firm, and obtain admissions about the lawsuit. The investigator followed those instructions.\n\nIs the partner professionally responsible for the investigator's conduct?",
     "gold": 55,
     "rule": "ABA Model Rule 5.3(c)(1)",
+    "explanation": "Rule 5.3(c)(1) makes a lawyer responsible for a nonlawyer's conduct that would violate the rules if the lawyer ordered it, and the partner ordered a pretext call to a represented plaintiff that would breach Rules 4.2 and 8.4(c) if the partner had made it. The rules reach the lawyer who directs the investigator, whether or not the admissions are ever used.",
     "choices": [
       {
         "grade": "wrong",
@@ -505,6 +519,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "The controlling court recently issued a decision directly adverse to our position. Opposing counsel has not cited it. The supervising partner ordered me to omit it from our brief because \"the other side can do its own research.\"\n\nI know the duty to disclose this controlling authority is clear rather than reasonably arguable. May I follow the partner's instruction?",
     "gold": 55,
     "rule": "ABA Model Rules 5.2 and 3.3(a)(2)",
+    "explanation": "Rule 3.3(a)(2) requires disclosing directly adverse controlling authority the opponent has not cited, and because that duty is clear rather than reasonably arguable, Rule 5.2(b) gives the associate no safe harbor for following the partner's order. Rule 5.2(a) makes the subordinate equally responsible, so both lawyers could be disciplined.",
     "choices": [
       {
         "grade": "wrong",
@@ -540,6 +555,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "I am admitted and in good standing in State A but not State B. A client needs temporary transactional work in State B. I will handle the matter in association with a State B lawyer who will actively participate throughout. I will not open an office in State B or claim to be admitted there.\n\nDoes the model rule permit this temporary practice?",
     "gold": 55,
     "rule": "ABA Model Rule 5.5(c)(1)",
+    "explanation": "Rule 5.5(c)(1) permits a lawyer admitted in State A to provide temporary legal services in State B in association with a State B lawyer who actively participates in the matter, without opening a State B office or claiming admission there. The local lawyer must actively participate, not do all the substantive work, and the exception does not depend on a pending tribunal matter.",
     "choices": [
       {
         "grade": "correct",
@@ -575,6 +591,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "A new partner formerly worked for a federal agency and participated personally and substantially in a specific enforcement investigation of Orion Systems. The partner is individually barred from representing Orion in that same matter, and the agency will not consent.\n\nOur firm proposes to represent Orion while timely screening the partner from all participation, giving the partner no part of the fee, and promptly sending written notice to the agency.\n\nMay the firm accept the matter?",
     "gold": 55,
     "rule": "ABA Model Rule 1.11(b)",
+    "explanation": "Rule 1.11(b) allows the firm to represent Orion even though the former agency partner is personally disqualified, provided the partner is timely screened, receives no part of the fee, and the agency gets prompt written notice. The firm is not automatically tainted, and an informal promise is no substitute for the structural screen.",
     "choices": [
       {
         "grade": "wrong",
@@ -610,6 +627,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "A longtime client has asked me to prepare a new will leaving me $75,000. The client is competent, fully informed, and acting voluntarily. We are not related and do not have a close familial relationship.\n\nMay I draft the will containing that gift?",
     "gold": 55,
     "rule": "ABA Model Rule 1.8(c)",
+    "explanation": "Rule 1.8(c) prohibits preparing an instrument that gives the lawyer a substantial gift from a client unless the lawyer is related to the client, so you may not draft a will leaving yourself $75,000 from an unrelated client, however voluntary her wish. Another lawyer witnessing the will does not cure the problem; the client needs independent counsel to draft the gift.",
     "choices": [
       {
         "grade": "wrong",
@@ -645,6 +663,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "Plaintiff's counsel called me without defense counsel because an emergency hearing needed to be scheduled immediately. We discussed only timing and courtroom availability, not the merits. I reasonably believed no party would gain a procedural, substantive, or tactical advantage.\n\nI promptly notified defense counsel of the substance of the call and gave both sides an opportunity to respond. Was it permissible to take the call?",
     "gold": 55,
     "rule": "ABA Model Code of Judicial Conduct Rule 2.9(A)(1)",
+    "explanation": "Judicial Conduct Rule 2.9(A)(1) permits an ex parte communication for scheduling or emergency purposes when it does not address substantive matters, the judge reasonably believes no party will gain an advantage, and the judge promptly notifies the other parties and lets them respond. Judge Alvarez met each condition; the rule does not require every party on the initial call, but the prompt notice was essential.",
     "choices": [
       {
         "grade": "wrong",
@@ -680,6 +699,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "A corporate defendant has appeared in a case assigned to me. I just learned that my spouse directly owns a significant amount of stock in that corporation. The interest is more than de minimis. I believe I can remain completely impartial, and no party has filed a motion.\n\nAm I required to disqualify myself?",
     "gold": 55,
     "rule": "ABA Model Code of Judicial Conduct Rule 2.11(A)(3)",
+    "explanation": "Judicial Conduct Rule 2.11(A)(3) requires disqualification when the judge knows that the judge or the judge's spouse has a more than de minimis economic interest in a party, and the spouse's holding counts regardless of the judge's confidence in his own impartiality. No party motion is needed, and whether the case will move the stock price is not the test.",
     "choices": [
       {
         "grade": "correct",
@@ -715,6 +735,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "We must review and produce several million emails. No one on our team understands the new review platform, its privilege filters, or how it handles metadata. The client wants to avoid the cost of an e-discovery specialist.\n\nI am considering having a junior associate upload the files and begin production immediately, learning the platform along the way. What do our professional obligations require?",
     "gold": 55,
     "rule": "ABA Model Rule 1.1, Comment 8",
+    "explanation": "Rule 1.1, Comment 8 makes keeping abreast of relevant technology part of competence, so before uploading millions of emails to a platform no one understands the team must learn it or bring in qualified assistance. Competence cannot be waived by the client and applies to every lawyer doing the review, not just the partner.",
     "choices": [
       {
         "grade": "wrong",
@@ -750,6 +771,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "I authorized the firm to negotiate my employment claim, but I never authorized anyone to accept a particular amount. Yesterday, opposing counsel offered $180,000. Your partner believed it was an excellent result and accepted it before consulting me.\n\nWas the partner permitted to make that decision?",
     "gold": 55,
     "rule": "ABA Model Rule 1.2(a)",
+    "explanation": "Rule 1.2(a) reserves the decision whether to settle a civil matter to the client, and authority to negotiate is not authority to accept, so the partner could not bind Ms. Reed to the $180,000 offer however good it looked. The size of the offer is irrelevant; the problem is the missing client decision.",
     "choices": [
       {
         "grade": "wrong",
@@ -785,6 +807,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "A small-business owner cannot afford full representation in a straightforward eviction case. She wants us only to analyze the complaint and draft her answer; she will appear without us after that. The limitation is reasonable under the circumstances.\n\nWe carefully explained what we will and will not do, and she gave informed consent. May we accept the limited engagement?",
     "gold": 55,
     "rule": "ABA Model Rule 1.2(c)",
+    "explanation": "Rule 1.2(c) permits limiting the scope of a representation when the limitation is reasonable under the circumstances and the client gives informed consent, both of which are met by analyzing the complaint and drafting the answer for the self-represented owner. Neither opposing counsel's consent nor continuation through judgment is required.",
     "choices": [
       {
         "grade": "correct",
@@ -820,6 +843,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "A business client described a proposed payment system that might violate federal reporting laws. I explained the statutes, the possible criminal consequences, and the unresolved legal questions. I advised the client not to proceed unless the plan could be brought into compliance.\n\nI did not suggest concealment or help implement an unlawful plan. The client later used my legal analysis to design a criminal scheme without telling me. Did my original advice violate the rules?",
     "gold": 55,
     "rule": "ABA Model Rule 1.2(d), Comment 9",
+    "explanation": "Rule 1.2(d) and Comment 9 distinguish presenting an honest analysis of the legal consequences of a proposed course of action, which is permitted, from recommending or assisting a crime or fraud, which is not; the partner explained the statutes and advised against proceeding. The client's secret later misuse of that advice does not retroactively make the lawyer a participant.",
     "choices": [
       {
         "grade": "wrong",
@@ -855,6 +879,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "The prosecutor offered our client a plea carrying six months in custody instead of the five-year sentence charged. I believe our suppression motion will win, and the client previously told me only that he hoped to avoid incarceration.\n\nI plan to reject the offer without telling him because discussing it may weaken his resolve. Is that permissible?",
     "gold": 55,
     "rule": "ABA Model Rule 1.4, Comment 2",
+    "explanation": "Rule 1.4, Comment 2 requires promptly informing a criminal client of a plea offer unless the client has previously told the lawyer that such an offer is acceptable or unacceptable. The client's stated hope to avoid incarceration is not advance authority to reject a six-month deal, and confidence in the suppression motion does not entitle counsel to decide for him.",
     "choices": [
       {
         "grade": "wrong",
@@ -890,6 +915,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "While we continue to represent a technology client, I discovered that our team missed a renewal filing. The error materially damaged the client's rights and could cause the client to reconsider both its strategy and whether to keep our firm.\n\nWe may be able to mitigate some of the harm. Must we tell the client about the error now?",
     "gold": 55,
     "rule": "ABA Model Rule 1.4; ABA Formal Opinion 481",
+    "explanation": "Rule 1.4 requires keeping the client reasonably informed, and ABA Formal Opinion 481 reads that duty to require disclosure of a material error in an ongoing representation when a reasonable client would consider it important; a missed renewal filing that damaged the client's rights qualifies. The firm cannot wait for mitigation to fail or for the client to ask.",
     "choices": [
       {
         "grade": "correct",
@@ -925,6 +951,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "A bar applicant knowingly omitted a prior professional-license suspension from his application. During the admissions investigation, the committee directly asked whether his filing was complete. He repeated the false answer and refused to correct the record.\n\nIs the applicant's conduct proper?",
     "gold": 55,
     "rule": "ABA Model Rule 8.1",
+    "explanation": "Rule 8.1 prohibits a bar applicant from knowingly making a false statement of material fact or failing to correct a misapprehension known to have arisen in the admissions matter. The applicant omitted the suspension and then repeated the false answer when asked directly, so the conduct is improper whether or not the suspension would have been disqualifying.",
     "choices": [
       {
         "grade": "wrong",
@@ -960,6 +987,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "I cannot pay a large fee now. I propose that the firm receive $75,000 only if I am acquitted of the felony charge and nothing if I am convicted. The amount would be reasonable for the work involved.\n\nMay the firm accept that arrangement?",
     "gold": 55,
     "rule": "ABA Model Rule 1.5(d)(2)",
+    "explanation": "Rule 1.5(d)(2) flatly prohibits a contingent fee for representing a defendant in a criminal case, so a $75,000 fee payable only on acquittal is impermissible regardless of its reasonableness. A signed agreement or a prosecutor's approval cannot cure a fee the rule forbids outright.",
     "choices": [
       {
         "grade": "wrong",
@@ -995,6 +1023,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "A former spouse already has a final court order awarding support. The obligor has ignored it for three years. The client wants us to pursue the accumulated unpaid balance for a reasonable percentage of whatever we recover.\n\nWould that contingent-fee arrangement be permissible?",
     "gold": 55,
     "rule": "ABA Model Rule 1.5, Comment 6",
+    "explanation": "Rule 1.5(d)(1) bars contingent fees that depend on securing a divorce or on the amount of support, but Comment 6 explains that the prohibition does not reach collection of post-judgment balances already due under an existing order. Recovering three years of unpaid support for a reasonable percentage of the recovery is therefore permissible.",
     "choices": [
       {
         "grade": "wrong",
@@ -1030,6 +1059,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "A partner knowingly fabricated income records on her personal mortgage application. The conduct had nothing to do with a client, a court, or the practice of law.\n\nCan the partner nevertheless be disciplined under the professional-conduct rules?",
     "gold": 55,
     "rule": "ABA Model Rule 8.4(c)",
+    "explanation": "Rule 8.4(c) makes it professional misconduct to engage in conduct involving dishonesty, fraud, deceit or misrepresentation, and the rule is not limited to client matters or the practice of law. Fabricating income records on a personal mortgage application is such conduct, and discipline does not wait for a criminal conviction or a client loss.",
     "choices": [
       {
         "grade": "wrong",
@@ -1065,6 +1095,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "A court ordered us to produce confidential client records. We asserted every nonfrivolous privilege and confidentiality objection, sought appropriate review, and lost. The order is now enforceable.\n\nMay we comply?",
     "gold": 55,
     "rule": "ABA Model Rule 1.6(b)(6), Comment 15",
+    "explanation": "Rule 1.6(b)(6) permits disclosure to comply with a court order, and Comment 15 explains that after asserting nonfrivolous privilege and confidentiality objections and losing, the lawyer may comply but should reveal only what the order requires. Confidentiality does not trump an enforceable order, and the order does not license public release of the whole file.",
     "choices": [
       {
         "grade": "correct",
@@ -1100,6 +1131,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "During a confidential consultation, our current client gave us reliable information showing that her former lawyer stole money from her trust account. The conduct raises a substantial question about that lawyer's honesty. Our client refuses to authorize disclosure, and no confidentiality exception applies.\n\nMust we report the former lawyer?",
     "gold": 55,
     "rule": "ABA Model Rule 8.3(c)",
+    "explanation": "Rule 8.3(c) provides that the reporting duty does not require disclosure of information protected by Rule 1.6, so because the client learned of the theft in confidence and refuses to permit disclosure, the firm must not report. The conduct plainly concerns honesty, but confidentiality controls unless the client consents or another exception applies.",
     "choices": [
       {
         "grade": "wrong",
@@ -1135,6 +1167,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "Our outside lawyer learned during the representation that we planned to acquire a specific warehouse. Before we could make an offer, the lawyer secretly purchased the neighboring parcel because our project would increase its value.\n\nThe lawyer did not reveal our information to anyone, but used it for personal gain without our consent. Was that proper?",
     "gold": 55,
     "rule": "ABA Model Rule 1.8(b)",
+    "explanation": "Rule 1.8(b) prohibits using information relating to the representation to the client's disadvantage without informed consent, and buying the neighboring parcel to profit from the client's secret expansion plan is exactly that kind of use. The rule is violated by use alone, without any disclosure, and it does not depend on evidentiary privilege.",
     "choices": [
       {
         "grade": "wrong",
@@ -1170,6 +1203,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "Our regulatory group currently represents Alpha Foods. A potential new client wants our litigation group to sue Alpha in a completely unrelated lease dispute. The two teams would share no confidential information, but Alpha refuses to consent.\n\nMay the firm accept the lawsuit?",
     "gold": 55,
     "rule": "ABA Model Rule 1.7(a), (b)",
+    "explanation": "Rule 1.7(a) treats suing a current client as direct adversity even in a completely unrelated matter, so the firm cannot take the lease dispute against Alpha Foods without Alpha's informed consent confirmed in writing under Rule 1.7(b). An ethical wall addresses confidential information, not loyalty, and the substantial-relationship test belongs to former-client analysis.",
     "choices": [
       {
         "grade": "correct",
@@ -1205,6 +1239,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "After a collision, we jointly represented a driver and passenger in claims against the other vehicle. New evidence now places them directly against one another in the same lawsuit, and each wants to assert a claim against the other.\n\nBoth are willing to consent in writing. May one lawyer continue to represent both?",
     "gold": 55,
     "rule": "ABA Model Rule 1.7(b)(3)",
+    "explanation": "Rule 1.7(b)(3) makes a conflict nonconsentable when the representation involves asserting a claim by one client against another client represented by the same lawyer in the same litigation, so the driver and passenger cannot both be kept once they sue each other. Their written consent cannot cure it, and their original alignment no longer controls.",
     "choices": [
       {
         "grade": "wrong",
@@ -1240,6 +1275,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "A sophisticated corporate client, advised by independent counsel, signed an advance waiver. The document specifically identified the types of unrelated matters in which we might oppose the company, described the likely classes of adverse clients, and explained the material risks.\n\nA new, consentable, unrelated matter falls squarely within that description. Is the advance waiver necessarily ineffective merely because it was signed before the conflict arose?",
     "gold": 55,
     "rule": "ABA Model Rule 1.7, Comment 22",
+    "explanation": "Rule 1.7, Comment 22 recognizes that an advance waiver can constitute informed consent when it specifically identifies the types of future conflicts and the client, especially a sophisticated one advised by independent counsel, understands the material risks. This waiver did that, so it is not ineffective merely because it predates the conflict; a vague general waiver would fare differently.",
     "choices": [
       {
         "grade": "wrong",
@@ -1275,6 +1311,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "One of our lawyers cannot represent a plaintiff because the defendant's CEO is the lawyer's sibling, creating a significant personal-interest conflict. Another lawyer at our firm has no relationship with the sibling, and there is no significant risk that the first lawyer's personal interest will materially limit the second lawyer's representation.\n\nIs the second lawyer automatically disqualified?",
     "gold": 55,
     "rule": "ABA Model Rule 1.10(a)(1)",
+    "explanation": "Rule 1.10(a)(1) does not impute a conflict based on a lawyer's personal interest when there is no significant risk that it will materially limit the representation by the other lawyers in the firm. The sibling relationship is personal to the first lawyer, so the second lawyer may proceed without the opposing party's consent.",
     "choices": [
       {
         "grade": "wrong",
@@ -1310,6 +1347,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "Our new associate's former firm represents a plaintiff in pending litigation. The associate never worked on the matter, never discussed it, and acquired no protected information material to it.\n\nOur firm has been asked to represent the defendant. Is the associate personally disqualified merely because her former firm handled the plaintiff's case?",
     "gold": 55,
     "rule": "ABA Model Rule 1.9(b)",
+    "explanation": "Rule 1.9(b) bars a lawyer whose former firm represented an adverse client only if the lawyer acquired protected information material to the matter, and the associate never worked on, discussed, or learned anything about the plaintiff's case. There is no irrebuttable presumption and no need for the plaintiff's consent on these facts.",
     "choices": [
       {
         "grade": "wrong",
@@ -1345,6 +1383,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "A producer has offered to buy the exclusive rights to our client's story. Before the criminal case ends, the client wants to assign our firm part of those documentary rights in place of a portion of our fee.\n\nMay the firm negotiate that agreement now?",
     "gold": 55,
     "rule": "ABA Model Rule 1.8(d)",
+    "explanation": "Rule 1.8(d) prohibits a lawyer, before the conclusion of the representation, from negotiating an agreement giving the lawyer literary or media rights based substantially on information relating to the representation. Taking documentary rights in lieu of fees during the criminal case is precisely that; the ban is about timing and the source of the rights, not a permanent prohibition.",
     "choices": [
       {
         "grade": "correct",
@@ -1380,6 +1419,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "I represent an indigent tenant without charging a fee. After the representation began, I learned that she could not buy food for her children. I gave her a modest grocery card.\n\nI never promised assistance before retention, did not use it to induce her to remain a client, will not seek repayment, and do not advertise such gifts. Was the gift permissible?",
     "gold": 55,
     "rule": "ABA Model Rule 1.8(e)(3)",
+    "explanation": "Rule 1.8(e)(3) permits a lawyer representing an indigent client pro bono to provide modest gifts for food and other basic living expenses, provided the lawyer does not promise or advertise the assistance, use it to induce the client to stay, or seek repayment. The grocery card met each safeguard, so it is not prohibited financial assistance.",
     "choices": [
       {
         "grade": "wrong",
@@ -1415,6 +1455,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "Last year, I served as the mediator in a commercial dispute. The mediation failed, and one party now wants me to represent it in that same dispute.\n\nEvery party to the mediation has given informed consent confirmed in writing. May I accept?",
     "gold": 55,
     "rule": "ABA Model Rule 1.12(a)",
+    "explanation": "Rule 1.12(a) permits a former mediator to represent a party in the same matter when all parties to the proceeding give informed consent confirmed in writing, which has happened here. Consent from the new client alone would not suffice, and a court appointment is not required.",
     "choices": [
       {
         "grade": "wrong",
@@ -1450,6 +1491,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "We represent a corporation in an internal investigation. We are about to interview an employee whose conduct may expose both the company and the employee to liability. The employee appears to believe that our firm represents him personally.\n\nWhat should we do before continuing?",
     "gold": 55,
     "rule": "ABA Model Rule 1.13(f)",
+    "explanation": "Rule 1.13(f) requires a lawyer dealing with an organization's constituent to explain that the organization is the client when the organization's interests may be adverse to the constituent's. Because the employee believes the firm represents him and his exposure may diverge from the company's, the lawyer must give that clarification and suggest separate counsel before continuing.",
     "choices": [
       {
         "grade": "correct",
@@ -1485,6 +1527,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "A longtime elderly client has significantly diminished decision-making capacity. A caregiver is rapidly transferring the client's savings, placing the client at risk of substantial financial harm. The client cannot adequately protect herself.\n\nMay we contact a protective agency or seek appointment of a guardian despite the ordinary confidentiality concerns?",
     "gold": 55,
     "rule": "ABA Model Rule 1.14(b), (c)",
+    "explanation": "Rule 1.14(b) permits reasonably necessary protective action, including consulting a protective agency or seeking a guardian, when a client with diminished capacity faces substantial financial harm and cannot protect herself, and Rule 1.14(c) authorizes revealing information only to the extent reasonably necessary to do so. Diminished capacity neither ends the relationship nor binds the lawyer to every instruction.",
     "choices": [
       {
         "grade": "wrong",
@@ -1520,6 +1563,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "A partner has developed a serious cognitive condition. Multiple medical assessments and recent work errors show that the condition materially impairs the partner's ability to represent clients competently.\n\nMay the partner continue handling active matters while the firm quietly monitors the situation?",
     "gold": 55,
     "rule": "ABA Model Rule 1.16(a)(2)",
+    "explanation": "Rule 1.16(a)(2) makes withdrawal mandatory when the lawyer's physical or mental condition materially impairs the ability to represent the client, and the medical assessments and work errors establish that impairment. The firm cannot wait for a client complaint or a disciplinary order while the partner keeps active matters.",
     "choices": [
       {
         "grade": "wrong",
@@ -1555,6 +1599,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "Our client discharged me during trial. I immediately moved to withdraw, but the judge denied the motion because departure would disrupt the proceeding and ordered me to continue through the verdict.\n\nWhat must I do?",
     "gold": 55,
     "rule": "ABA Model Rule 1.16(c)",
+    "explanation": "Rule 1.16(c) requires a lawyer to continue the representation when ordered to do so by a tribunal, even when the lawyer otherwise has good cause to terminate, such as being discharged. The lawyer continues through the verdict while protecting the client's interests; a new engagement letter is not needed and ignoring the order is not an option.",
     "choices": [
       {
         "grade": "wrong",
@@ -1590,6 +1635,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "I plan to sell my entire immigration-law practice to another competent firm and stop accepting immigration matters. Each client will receive written notice of the sale, the proposed purchaser, the right to choose other counsel or retrieve the file, and the 90-day consent rule. Client fees will not increase because of the sale.\n\nIs such a sale permissible under the model rule?",
     "gold": 55,
     "rule": "ABA Model Rule 1.17",
+    "explanation": "Rule 1.17 permits selling an entire practice or an entire area of practice when the seller ceases that practice, each client receives written notice of the sale, the right to retain other counsel or take the file, and the 90-day deemed-consent rule, and fees are not increased by the sale. Selling the whole immigration practice on those terms qualifies; the seller need not leave all other practice areas.",
     "choices": [
       {
         "grade": "correct",
@@ -1625,6 +1671,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "Closing our plant would be lawful and profitable, but it would eliminate most jobs in a small town. I asked our lawyer for legal advice. She also discussed the likely moral, economic, and social consequences of the closure.\n\nWas it proper for her to address considerations beyond the letter of the law?",
     "gold": 55,
     "rule": "ABA Model Rule 2.1",
+    "explanation": "Rule 2.1 requires candid advice and expressly permits a lawyer to refer not only to the law but to moral, economic, social and political factors relevant to the client's situation. Discussing the human consequences of the plant closure alongside the legal analysis was proper and does not require a financial-adviser license.",
     "choices": [
       {
         "grade": "wrong",
@@ -1660,6 +1707,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "The opponent is financially weak. I want the firm to request repeated extensions and continuances solely to increase its costs and pressure it to abandon a valid claim. The requests would serve no substantial purpose related to the merits or our legitimate litigation needs.\n\nMust the firm follow my instruction?",
     "gold": 55,
     "rule": "ABA Model Rule 3.2",
+    "explanation": "Rule 3.2 requires reasonable efforts to expedite litigation consistent with the client's interests, and its comment makes clear that delay serving no substantial purpose other than to frustrate or burden the opponent is improper. Repeated extensions requested solely to exhaust a weaker opponent fall on the wrong side of that line, so the firm must refuse.",
     "choices": [
       {
         "grade": "wrong",
@@ -1695,6 +1743,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "In a civil trial, the client wants us to call a nonclient witness. I reasonably believe the witness will lie, but I do not know that the proposed testimony is false. The witness is not a criminal defendant testifying in her own defense.\n\nMay I refuse to offer the testimony?",
     "gold": 55,
     "rule": "ABA Model Rule 3.3(a)(3)",
+    "explanation": "Rule 3.3(a)(3) permits a lawyer to refuse to offer evidence, other than the testimony of a criminal defendant, that the lawyer reasonably believes is false, so the partner may decline to call the distrusted nonclient witness. A reasonable belief is enough to refuse; it does not require reporting the witness to the court or waiting for an admission.",
     "choices": [
       {
         "grade": "correct",
@@ -1730,6 +1779,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "Our damages expert proposed receiving $75,000 if the client wins at trial and nothing if the client loses. The amount would compensate the expert for time spent preparing and testifying.\n\nMay we agree?",
     "gold": 55,
     "rule": "ABA Model Rule 3.4(b), Comment 3",
+    "explanation": "Rule 3.4(b) and Comment 3 allow reasonable compensation of an expert for professional services but prohibit making the expert's fee contingent on the outcome of the case, so the $75,000-only-if-we-win proposal must be rejected. The prohibition is not limited to fact witnesses, and experts may of course be paid on permissible terms.",
     "choices": [
       {
         "grade": "wrong",
@@ -1765,6 +1815,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "We represent a corporation in litigation. A current logistics employee has relevant information, but no subpoena requires her to speak with the opponent. We want to ask her not to volunteer information.\n\nShe is our client's employee, and we reasonably believe that remaining silent will not adversely affect her interests. May we make the request?",
     "gold": 55,
     "rule": "ABA Model Rule 3.4(f)",
+    "explanation": "Rule 3.4(f) permits a lawyer to ask a client's employee or agent to refrain from voluntarily giving information to the other side when the lawyer reasonably believes the person's interests will not be adversely affected. The logistics employee meets both conditions; the exception is not limited to relatives, and it never authorizes defying a subpoena.",
     "choices": [
       {
         "grade": "wrong",
@@ -1800,6 +1851,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "During trial, our research team viewed a juror's public social-media page. The team did not follow, friend, message, react to, or otherwise contact the juror, and the platform did not notify the juror that the page had been viewed.\n\nDid the passive review itself violate the rule against juror communications?",
     "gold": 55,
     "rule": "ABA Model Rule 3.5(b); ABA Formal Opinion 466",
+    "explanation": "Rule 3.5(b) prohibits ex parte communication with a juror, and ABA Formal Opinion 466 concludes that passively viewing a juror's public social-media page, with no friend request, message or platform notification, is not a communication. The research itself was therefore permissible, though any contact or notification would change the analysis.",
     "choices": [
       {
         "grade": "wrong",
@@ -1835,6 +1887,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "Opposing counsel publicly made false statements that create a substantial undue prejudicial effect against our client in a pending case. Neither our client nor anyone acting for us initiated the publicity.\n\nMay we make a narrowly tailored public statement limited to information reasonably necessary to protect the client from that prejudice?",
     "gold": 55,
     "rule": "ABA Model Rule 3.6(c)",
+    "explanation": "Rule 3.6(c) allows a lawyer to make a statement that a reasonable lawyer would believe necessary to protect the client from the substantial undue prejudicial effect of recent publicity not initiated by the lawyer or client, limited to information necessary to mitigate it. The response must stay narrow; the opponent's statement does not open the door to discussing all the evidence, and no judicial pre-approval is required.",
     "choices": [
       {
         "grade": "correct",
@@ -1870,6 +1923,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "We want to subpoena a lawyer to provide evidence about a former client in a criminal investigation. The information is not privileged, is essential to completing the investigation, and no feasible alternative source exists.\n\nWould issuing the subpoena violate the prosecutor's special duties?",
     "gold": 55,
     "rule": "ABA Model Rule 3.8(e)",
+    "explanation": "Rule 3.8(e) permits a prosecutor to subpoena a lawyer for evidence about a client when the prosecutor reasonably believes the information is not privileged, is essential to the investigation, and has no feasible alternative source. All three conditions are met, so the subpoena may issue; the rule restricts lawyer subpoenas rather than banning them.",
     "choices": [
       {
         "grade": "wrong",
@@ -1905,6 +1959,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "We possess surveillance footage showing a person who resembles someone other than the accused leaving the crime scene. The evidence tends to negate the accused's guilt, although I still believe the remaining evidence is sufficient to convict.\n\nI withheld the footage because I do not think it will change the verdict. Was that proper?",
     "gold": 55,
     "rule": "ABA Model Rule 3.8(d)",
+    "explanation": "Rule 3.8(d) requires a prosecutor to make timely disclosure of all evidence or information known to the prosecutor that tends to negate the guilt of the accused, and footage showing someone else leaving the scene qualifies. The duty does not depend on the prosecutor's belief that the verdict would change, on a defense request, or on a prior admissibility ruling.",
     "choices": [
       {
         "grade": "wrong",
@@ -1940,6 +1995,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "During settlement negotiations, our lawyer knew the defendant had $1 million in available insurance coverage. Hoping to reduce the demand, the lawyer stated as a fact that only $100,000 in coverage existed.\n\nWas that permissible negotiation conduct?",
     "gold": 55,
     "rule": "ABA Model Rule 4.1(a)",
+    "explanation": "Rule 4.1(a) prohibits knowingly making a false statement of material fact to a third person, and the amount of available insurance is a material fact rather than negotiating puffery. Stating a $100,000 limit while knowing of $1 million in coverage is a false statement, and client authorization cannot make it permissible.",
     "choices": [
       {
         "grade": "wrong",
@@ -1975,6 +2031,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "We represent an investor negotiating with a startup founder who has no lawyer. The founder told us that she assumes our firm is neutral and protecting both sides. Her interests are reasonably likely to conflict with our client's.\n\nWhat should we do?",
     "gold": 55,
     "rule": "ABA Model Rule 4.3",
+    "explanation": "Rule 4.3 requires a lawyer who knows or should know that an unrepresented person misunderstands the lawyer's role to make reasonable efforts to correct it, and bars giving her legal advice beyond recommending independent counsel when her interests may conflict with the client's. The founder must be told the firm represents the investor only; advising her on the deal or withdrawing are both wrong responses.",
     "choices": [
       {
         "grade": "correct",
@@ -2010,6 +2067,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "Opposing counsel mistakenly emailed us a document that was obviously intended for the opposing client and appears privileged. We recognized the mistake immediately.\n\nWhat does the model rule require us to do?",
     "gold": 55,
     "rule": "ABA Model Rule 4.4(b)",
+    "explanation": "Rule 4.4(b) requires a lawyer who receives a document relating to the representation and knows or reasonably should know it was inadvertently sent to notify the sender promptly. The comment leaves questions of return, destruction or use to other law and the lawyer's judgment, so silent deletion, exploitation, and public filing all miss the one thing the rule actually mandates.",
     "choices": [
       {
         "grade": "wrong",
@@ -2045,6 +2103,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "An online marketing company proposes receiving 5% of every legal fee collected from clients generated by its advertising campaign. The company is not owned by lawyers and will perform no legal work.\n\nMay the firm accept that compensation structure?",
     "gold": 55,
     "rule": "ABA Model Rule 5.4(a)",
+    "explanation": "Rule 5.4(a) prohibits sharing legal fees with a nonlawyer, and paying a marketing company 5% of fees collected from the clients it generates is fee sharing however the arrangement is labeled, since none of the rule's exceptions applies. The reasonableness of each client's total fee does not matter, and the violation does not depend on the company influencing strategy.",
     "choices": [
       {
         "grade": "wrong",
@@ -2080,6 +2139,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "Our proposed employment agreement says that, after leaving the firm, an associate may not practice family law anywhere in the county for two years. The restriction is unrelated to retirement benefits.\n\nIs the clause proper?",
     "gold": 55,
     "rule": "ABA Model Rule 5.6(a)",
+    "explanation": "Rule 5.6(a) prohibits participating in an employment agreement that restricts a lawyer's right to practice after the relationship ends, except for an agreement concerning retirement benefits. A two-year county-wide ban on practicing family law is such a restriction, and neither its limited duration nor the associate's lack of local clients saves it.",
     "choices": [
       {
         "grade": "wrong",
@@ -2115,6 +2175,7 @@ export const ADDITIONAL_MPRE_SCENARIOS = [
     "body": "A judicial candidate wants to say: \"If elected, I promise that I will always order eviction whenever a tenant withholds rent, regardless of the tenant's defense.\"\n\nMay the candidate make that promise?",
     "gold": 55,
     "rule": "ABA Model Code of Judicial Conduct Rule 4.1(A)(13)",
+    "explanation": "Judicial Conduct Rule 4.1(A)(13) prohibits a judicial candidate from making pledges, promises or commitments in connection with cases, controversies or issues likely to come before the court that are inconsistent with the impartial performance of judicial duties. Promising to always order eviction regardless of the tenant's defense is exactly such a commitment, whether or not any eviction case is pending.",
     "choices": [
       {
         "grade": "correct",

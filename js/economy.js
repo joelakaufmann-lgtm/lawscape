@@ -6,7 +6,7 @@
 // clock, the DOM, storage or the state singleton: time arrives in `ctx.now`
 // and randomness in `ctx.rng`, so the same code can run inside a server.
 
-import { freshState, playerHasUpgrade, playerMaxEthics, healPlayer, damagePlayer } from './state.js';
+import { freshState, playerHasUpgrade, playerMaxEthics, healPlayer, damagePlayer, MISSED_LIMIT } from './state.js';
 import { normalizeAppearance } from './data/appearance.js';
 import { ALL_MAIL_SCENARIOS, practiceInbox } from './data/mail.js';
 import { STREAK_HEAL } from './data/ethics.js';
@@ -23,6 +23,7 @@ import {
   DOC_REVIEW_CYCLE_MS, DOC_REVIEW_REWARD, LINDA_TIP_COST, RILEY_HINT_COST, WHISKEY_ETHICS_DAMAGE,
   WHISKEY_SLOW_MS, MONEYBAGS_SAFE_GOLD, MONEYBAGS_ETHICS_DAMAGE, MONEYBAGS_GRACE_PURCHASES, ETHICS_TIPS,
   ARCADE_PLAY_COST, ARCADE_ROUNDS_PER_PLAY, ESPRESSO_ETHICS_RESTORE, ESPRESSO_COOLDOWN_MS,
+  SNACK_ETHICS_RESTORE, SNACK_COOLDOWN_MS,
   DRUNK_AT_WORK_ETHICS_DAMAGE, DRUNK_PENALTY_ZONES,
   moneybagsAuditTriggered, rileyHintEligible, wrongAnswerDamage, streakMultiplier,
 } from './data/work.js';
@@ -48,7 +49,7 @@ function eligibleScenario(player, scenarioId) {
 // BarMail ethics scenario. Every pack (Canada included) applies the full
 // economy: gold scaled by upgrades and the correct-answer streak, Ethics
 // damage for wrong answers, and per-pack correct counts for wardrobe unlocks.
-export function answerScenario(player, scenarioId, choiceIndex) {
+export function answerScenario(player, scenarioId, choiceIndex, ctx) {
   activeRun(player);
   const scenario = eligibleScenario(player, scenarioId);
   const choice = scenario.choices[choiceIndex];
@@ -57,8 +58,10 @@ export function answerScenario(player, scenarioId, choiceIndex) {
   const b = bonuses(player.upgrades);
   player.casesDone++;
   player.hintScenarioId = null;
+  if (!Array.isArray(player.missed)) player.missed = [];
   let earned = 0, healed = 0, dmg = 0, disbarred = false, multiplier = 1, unlocked = [];
   if (choice.grade === 'correct') {
+    player.missed = player.missed.filter((entry) => entry.id !== scenario.id); // reviewed and resolved
     player.streak++;
     multiplier = streakMultiplier(player.streak);
     earned = Math.round(scenario.gold * b.goldMult * multiplier + b.goldFlat);
@@ -81,11 +84,14 @@ export function answerScenario(player, scenarioId, choiceIndex) {
     dmg = wrongAnswerDamage(player.wrongStreak, playerHasUpgrade(player, 'paralegal'));
     player.streak = 0;
     disbarred = damagePlayer(player, dmg);
+    // The study list keeps one entry per question: the latest wrong reply.
+    player.missed = [...player.missed.filter((entry) => entry.id !== scenario.id), { id: scenario.id, choiceIndex, at: ctx?.now ?? 0 }].slice(-MISSED_LIMIT);
   }
   if (!player.seen.includes(scenario.id)) player.seen.push(scenario.id);
   return {
     scenarioId, choiceIndex, grade: choice.grade, correct: choice.grade === 'correct',
     earned, healed, dmg, disbarred, multiplier, unlocked, streak: player.streak, wrongStreak: player.wrongStreak,
+    base: scenario.gold, goldMult: b.goldMult, missedCount: player.missed.length,
     rileyHalved: dmg > 0 && playerHasUpgrade(player, 'paralegal'),
   };
 }
@@ -210,7 +216,7 @@ export function drinkEspresso(player, ctx) {
   if (player.zone !== 'office') throw new Error('The espresso machine is in the main office.');
   if (!playerHasUpgrade(player, 'espresso')) throw new Error('There is no espresso machine yet. Buy it from the Office Upgrades catalog.');
   const since = player.lastEspressoAt ? ctx.now - player.lastEspressoAt : Infinity;
-  if (since < ESPRESSO_COOLDOWN_MS) throw new Error(`The machine is still heating up. Try again in ${Math.ceil((ESPRESSO_COOLDOWN_MS - since) / 1000)}s.`);
+  if (since < ESPRESSO_COOLDOWN_MS) throw new Error(`The machine is still heating up (${Math.ceil((ESPRESSO_COOLDOWN_MS - since) / 1000)}s).`);
   const sobered = (player.slowUntil || 0) > ctx.now;
   if (!sobered && player.ethics >= playerMaxEthics(player)) throw new Error('Your Ethics is already full. Save the espresso for a harder day.');
   player.lastEspressoAt = ctx.now;
@@ -218,6 +224,20 @@ export function drinkEspresso(player, ctx) {
   const before = player.ethics;
   healPlayer(player, ESPRESSO_ETHICS_RESTORE);
   return { healed: player.ethics - before, sobered };
+}
+
+// The office snack fridge: a free bite on a cooldown, office only.
+export function eatSnack(player, ctx) {
+  activeRun(player);
+  if (player.zone !== 'office') throw new Error('The snack fridge is in the main office.');
+  if (!playerHasUpgrade(player, 'snack_fridge')) throw new Error('There is no snack fridge yet. Buy it from the Office Upgrades catalog.');
+  const since = player.lastSnackAt ? ctx.now - player.lastSnackAt : Infinity;
+  if (since < SNACK_COOLDOWN_MS) throw new Error(`You just ate. The fridge restocks in ${Math.ceil((SNACK_COOLDOWN_MS - since) / 1000)}s.`);
+  if (player.ethics >= playerMaxEthics(player)) throw new Error('Your Ethics is already full. Leave the yoghurt for Liz.');
+  player.lastSnackAt = ctx.now;
+  const before = player.ethics;
+  healPlayer(player, SNACK_ETHICS_RESTORE);
+  return { healed: player.ethics - before };
 }
 
 // Briefcase Dash credits are server-owned: five gold buys three rounds, and

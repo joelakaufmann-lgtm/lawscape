@@ -259,6 +259,32 @@ test('every non-trivial action settles due partner replies first and reports the
   assert.equal(run(p, { type: 'settle' }, 99_999).delivered.length, 0);
 });
 
+test('wrong answers join the study list with the chosen reply, and a later correct answer clears them', () => {
+  const p = office();
+  const wrong = scenario(p, 'wrong');
+  const out = run(p, { type: 'answer_scenario', scenarioId: wrong.s.id, choiceIndex: wrong.i }, 4000);
+  assert.deepEqual(p.missed, [{ id: wrong.s.id, choiceIndex: wrong.i, at: 4000 }]); assert.equal(out.result.missedCount, 1);
+  const right = scenario(p, 'correct');
+  const paid = run(p, { type: 'answer_scenario', scenarioId: right.s.id, choiceIndex: right.i }, 5000);
+  assert.equal(paid.result.base, right.s.gold); assert.equal(paid.result.goldMult, 1); assert.equal(paid.result.missedCount, 1);
+  run(p, { type: 'reset_seen' });
+  const retry = run(p, { type: 'answer_scenario', scenarioId: wrong.s.id, choiceIndex: wrong.s.choices.findIndex((c) => c.grade === 'correct') }, 6000);
+  assert.deepEqual(p.missed, []); assert.equal(retry.result.missedCount, 0);
+  assert.deepEqual(normalizeSave({ missed: [{ id: 'x', choiceIndex: 1 }, { id: 2 }, 'junk', { id: 'y', choiceIndex: 0, at: 'z' }] }).missed, [{ id: 'x', choiceIndex: 1, at: 0 }, { id: 'y', choiceIndex: 0, at: 0 }]);
+  assert.deepEqual(normalizeSave({ upgrades: ['artwork', 'office_window'] }).upgrades, ['snack_fridge', 'work_phone']);
+});
+
+test('the office snack fridge heals 8 on a two-minute cooldown', () => {
+  const p = office(); p.ethics = 50;
+  assert.throws(() => run(p, { type: 'snack' }, 1000), /snack fridge yet/);
+  p.upgrades.push('snack_fridge');
+  p.zone = 'apartment'; assert.throws(() => run(p, { type: 'snack' }, 1000), /main office/); p.zone = 'office';
+  assert.deepEqual(run(p, { type: 'snack' }, 1000).result, { healed: 8 }); assert.equal(p.ethics, 58);
+  assert.throws(() => run(p, { type: 'snack' }, 61_000), /restocks in 60s/);
+  assert.equal(run(p, { type: 'snack' }, 121_000).result.healed, 8);
+  p.ethics = 100; assert.throws(() => run(p, { type: 'snack' }, 400_000), /already full/);
+});
+
 test('creating a character resets everything except the supplied identity', () => {
   const p = office(900); p.upgrades.push('monitor'); p.runStatus = 'ended';
   const out = run(p, { type: 'create_character', name: '  Jordan Case ', gender: 'female', appearance: { skin: 3, glasses: true, suitColor: 'nope' } }, 7, undefined);

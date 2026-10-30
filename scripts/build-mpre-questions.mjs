@@ -25,12 +25,14 @@ async function buildSource(sourceName) {
   const source = await readFile(sourcePath, 'utf8');
   const answerRows = new Map();
   for (const line of source.split('\n')) {
-    const match = line.match(/^\|\s*(\d+)\s*\|\s*([A-D])\s*\|\s*([^|]+)\|\s*([^|]+)\|$/);
+    // | Question | Answer | Primary authority | Core reason | Explanation |
+    const match = line.match(/^\|\s*(\d+)\s*\|\s*([A-D])\s*\|\s*([^|]+)\|\s*([^|]+)\|\s*([^|]+)\|$/);
     if (match) {
       answerRows.set(Number(match[1]), {
         answer: match[2],
         authority: match[3].trim(),
         reason: match[4].trim(),
+        explanation: match[5].trim(),
       });
     }
   }
@@ -74,6 +76,9 @@ async function buildSource(sourceName) {
     if (!answer || choices.length !== 4) {
       throw new Error(`Question ${number} could not be paired with four choices and its answer key.`);
     }
+    if (answer.explanation.length < 40) {
+      throw new Error(`Question ${number} needs an Explanation column in the answer key.`);
+    }
 
     const advanced = number >= 26;
     return {
@@ -89,6 +94,7 @@ async function buildSource(sourceName) {
       body,
       gold: advanced ? 55 : 40,
       rule: answer.authority,
+      explanation: answer.explanation,
       choices: choices.map((choice) => choice.letter === answer.answer
         ? { grade: 'correct', text: choice.text }
         : {

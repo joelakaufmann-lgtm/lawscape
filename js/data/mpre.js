@@ -20,6 +20,7 @@ export const MPRE_SCENARIOS = [
 I told the board that silence could facilitate fraud and that we would withdraw unless it disclosed the issue. The board refused, so I withdrew without notifying the other nonprofit or regulators. Did I mishandle this?`,
     gold: 35,
     rule: 'Model Rules 1.13, 1.16, and 1.6 — Organizational Client; Withdrawal; Confidentiality',
+    explanation: 'The partner referred the problem to the board, warned that silence could facilitate fraud, and withdrew when the board refused, which is what Rules 1.13 and 1.16 contemplate; the firm made no false statement, so nothing on these facts required external disclosure. Withdrawal does not itself authorize revealing the client\'s information under Rule 1.6, and the board has no veto over a withdrawal the rules require.',
     choices: [
       { grade: 'very_wrong',
         text: 'You had to reveal the old activity to the merger counterparty immediately.',
@@ -48,6 +49,7 @@ I told the board that silence could facilitate fraud and that we would withdraw 
 Our office has not shared the information with the other jurisdiction. What does professional responsibility require?`,
     gold: 55,
     rule: 'Model Rule 3.8(g) — New Evidence of Wrongful Conviction',
+    explanation: 'Rule 3.8(g) requires a prosecutor who learns of new, credible and material evidence creating a reasonable likelihood that a convicted defendant is innocent to promptly disclose it to an appropriate court or authority in the other jurisdiction. The duty is triggered by the corroborated confession itself, not by completing a reinvestigation, and neither confidentiality nor the finality of the old conviction excuses silence.',
     choices: [
       { grade: 'correct',
         text: 'Promptly disclose the information to an appropriate court or prosecutorial authority in the other jurisdiction.' },
@@ -76,6 +78,7 @@ Our office has not shared the information with the other jurisdiction. What does
 The president refused my advice to notify the city, so I withdrew and alerted authorities. Was that disclosure permitted?`,
     gold: 40,
     rule: 'Model Rule 1.6(b)(1) — Preventing Reasonably Certain Death or Substantial Bodily Harm',
+    explanation: 'Rule 1.6(b)(1) permits a lawyer to reveal information to the extent reasonably necessary to prevent reasonably certain death or substantial bodily harm, and buried toxic waste reaching the city water supply meets that threshold. The exception turns on the certainty of the harm, not on whether the burial was intentional, and the president\'s immorality or fear of bad publicity is not itself a basis for disclosure.',
     choices: [
       { grade: 'very_wrong',
         text: 'No. Confidential information can never be disclosed without client consent.',
@@ -104,6 +107,7 @@ The president refused my advice to notify the city, so I withdrew and alerted au
 Was the meeting improper?`,
     gold: 35,
     rule: 'Model Rule 4.3 — Dealing With an Unrepresented Person',
+    explanation: 'Rule 4.3 lets a lawyer communicate and negotiate with an unrepresented person as long as the lawyer does not imply disinterest or give legal advice to someone whose interests may conflict with the client\'s. Presenting the custody proposal and answering the fairness question only by recommending independent counsel stayed within that line; advising the father on fairness would have crossed it.',
     choices: [
       { grade: 'wrong',
         text: 'Yes. A lawyer may never present a client proposal to an unrepresented opposing person.',
@@ -132,6 +136,7 @@ Was the meeting improper?`,
 Must the firm report the former partner?`,
     gold: 40,
     rule: 'Model Rule 8.3(a) — Reporting Professional Misconduct',
+    explanation: 'Deliberately charging personal expenses to a client and disguising them as representation costs is a known violation raising a substantial question about honesty, so Rule 8.3(a) requires a report, and the client does not object to one. Reimbursement helps the client but does not erase the dishonesty, and the rule reaches serious violations rather than every technical one.',
     choices: [
       { grade: 'wrong',
         text: 'Yes, because every professional-conduct violation must be reported.',
@@ -160,6 +165,7 @@ Must the firm report the former partner?`,
 Is the settlement professionally permissible?`,
     gold: 55,
     rule: 'Model Rule 1.8(h)(2) — Settling a Malpractice Claim With an Unrepresented Client',
+    explanation: 'Rule 1.8(h)(2) permits settling a potential malpractice claim with an unrepresented client if the client is advised in writing of the desirability of independent counsel and given a reasonable opportunity to seek it, which the written agreement and the week-long delay provided. The client need not actually retain counsel, and the size of the payment is not a substitute for the required process.',
     choices: [
       { grade: 'very_wrong',
         text: 'No. A lawyer may never settle a potential malpractice claim with a client.',
@@ -188,6 +194,7 @@ Is the settlement professionally permissible?`,
 May I serve as trial counsel in the contest?`,
     gold: 55,
     rule: 'Model Rule 3.7 — Lawyer as Witness',
+    explanation: 'Because you expect to be the only surviving witness on the contested capacity issue, Rule 3.7 bars you from acting as trial advocate in the will contest unless an exception applies, although another lawyer in your firm may try it. Being the only witness is what triggers the rule rather than an exception to it, and it applies even when your testimony would favor the executor.',
     choices: [
       { grade: 'correct',
         text: 'No. A lawyer ordinarily may not advocate at a trial where the lawyer is likely to be a necessary witness on a contested issue.' },
@@ -216,6 +223,7 @@ May I serve as trial counsel in the contest?`,
 Was reporting outside the company permitted under the organizational-client rule?`,
     gold: 60,
     rule: 'Model Rule 1.13(c) and (d) — Reporting Outside an Organization',
+    explanation: 'Rule 1.13(d) withholds the reporting-out option in Rule 1.13(c) from a lawyer retained to investigate the alleged violation or to defend the organization against a claim arising from it, which is exactly this engagement. Reporting up to the board was required, but a board that refuses to act does not unlock disclosure to the attorney general for investigation or defense counsel.',
     choices: [
       { grade: 'wrong',
         text: 'No, because the employee who first reported the conduct did not consent.',

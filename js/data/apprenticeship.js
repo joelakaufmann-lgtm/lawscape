@@ -92,7 +92,12 @@ export const WRITING_TASKS = [
     sources: ['L2.1', 'L6.1'],
     issues: ['A lunch deadline proves authority to release.', 'Recipient approval and the approved version are uncertain.', 'All outside sharing is permanently forbidden.'], issue: 1,
     actions: ['Hold release; ask the partner to verify recipient, version and approval.', 'Send the newest file and ask permission afterward.', 'Tell Mara the director already approved it.'], action: 0, evidence: 'L2.1',
-    reply: 'Speed is lovely. An invented approval is less lovely. L2.1 leaves authority unresolved. Under our fictional policy at L6.1, hold the release and obtain the missing confirmation. In your prose, say who will check it and when you will update Mara.',
+    replies: {
+      3: 'Good. You read L2.1 for what it says rather than what Mara hoped it said: authority to release is unresolved. Holding under L6.1 and naming the confirmation you need is the right call. In your prose, say who will check it and when you will update Mara.',
+      2: 'Close. You saw that L2.1 leaves authority unresolved, but one of your picks still treats the release as settled. Under our fictional policy at L6.1, hold and obtain the missing confirmation before anything leaves the firm. In your prose, say who will check it and when you will update Mara.',
+      1: 'One of three. L2.1 leaves authority unresolved; a lunch deadline is not an approval. Under our fictional policy at L6.1, hold the release and obtain the missing confirmation. In your prose, say who will check it and when you will update Mara.',
+      0: 'Speed is lovely. An invented approval is less lovely. L2.1 leaves authority unresolved. Under our fictional policy at L6.1, hold the release and obtain the missing confirmation. In your prose, say who will check it and when you will update Mara.',
+    },
   },
   {
     id: 'timeline', pack: 'lantern', title: 'The date that moved itself', skill: 'Evidence handling', partner: 'Jim Hardsell',
@@ -100,7 +105,12 @@ export const WRITING_TASKS = [
     sources: ['L3.1', 'L4.1', 'L6.2'],
     issues: ['The signed schedule and later unconfirmed report differ.', 'A later phone call always replaces a signed date.', 'There is no delivery date anywhere in the file.'], issue: 0,
     actions: ['Promise the 18th.', 'Discard the call note.', 'Report both dates; obtain written confirmation from the project leads.'], action: 2, evidence: 'L4.1',
-    reply: 'L3.1 records the 20th; L4.1 reports the 18th without the required confirmation. Give me both, with their different status. Ask for the missing written confirmation. “I made it sound certain” is not one of our billing codes.',
+    replies: {
+      3: 'That is exactly the shape I wanted: L3.1 records the 20th, L4.1 reports the 18th without the required confirmation, and you kept their status different instead of picking one. Ask for the missing written confirmation and keep the two dates labelled until it arrives.',
+      2: 'Nearly there. You separated the signed schedule from the later report, but one pick still resolves the date on your own authority. L3.1 records the 20th; L4.1 reports the 18th without the required confirmation. Ask for the written confirmation rather than choosing.',
+      1: 'One of three. The file does not let you pick a date: L3.1 records the 20th and L4.1 reports the 18th without the required confirmation. Give me both, with their different status, and ask for the missing written confirmation.',
+      0: 'L3.1 records the 20th; L4.1 reports the 18th without the required confirmation. Give me both, with their different status. Ask for the missing written confirmation. “I made it sound certain” is not one of our billing codes.',
+    },
   },
   {
     id: 'ai-check', pack: 'lantern', title: 'Confidently incorrect', skill: 'Research and source checking', partner: 'Linda Firestone',
@@ -108,7 +118,12 @@ export const WRITING_TASKS = [
     sources: ['L5.1', 'L2.1', 'L3.1', 'L4.1'],
     issues: ['A polished draft is a source.', 'The draft only needs a friendlier tone.', 'The draft invents approval, agreement and certainty.'], issue: 2,
     actions: ['Forward it with an AI disclaimer.', 'Replace unsupported claims with record-based statements and unresolved questions.', 'Add a fabricated citation to improve confidence.'], action: 1, evidence: 'L5.1',
-    reply: 'Compare each claim in L5.1 to the underlying records. Approval is unclear, the date change is unconfirmed, and no exhibit guarantees the opening. A useful replacement tells us what we know, how we know it, and what we still need. AI confidence does not fill a file gap.',
+    replies: {
+      3: 'Right on every count. You checked each claim in L5.1 against the records: approval is unclear, the date change is unconfirmed, and no exhibit guarantees the opening. Your replacement should keep that shape: what we know, how we know it, and what we still need.',
+      2: 'Mostly right. You caught that L5.1 overstates the record, but one of your picks still lets a summary stand in for an exhibit. Approval is unclear, the date change is unconfirmed, and no exhibit guarantees the opening. Say what we know, how we know it, and what we still need.',
+      1: 'One of three. Compare each claim in L5.1 to the underlying records before you trust it. Approval is unclear, the date change is unconfirmed, and no exhibit guarantees the opening. A useful replacement says what we know, how we know it, and what we still need.',
+      0: 'Compare each claim in L5.1 to the underlying records. Approval is unclear, the date change is unconfirmed, and no exhibit guarantees the opening. A useful replacement tells us what we know, how we know it, and what we still need. AI confidence does not fill a file gap.',
+    },
   },
   {
     id: 'versions', pack: 'harbor', title: 'One sentence, different deal', skill: 'Analysis', partner: 'Linda Firestone',
@@ -116,7 +131,12 @@ export const WRITING_TASKS = [
     sources: ['H2.1', 'H3.1', 'H3.2', 'H6.1'],
     issues: ['Both versions promise inspection first.', 'Draft B moves payment before inspection; neither version is signed.', 'Draft B is a court order.'], issue: 1,
     actions: ['Describe the change and ask whether the client accepts that commercial sequence.', 'Declare Draft B binding.', 'Tell the client nothing changed.'], action: 0, evidence: 'H3.1',
-    reply: 'H2.1 permits inspection before payment; H3.1 reverses the sequence. Explain the practical consequence and obtain instructions. Both are unsigned drafts. Do not smuggle a conclusion about enforceability into a comparison of text.',
+    replies: {
+      3: 'Good comparison. H2.1 permits inspection before payment and H3.1 reverses the sequence; you explained the practical consequence and asked for instructions instead of deciding for the client. Keep it that way: both are unsigned drafts, and enforceability is not ours to announce.',
+      2: 'Close. You spotted that H3.1 reverses the inspection-before-payment sequence in H2.1, but one pick still draws a conclusion the client should be making. Explain the practical consequence and obtain instructions. Both are unsigned drafts.',
+      1: 'One of three. H2.1 permits inspection before payment; H3.1 reverses the sequence. The job is to explain the practical consequence and obtain instructions, not to resolve it. Both are unsigned drafts.',
+      0: 'H2.1 permits inspection before payment; H3.1 reverses the sequence. Explain the practical consequence and obtain instructions. Both are unsigned drafts. Do not smuggle a conclusion about enforceability into a comparison of text.',
+    },
   },
   {
     id: 'adverse', pack: 'harbor', title: 'The inconvenient two cabinets', skill: 'Supervision', partner: 'Jim Hardsell',
@@ -124,7 +144,12 @@ export const WRITING_TASKS = [
     sources: ['H4.1', 'H4.2', 'H6.2'],
     issues: ['The possible defects matter, but the report needs verification.', 'Missing photos prove there are no defects.', 'All six cabinets are certainly defective.'], issue: 0,
     actions: ['Omit the two cabinets.', 'Guarantee an inspection result.', 'Report the uncertainty; identify the inspector and obtain the missing photographs.'], action: 2, evidence: 'H4.1',
-    reply: 'Include both sides: four reportedly looked ready, two may have hinge damage. H4.1 does not establish who inspected them or provide photographs. Ask for both. By “good version” I apparently meant “the accurate one.” Please quote me selectively.',
+    replies: {
+      3: 'That is the accurate version, which is the only good one. Four reportedly looked ready, two may have hinge damage, and you noticed that H4.1 does not establish who inspected them or provide photographs. Ask for both before anyone relies on the report.',
+      2: 'Nearly. You reported both sides of H4.1, but one of your picks still treats the inspection as established. H4.1 does not say who inspected the crates or provide photographs. Ask for both.',
+      1: 'One of three. Include both sides: four reportedly looked ready, two may have hinge damage. H4.1 does not establish who inspected them or provide photographs. Ask for both before calling anything a good version.',
+      0: 'Include both sides: four reportedly looked ready, two may have hinge damage. H4.1 does not establish who inspected them or provide photographs. Ask for both. By “good version” I apparently meant “the accurate one.” Please quote me selectively.',
+    },
   },
   {
     id: 'client-update', pack: 'harbor', title: 'Useful by five o’clock', skill: 'Written communication', partner: 'Linda Firestone',
@@ -132,7 +157,12 @@ export const WRITING_TASKS = [
     sources: ['H5.1', 'H2.1', 'H3.1', 'H4.1', 'H6.2'],
     issues: ['Only spelling needs checking.', 'The client has already accepted Draft B.', 'The all-clear draft conflicts with unsigned versions and an unresolved defect report.'], issue: 2,
     actions: ['Tell the client the deal is signed.', 'Give a source-based update, request inspection evidence and ask about payment sequencing.', 'Delete the adverse facts.'], action: 1, evidence: 'H5.1',
-    reply: 'Use H2.1 and H3.1 to explain the versions, H4.1 for the qualified defect report, and H6.2 for the required next steps. Ask the client about payment sequencing. Keep the prose civil and useful. “All clear” is a status we earn, not a font choice.',
+    replies: {
+      3: 'Clean work. You used H2.1 and H3.1 to explain the versions, H4.1 for the qualified defect report, and H6.2 for the required next steps, and you asked the client about payment sequencing instead of assuming it. Keep the prose civil and useful.',
+      2: 'Good, with one gap. You tied the versions and the defect report to the record, but one pick still skips the step H6.2 requires. Ask the client about payment sequencing and name the next action. Keep the prose civil and useful.',
+      1: 'One of three. Use H2.1 and H3.1 to explain the versions, H4.1 for the qualified defect report, and H6.2 for the required next steps. Ask the client about payment sequencing rather than declaring the file clear.',
+      0: 'Use H2.1 and H3.1 to explain the versions, H4.1 for the qualified defect report, and H6.2 for the required next steps. Ask the client about payment sequencing. Keep the prose civil and useful. “All clear” is a status we earn, not a font choice.',
+    },
   },
 ];
 
@@ -143,7 +173,12 @@ export const CAPSTONE = {
   evidencePrompt: 'Choose the office policy that supports this handoff approach',
   issues: ['Both files are ready for an unconditional all-clear.', 'Both contain unresolved facts and unsupported summaries, but different decisions.', 'An AI summary removes the need to inspect exhibits.'], issue: 1,
   actions: ['Send both flawed summaries.', 'Promise both clients their preferred outcome.', 'Separate the files, cite the record and assign specific verification and client decisions.'], action: 2, evidence: 'H6.2',
-  reply: 'Lantern needs release authority (L2.1) and date confirmation (L4.1). Harbor needs instructions about the changed payment sequence (H3.1) and better inspection evidence (H4.1). Both AI drafts overstate the record (L5.1 and H5.1). Under H6.2, your handoff should preserve those distinctions and identify who owns each next action. You have survived a day in which “pls fix” was considered a complete brief.',
+  replies: {
+    3: 'This is a handoff I can use. Lantern needs release authority (L2.1) and date confirmation (L4.1); Harbor needs instructions about the changed payment sequence (H3.1) and better inspection evidence (H4.1); both AI drafts overstate the record (L5.1 and H5.1). You kept the files separate and, under H6.2, said who owns each next action. You have survived a day in which “pls fix” was considered a complete brief.',
+    2: 'Nearly a complete handoff. You separated the two files and cited the record, but one of your picks still blurs who decides what next. Lantern needs release authority (L2.1) and date confirmation (L4.1); Harbor needs instructions about the changed payment sequence (H3.1) and better inspection evidence (H4.1). Under H6.2, name the owner of each next action.',
+    1: 'One of three. Lantern needs release authority (L2.1) and date confirmation (L4.1). Harbor needs instructions about the changed payment sequence (H3.1) and better inspection evidence (H4.1). Both AI drafts overstate the record (L5.1 and H5.1). Under H6.2, keep the files distinct and identify who owns each next action.',
+    0: 'Lantern needs release authority (L2.1) and date confirmation (L4.1). Harbor needs instructions about the changed payment sequence (H3.1) and better inspection evidence (H4.1). Both AI drafts overstate the record (L5.1 and H5.1). Under H6.2, your handoff should preserve those distinctions and identify who owns each next action. You have survived a day in which “pls fix” was considered a complete brief.',
+  },
 };
 
 // Wardrobe catalog. `look` is layered onto appearanceLook() while equipped;

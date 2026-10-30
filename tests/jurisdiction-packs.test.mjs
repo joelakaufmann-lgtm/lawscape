@@ -3,14 +3,17 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { SCENARIOS } from '../js/data/ethics.js';
+import { CALIFORNIA_SCENARIOS, NEW_YORK_SCENARIOS } from '../js/data/state-questions.js';
 import { PRACTICE_PACKS } from '../js/data/practice-packs.js';
 import { practiceInbox } from '../js/data/mail.js';
 import { freshState, state, load, save } from '../js/state.js';
 
 test('all 118 released questions retain their content and identifiers after relocation', () => {
-  // Canonical digest captured from v0.5.0 before editing. Only source-directory moves are normalized.
+  // Canonical digest captured from v0.5.0 before editing. Only source-directory moves are normalized,
+  // and the per-question `explanation` (added later for the result screen) is excluded so the digest
+  // still proves the released facts, choices and rules are untouched.
   const legacy = SCENARIOS.filter(s => ['lawscape', 'mpre-style', 'sqe-style'].includes(s.sourceType))
-    .map(s => ({ ...s, ...(s.localSourceFile ? { localSourceFile: s.localSourceFile.split('/').at(-1) } : {}) }));
+    .map(({ explanation, ...s }) => ({ ...s, ...(s.localSourceFile ? { localSourceFile: s.localSourceFile.split('/').at(-1) } : {}) }));
   assert.equal(legacy.length, 118);
   assert.equal(createHash('sha256').update(JSON.stringify(legacy)).digest('hex'),
     '2a252cc368ed033d6dab41b4eedc3f8f8386e72a038c82965787cee0950775c1');
@@ -19,6 +22,9 @@ test('all 118 released questions retain their content and identifiers after relo
 test('California and New York remain isolated at every tier, with readable sources and explanations', async () => {
   assert.deepEqual(PRACTICE_PACKS.map(pack => [pack.id, pack.count]),
     [['juris', 21], ['mixed', 196], ['ca', 20], ['ny', 33], ['mpre', 69], ['sqe', 28], ['canada', 25]]);
+  for (const s of [...CALIFORNIA_SCENARIOS, ...NEW_YORK_SCENARIOS]) {
+    assert.equal(s.gold, s.difficulty === 1 ? 35 : s.difficulty === 2 ? 45 : 60, `${s.id} pays by difficulty, not by option count`);
+  }
   for (const [pack, jurisdiction] of [['ca', 'California'], ['ny', 'New York']]) {
     const reached = new Set();
     for (const casesDone of [0, 5, 12]) {

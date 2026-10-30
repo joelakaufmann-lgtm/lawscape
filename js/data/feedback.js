@@ -28,7 +28,7 @@ export const HR_CATEGORIES = [
     titleTag: '[HR Complaint]',
     reply: 'Human Resources acknowledges your complaint regarding working conditions at '
       + 'Hardsell & Firestone. HR notes that the firm already provides: one (1) porthole window '
-      + '(2,000 gold), motivational artwork consisting of one (1) dot, and a bar cart that is '
+      + '(2,000 gold), an office snack fridge whose yoghurt is contested, and a bar cart that is '
       + 'somehow a wellness initiative. Your complaint has been added to the pile. The pile is '
       + 'load-bearing. Management thanks you for your candor and reminds you that candor is billable.',
   },

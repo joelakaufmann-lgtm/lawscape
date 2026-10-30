@@ -32,7 +32,9 @@ try{
   await page.reload();await page.locator('#btn-continue').click();await page.locator('#btn-mail').click();
   await page.locator('#mail-new-round').click();assert.ok(await page.locator('[data-scenario]').count()>0);check('Reload preserves completion and a new study round reopens the tier');
   for(const [i,email] of pack.emails.entries()){
-    await page.locator(`[data-writing="${email.id}"]`).click();await page.locator('#canada-email-text').fill(email.sampleResponse);
+    await page.locator(`[data-writing="${email.id}"]`).click();
+    if(i===0){const scroll=await page.locator('#email-writing-body > .canada-email').evaluate(el=>{el.scrollTop=400;return {canScroll:el.scrollHeight>el.clientHeight,scrolled:el.scrollTop};});assert.ok(scroll.canScroll&&scroll.scrolled>0,'Canada email assignment scrolls');check('Canada email assignment is scrollable');}
+    await page.locator('#canada-email-text').fill(email.sampleResponse);
     if(i===0){await page.reload();await page.locator('#btn-continue').click();await page.locator('#btn-mail').click();await page.locator(`[data-writing="${email.id}"]`).click();assert.equal(await page.locator('#canada-email-text').inputValue(),email.sampleResponse);}
     await page.getByRole('button',{name:'Commit practice reply · local only'}).click();await page.locator('#canada-partner summary').click();assert.match(await page.locator('#canada-partner').innerText(),/Human review only/);
     if(i===0)await shot(page,'game-canada-email.png');

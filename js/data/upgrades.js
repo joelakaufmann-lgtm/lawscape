@@ -6,7 +6,7 @@ export const OFFICE_UPGRADES = [
   { id: 'monitor', name: 'Second Monitor', cost: 60,
     desc: '+15% gold from correct answers. A second screen appears on your desk.' },
   { id: 'subscription', name: 'Ethics Treatise Shelf', cost: 250,
-    desc: 'Unlocks the searchable Nevada, Arizona, and California reference library. Required for Riley’s paid ethics hints.' },
+    desc: 'Unlocks the searchable reference library: Nevada, Arizona, California, New York, the FLSC Model Code (Canada) and the SRA Standards (England & Wales). Required for Riley’s paid ethics hints.' },
   { id: 'liz_chair', name: 'New Chair for Liz Loza', cost: 250,
     desc: '+10 max Ethics. Replaces the broken chair Liz has been balancing on since 1987.' },
   { id: 'houseplants', name: 'Houseplants', cost: 500,
@@ -17,13 +17,13 @@ export const OFFICE_UPGRADES = [
     desc: 'Riley halves Ethics damage from wrong answers. With the treatise shelf, Riley can research a relevant-rule hint for 100 gold.' },
   { id: 'work_phone', name: 'Work Phone', cost: 2000,
     desc: 'Open the full BarMail inbox anywhere: ethics practice, writing assignments, and partner replies. Jim can now find you at the bar.' },
-  { id: 'artwork', name: 'Artwork', cost: 2000,
-    desc: 'A single black dot on a white canvas adds unmistakable warmth to the office.' },
+  { id: 'snack_fridge', name: 'Office Snack Fridge', cost: 2000,
+    desc: 'A stocked fridge in the main office. Grab a snack to restore 8 Ethics (two-minute cooldown). Liz will have opinions about the yoghurt.' },
 ];
 
 export const APARTMENT_UPGRADES = [
   { id: 'mattress', name: 'Better Mattress', cost: 80,
-    desc: '+20 max Ethics. A principled attorney is a well-rested attorney.' },
+    desc: '+20 max Ethics and a proper queen bed with a real headboard. A principled attorney is a well-rested attorney.' },
   { id: 'coffee', name: 'Coffee Machine', cost: 500,
     desc: 'Drink a cup to restore 2 Ethics. Clarity in a cup.' },
   { id: 'wardrobe_rack', name: 'Wardrobe Rack', cost: 160,

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { freshState, state, reset, load, save, damageEthics } from '../js/state.js';
 import { WRITING_TASKS, CAPSTONE, DOCUMENT_PACKS, evidenceAt } from '../js/data/apprenticeship.js';
-import { PARTNER_DELAY_MS, saveDraft, commitWriting, settleReplies, submitReview, buyCosmetic, equipCosmetic, cosmeticLock, grantUnlocks, capstoneReady, requestJurisdiction, requestIssueUrl } from '../js/apprenticeship.js';
+import { PARTNER_DELAY_MS, saveDraft, commitWriting, settleReplies, submitReview, buyCosmetic, equipCosmetic, cosmeticLock, grantUnlocks, capstoneReady, requestJurisdiction, requestIssueUrl, partnerReply } from '../js/apprenticeship.js';
 import { COSMETICS } from '../js/data/apprenticeship.js';
 
 function draft(player, task, overrides = {}) {
@@ -175,6 +175,21 @@ test('legacy saves migrate additively, retain identity/economy and reject future
   items.set('lawscape_save_v2', '{"schemaVersion":99}'); assert.equal(load(), false);
   assert.equal(state.gold, 120);
   delete globalThis.localStorage;
+});
+
+test('partner replies are chosen by the checklist score, so a perfect answer is not rebuked', () => {
+  for (const task of [...WRITING_TASKS, CAPSTONE]) {
+    assert.deepEqual(Object.keys(task.replies).sort(), ['0', '1', '2', '3'], task.id);
+    assert.equal(new Set(Object.values(task.replies)).size, 4, `${task.id} replies differ by score`);
+  }
+  const task = WRITING_TASKS[0];
+  assert.match(partnerReply(task, 0), /invented approval/);
+  assert.doesNotMatch(partnerReply(task, 3), /invented approval/);
+  assert.match(partnerReply(task, 3), /L2.1/);
+  assert.equal(partnerReply({ reply: 'legacy' }, 2), 'legacy');
+  const player = freshState();
+  draft(player, task); commitWriting(player, task.id, 0); settleReplies(player, PARTNER_DELAY_MS);
+  assert.equal(player.apprenticeship.attempts[0].result.correct, 3);
 });
 
 test('jurisdiction requests de-duplicate explicit aliases, distinguish UK systems and never claim submission', () => {

@@ -2,7 +2,7 @@ import { state } from '../state.js';
 import { dispatch } from '../progress.js';
 import { now } from '../clock.js';
 import { DOCUMENT_PACKS, WRITING_TASKS, CAPSTONE, FIRM_PACKS, COSMETICS, TRAINING_JURISDICTION, evidenceAt } from '../data/apprenticeship.js';
-import { taskById, pendingAttempt, taskAttempts, returnedTasks, capstoneReady, requestIssueUrl, cosmeticLock } from '../apprenticeship.js';
+import { taskById, pendingAttempt, taskAttempts, returnedTasks, capstoneReady, requestIssueUrl, cosmeticLock, partnerReply } from '../apprenticeship.js';
 import { Actor } from '../entities/actor.js';
 import { appearanceLook } from '../data/appearance.js';
 import { mountAppearanceEditor } from './appearance.js';
@@ -168,7 +168,7 @@ export function createApprenticeshipUI({ beforeOpen, onChange, onPractice, onWri
       body.innerHTML += `<article class="sent-reply"><p class="desk-kicker">${latest.status === 'pending' ? 'Sent — awaiting partner review' : 'Your committed reply'} · Attempt ${attempts.length}</p><p class="preserve-lines">${e(latest.submission.text)}</p><dl><dt>Issue</dt><dd>${e(task.issues[latest.submission.issue])}</dd><dt>Next step</dt><dd>${e(task.actions[latest.submission.action])}</dd><dt>Evidence</dt><dd>${e(latest.submission.evidence)}</dd></dl></article>`;
       if (latest.status === 'pending') body.innerHTML += `<p class="desk-pending" role="status">Your answer is locked. Your partner will reply shortly; closing this window will not cancel the submission.</p>`;
       else {
-        body.innerHTML += `<article class="partner-reply"><p class="desk-kicker">From ${e(task.partner)} · Authored practice feedback</p><h3>${latest.result.correct}/3 checklist choices · +${latest.result.gold} gold</h3><p>${linkedEvidence(task.reply, task.sources)}</p><ul>${['Issue recognition', 'Next action', 'Evidence selection'].map((label, index) => `<li>${latest.result.checks[index] ? '✓' : 'Revisit:'} ${label}</li>`).join('')}</ul><p class="desk-note">Compare your prose to this guidance. Your free text was not graded. Reward credited once when this reply arrived.</p></article>`;
+        body.innerHTML += `<article class="partner-reply"><p class="desk-kicker">From ${e(task.partner)} · Authored practice feedback</p><h3>${latest.result.correct}/3 checklist choices · +${latest.result.gold} gold</h3><p>${linkedEvidence(partnerReply(task, latest.result.correct), task.sources)}</p><ul>${['Issue recognition', 'Next action', 'Evidence selection'].map((label, index) => `<li>${latest.result.checks[index] ? '✓' : 'Revisit:'} ${label}</li>`).join('')}</ul><p class="desk-note">Compare your prose to this guidance. Your free text was not graded. Reward credited once when this reply arrived.</p></article>`;
         if (latest.result.correct < 3 && attempts.length < 2) body.innerHTML += button('Accept invitation to revise', 'revise', task.id) + note('One revision is available. Improving the checklist can earn up to 20% extra; your original answer remains in the correspondence.');
         else body.innerHTML += button('Return to journal', 'journal');
       }

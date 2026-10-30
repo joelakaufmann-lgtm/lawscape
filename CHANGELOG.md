@@ -1,5 +1,40 @@
 # LawScape changelog
 
+## 0.9.0 — October 30, 2026
+
+- **Three new treatise shelves, verbatim:** the New York Rules of Professional
+  Conduct (22 NYCRR Part 1200, as amended through July 1, 2026), the Federation
+  of Law Societies of Canada Model Code of Professional Conduct (2024, with
+  Commentary) and the SRA Standards and Regulations for England & Wales
+  (Principles, Code of Conduct for Solicitors, Code of Conduct for Firms). The
+  extracts live under `content/references/` with source and retrieval notes.
+- **Study list:** every question answered wrongly is kept until it is answered
+  correctly. The Record panel lists them and exports a Markdown study list (or
+  copies it as text) with your reply, the preferred reply and its rationale.
+- **Authored rationale on every question:** the 21 LawScape originals, 69
+  MPRE-style and 28 SQE-style questions now carry a per-question explanation
+  for the correct answer; the generic closing sentence is gone. The generated
+  packs fail to build if a rationale is missing. (Content needs legal review.)
+- **Partner feedback follows your score:** each writing assignment has four
+  authored replies (0 to 3 checklist picks right), so a 3/3 reply is no longer
+  greeted with the rebuke written for 0/3.
+- **Office Snack Fridge** replaces the dot painting as the 2,000-gold office
+  upgrade: grab a snack for +8 Ethics on a two-minute cooldown. Existing saves
+  that owned the painting own the fridge.
+- Rooms: sitting on the couch no longer hides you behind it (seated figures
+  draw above the furniture they sit on); the Better Mattress now swaps in a 2×2
+  queen bed, and both beds have a real headboard with posts and a padded panel;
+  Riley sits at the paralegal desk once hired; the plant in Jim's office is gone.
+- BarMail: Canada email assignments scroll again; reopening BarMail returns to
+  the view you left instead of resetting to "All mail"; payouts show their
+  basis (base × upgrades × streak); New York short dilemmas pay by difficulty
+  like every other question; the emptied-tier notice explains what a new round
+  does and what unlocks the next level; the originals pack carries a standing
+  mixed Arizona/Nevada notice and list badge; the loss screen names the ways to
+  recover Ethics.
+- The espresso cooldown now shows a moment with a random rule from the shelf
+  (or a rule of thumb) instead of a bare error.
+
 ## 0.8.0 — October 29, 2026
 
 - Added **Juris Avenue**, a walkable street outside every building. Leaving the

@@ -10,7 +10,7 @@ and improve your office while protecting your Ethics.
 ![An attorney exploring the LawScape office](media/demo-30s/captures/office-full.png)
 
 Free to play. No account, installation or API key required. The current release
-is **0.8.0**, with a walkable street joining nine locations, a bigger wardrobe,
+is **0.9.0**, with six rule shelves (Nevada, Arizona, California, New York, the FLSC Model Code and the SRA Standards), a study-list export, a walkable street, a bigger wardrobe,
 adoptable pets, and California, New York and Canada practice. Prefer a quick look first? [Watch the 30-second demo](media/lawscape-demo-30s.mp4).
 
 ## Your first five minutes

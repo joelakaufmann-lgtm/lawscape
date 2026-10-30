@@ -30,6 +30,7 @@ const CORE_SCENARIOS = [
       + 'Payroll is tight this month — deposit it straight into the firm operating account. '
       + 'We’ll have it earned by the 30th anyway. Confirm when done.',
     rule: 'ER 1.15(c) / NRPC 1.15 — Safekeeping Property',
+    explanation: 'The $10,000 advance is client property until it is earned, so ER 1.15(c) requires it to go into the client trust account and come out only as fees are earned or expenses incurred. Payroll pressure and a forecast that the fee will be earned by the 30th do not change who owns the money today, and depositing even half of it in operating is commingling.',
     choices: [
       { grade: 'correct',
         text: 'Deposit it into the client trust account and withdraw fees only as they are earned.' },
@@ -49,6 +50,7 @@ const CORE_SCENARIOS = [
       + 'case directly against our position on the motion. Opposing counsel clearly hasn’t '
       + 'found it. You’re not going to hand them the win, right? Just leave it out of the brief.',
     rule: 'ER 3.3(a)(2) / NRPC 3.3 — Candor Toward the Tribunal',
+    explanation: 'ER 3.3(a)(2) requires you to disclose controlling authority you know is directly adverse when opposing counsel has not cited it, so the court of appeals decision must go in the brief. Candor is the floor, not the ceiling: the competent move is to confront the case and argue why it is distinguishable, rather than omit it or bury it in an unexplained footnote.',
     choices: [
       { grade: 'correct',
         text: 'Explain that you must disclose directly adverse controlling authority — and will argue why it is distinguishable.' },
@@ -68,6 +70,7 @@ const CORE_SCENARIOS = [
       + 'citations look plausible. Nobody has time to pull the cases. File it as-is and '
       + 'we’ll clean it up if the judge asks questions.',
     rule: 'ER 1.1 (Competence), ER 3.3 (Candor) / NRPC 1.1, 3.3',
+    explanation: 'ER 1.1 requires the thoroughness reasonably necessary for the representation, and ER 3.3 bars presenting authority you have not confirmed exists, so every AI-generated citation must be checked against the real authorities before you sign and file. A midnight deadline is handled by requesting a short extension; a spot check of two or three cases leaves the unverified ones as your representation to the court.',
     choices: [
       { grade: 'correct',
         text: 'Verify every citation against the actual authorities before filing — even if it means asking for a short extension.' },
@@ -88,6 +91,7 @@ const CORE_SCENARIOS = [
       + 'company’s formation work a few years back, so you already know everything. '
       + 'When can we start?',
     rule: 'ER 1.9 / NRPC 1.9 — Duties to Former Clients',
+    explanation: 'A dissolution fight over the company you formed is substantially related to the formation work, so ER 1.9 bars representing Theo against Gina, the former client, without her informed consent confirmed in writing. Her no longer being a client is the point of the rule, not an exception to it, and a private promise not to use what you learned is no substitute for her written consent.',
     choices: [
       { grade: 'correct',
         text: 'Turn down the engagement: the matter is substantially related to work done for the former client, absent her informed written consent.' },
@@ -107,6 +111,7 @@ const CORE_SCENARIOS = [
       + 'CEO — he’s reasonable. Skip the lawyers: call him directly tomorrow and make '
       + 'the offer CEO-to-lawyer. He’ll take your call.',
     rule: 'ER 4.2 / NRPC 4.2 — Communication with Represented Persons',
+    explanation: 'ER 4.2 forbids communicating about the matter with a person you know is represented in it without that lawyer\'s consent, and a represented company\'s CEO is squarely covered. The clients themselves may speak to each other, but a lawyer-written script delivered by your client is still your communication under ER 8.4(a).',
     choices: [
       { grade: 'correct',
         text: 'Decline — you cannot contact a represented party about the matter without their lawyer’s consent. (The clients themselves may talk to each other.)' },
@@ -126,6 +131,7 @@ const CORE_SCENARIOS = [
       + 'Marlowe. Bill the full twelve hours to Hendricks AND the same twelve to Marlowe. '
       + 'Both clients got the value, so both can pay for it. That’s just good realization.',
     rule: 'ER 1.5(a) / NRPC 1.5 — Fees; ER 8.4(c) — Dishonesty',
+    explanation: 'The research took twelve hours, so billing twelve to each file charges twenty-four hours for twelve hours of work: an unreasonable fee under ER 1.5(a) and a misrepresentation to both clients under ER 8.4(c). Recycled work may be allocated fairly between the files but never multiplied, and a 25% discount only makes the misstatement smaller.',
     choices: [
       { grade: 'correct',
         text: 'Refuse — bill only the hours actually worked, allocated fairly between the files.' },
@@ -145,6 +151,7 @@ const CORE_SCENARIOS = [
       + 'entire litigation strategy memo — clearly meant for their own client. I’m '
       + 'forwarding it to you. Read every word and let’s take them apart with it.',
     rule: 'ER 4.4(b) / NRPC 4.4(b) — Inadvertently Sent Documents',
+    explanation: 'ER 4.4(b) requires a lawyer who knows a document was inadvertently sent to notify the sender promptly, so stop reading the strategy memo, tell opposing counsel, and let the court resolve its status. Exploiting the paralegal\'s mistake invites disqualification, and quietly deleting it skips the mandatory notice while leaving your client\'s reading of it unaddressed.',
     choices: [
       { grade: 'correct',
         text: 'Stop reading, promptly notify the sender, and seek guidance from the court on the document’s status.' },
@@ -164,6 +171,7 @@ const CORE_SCENARIOS = [
       + 'friendly. Suggest to him that this would be a wonderful week to take that fishing '
       + 'trip in Baja — somewhere without cell service — until the discovery cutoff passes.',
     rule: 'ER 3.4(a), (f) / NRPC 3.4 — Fairness to Opposing Party and Counsel',
+    explanation: 'ER 3.4(a) bars unlawfully obstructing another party\'s access to evidence and ER 3.4(f) bars asking a non-client to withhold relevant information, so suggesting that Ochoa disappear to Baja until the discovery cutoff is witness-secreting however it is phrased. Routing the suggestion through the client does not help, because ER 8.4(a) reaches violations committed through the acts of another.',
     choices: [
       { grade: 'correct',
         text: 'Refuse — you cannot ask a witness to make himself unavailable or obstruct access to evidence.' },
@@ -184,6 +192,7 @@ const CORE_SCENARIOS = [
       + 'about his "fraudulent" invoices AND file a bar complaint against his lawyer. '
       + 'They’ll fold in a day.',
     rule: 'ER 3.10 (Arizona-specific) — Threatening Criminal, Administrative or Disciplinary Action',
+    explanation: 'Arizona\'s ER 3.10 forbids threatening criminal, administrative or disciplinary charges solely to gain an advantage in a civil matter, so the Friday ultimatum tying a DA referral and a bar complaint to payment is out, and you negotiate on the civil merits instead. A softened reference to "weighing criminal remedies" inside a settlement demand serves the same coercive purpose and fails the same rule.',
     choices: [
       { grade: 'correct',
         text: 'Refuse to threaten criminal or disciplinary action to gain leverage in the civil matter; negotiate on the civil merits.' },
@@ -203,6 +212,7 @@ const CORE_SCENARIOS = [
       + 'all to you, and you kick back 30% of every fee you earn from my referrals. '
       + 'Handshake deal, nothing in writing. Everybody wins!',
     rule: 'ER 7.2(b), former ER 5.4 (abrogated in Ariz. 2021 — ABS only) / NRPC 5.4, 7.2',
+    explanation: 'Paying Chuck 30% of every fee for sending clients is giving something of value for a recommendation, which ER 7.2(b) prohibits, and it is fee sharing with a nonlawyer that Rule 5.4 bars in most states; in Arizona such sharing is lawful only inside a licensed Alternative Business Structure, not a handshake kickback. Capping it at 10% changes the size of the violation, not its nature.',
     choices: [
       { grade: 'correct',
         text: 'Decline the kickback arrangement — paying a percentage of fees for referrals is prohibited outside a court-approved structure.' },
@@ -222,6 +232,7 @@ const CORE_SCENARIOS = [
       + 'car needs brakes before I can even get to work. Could the firm lend me $2,000 '
       + 'against my settlement? You know the case is worth way more than that.',
     rule: 'ER 1.8(e) / NRPC 1.8(e) — Financial Assistance to Clients',
+    explanation: 'ER 1.8(e) permits a lawyer to advance court costs and litigation expenses but not living expenses, so a $2,000 loan for rent and brakes against Rosa\'s pending injury case is prohibited no matter how sympathetic the need. Paying it quietly in cash adds concealment under ER 8.4(c) to the underlying violation; point her to legitimate hardship resources instead.',
     choices: [
       { grade: 'correct',
         text: 'Decline the personal loan — the firm may advance court costs and litigation expenses, but not living expenses.' },
@@ -241,6 +252,7 @@ const CORE_SCENARIOS = [
       + 'Mrs. Vann is on a cruise, unreachable until Sunday. She told us last week she was '
       + '"fine with whatever." Just sign her name — she’ll ratify it when she’s back.',
     rule: 'ER 8.4(c), ER 1.2(a) / NRPC 8.4, 1.2 — Dishonesty; Allocation of Authority',
+    explanation: 'Settlement belongs to the client under ER 1.2(a), and signing Mrs. Vann\'s name on the release without express authority tells opposing counsel she executed it when she did not, a misrepresentation under ER 8.4(c). The honest course is to disclose that she is briefly unreachable and ask for a short extension; having an assistant sign and notarize later only adds a false notarization to the problem.',
     choices: [
       { grade: 'correct',
         text: 'Refuse to sign her name — tell opposing counsel the client is briefly unreachable and get a short extension.' },
@@ -260,6 +272,7 @@ const CORE_SCENARIOS = [
       + 'manager joked about the safety inspections. It reads TERRIBLY out of context. '
       + 'IT can purge it from the server tonight before anything gets collected. OK to proceed?',
     rule: 'ER 3.4(a) / NRPC 3.4(a) — Destruction of Evidence (Spoliation)',
+    explanation: 'Litigation is pending, so ER 3.4(a) prohibits unlawfully destroying or concealing the 2024 thread and prohibits counseling or assisting the client to purge it; the right response is a litigation hold now and advocacy about context later. A knowing wink that you "can\'t advise" deletion is still assistance under ER 3.4(a) and ER 1.2(d).',
     choices: [
       { grade: 'correct',
         text: 'Absolutely not — instruct the client to preserve everything, issue a litigation hold, and address bad documents through advocacy.' },
@@ -279,6 +292,7 @@ const CORE_SCENARIOS = [
       + 'thinking in the shower, dreams about the case — it all counts. Round each entry up '
       + 'to the next full hour and resubmit by Friday. This is how the business works, associate.',
     rule: 'ER 5.2 / NRPC 5.2 — Subordinate Lawyers; ER 8.4(c)',
+    explanation: 'Billing hours you did not work is dishonesty under ER 8.4(c), and ER 5.2(a) makes you responsible for the violation even though the partner ordered it. The ER 5.2(b) safe harbor covers only a supervisor\'s reasonable resolution of an arguable question, and rounding every entry up to the hour is not arguable; padding only the entries unlikely to be audited is the same fraud with a risk filter.',
     choices: [
       { grade: 'correct',
         text: 'Decline to pad the entries and keep your timesheets accurate — following orders is no defense to a clear violation.' },
@@ -299,6 +313,7 @@ const CORE_SCENARIOS = [
       + 'Totally natural-looking. We can also add "Voted #1 Trial Lawyer" to your site. '
       + 'Ready to launch Monday?',
     rule: 'ER 7.1 / NRPC 7.1 — False or Misleading Communications',
+    explanation: 'ER 7.1 prohibits false or misleading communications about a lawyer\'s services, and fifty invented testimonials describing cases that never happened are false statements of fact regardless of which vendor posts them, since ER 8.4(a) covers violations through another\'s acts. A "Voted #1 Trial Lawyer" badge with no bona fide vote behind it fails the same rule, so dropping only the reviews does not fix the package.',
     choices: [
       { grade: 'correct',
         text: 'Refuse — fake client reviews and unverifiable "#1" claims are false and misleading lawyer advertising.' },
@@ -318,6 +333,7 @@ const CORE_SCENARIOS = [
       + 'injured, all still admitted, none have lawyers yet. Swing by the hospital tonight '
       + 'with retainer agreements. First firm in the door signs them all!',
     rule: 'ER 7.3 / NRPC 7.3 — Solicitation of Clients',
+    explanation: 'ER 7.3 bars in-person solicitation for pecuniary gain from people with whom you have no prior relationship, and visiting fourteen hospitalized strangers with retainer agreements is the exact conduct the rule targets. Sending the nurse cousin with your cards and a script is solicitation through an agent under ER 8.4(a) and 7.3, and runs into capping laws in many states.',
     choices: [
       { grade: 'correct',
         text: 'Refuse — in-person solicitation of injured strangers for money is prohibited; wait for them to seek counsel.' },
@@ -337,6 +353,7 @@ const CORE_SCENARIOS = [
       + 'Delgado from church in that big injury case. How much is she getting? Is it the '
       + 'seven figures Brenda says? I promise I won’t tell a soul (except Brenda).',
     rule: 'ER 1.6 / NRPC 1.6 — Confidentiality of Information',
+    explanation: 'ER 1.6 protects all information relating to the representation, with no exception for family, so you cannot confirm the settlement figure or even that Rosa is a client. Saying she will "be very happy" discloses the outcome, and "public eventually" is not public now; settlement terms are often confidential by agreement.',
     choices: [
       { grade: 'correct',
         text: 'Politely decline to confirm or discuss anything about any client — even with family.' },
@@ -357,6 +374,7 @@ const CORE_SCENARIOS = [
       + 'Partner says sweep the full $30,000 to operating today and argue about it later. '
       + 'Please confirm disbursement instructions.',
     rule: 'ER 1.15(d), (e) / NRPC 1.15 — Disputed Funds',
+    explanation: 'ER 1.15(e) requires funds in which both the firm and Ms. Delgado claim an interest to stay in trust until the dispute is resolved, while ER 1.15(d) requires prompt delivery of everything that is undisputed. Only the contested $8,000 is held: sweeping the full $30,000 converts disputed client money, and freezing all $90,000 wrongly withholds funds the client is clearly owed.',
     choices: [
       { grade: 'correct',
         text: 'Disburse the client’s undisputed share promptly, take the undisputed fee, and hold the disputed $8,000 in trust until resolved.' },
@@ -376,6 +394,7 @@ const CORE_SCENARIOS = [
       + 'status conferences and knows the Chen file cold. Have Riley appear for us and enter '
       + 'the scheduling stipulations. The judge barely looks up anyway.',
     rule: 'ER 5.5, ER 5.3 / NRPC 5.5, 5.3 — Unauthorized Practice of Law',
+    explanation: 'Appearing before the court on a client\'s behalf and entering stipulations is the practice of law, so sending Riley assists unauthorized practice under ER 5.5(a) and breaches your supervisory duties under ER 5.3. Handing up a proposed order with a softer script is still an appearance; the compliant options are a continuance, a remote appearance or licensed coverage counsel.',
     choices: [
       { grade: 'correct',
         text: 'No — a nonlawyer cannot appear and act for a client in court; move the conference or find licensed coverage.' },
@@ -396,6 +415,7 @@ const CORE_SCENARIOS = [
       + 'he’ll pay it back and that if I report it he’ll end my career. It’s not my money '
       + 'and not my client. I keep my head down, right?',
     rule: 'ER 8.3(a) / NRPC 8.3 — Reporting Professional Misconduct',
+    explanation: 'Two years of six-figure trust theft with doctored ledgers is knowledge of a violation raising a substantial question about honesty and fitness, so ER 8.3(a) requires Sam to inform the appropriate professional authority; the partner\'s repayment promise and retaliation threat change nothing. An anonymous note to the managing partner may be a first step but does not discharge a duty that runs to disciplinary counsel.',
     choices: [
       { grade: 'correct',
         text: 'Advise reporting it to the disciplinary authority — knowing misappropriation of trust funds is squarely reportable, and retaliation threats change nothing.' },
@@ -416,6 +436,7 @@ const CORE_SCENARIOS = [
       + 'so the numbers hold up. Strictly paperwork, nothing to litigate. I pay triple '
       + 'your rate, cash, today.',
     rule: 'ER 1.2(d), ER 1.16(a) / NRPC 1.2(d), 1.16 — Counseling Fraud; Declining Representation',
+    explanation: 'Backdated invoices and a fake consulting agreement built to survive a lender audit are the fraud itself, and ER 1.2(d) forbids assisting conduct you know is fraudulent, so the engagement must be declined no matter the rate. Reviewing documents you know the client fabricated still assists the fraud, and ER 1.16(a) would mandate withdrawal if you had already been retained.',
     choices: [
       { grade: 'correct',
         text: 'Turn down the engagement — a lawyer cannot assist conduct the lawyer knows is fraudulent, at any rate.' },

@@ -26,6 +26,23 @@ const WALL_COLORS = {
   navy: PAL.navy,
 };
 
+// Painter's depth for a figure. Someone seated on furniture (the couch, a desk
+// chair) stands on a tile inside that prop's footprint; the prop's own depth is
+// measured from its far corner, so it would otherwise draw over the figure.
+export function actorDepth(zone, actor) {
+  let depth = actor.x + actor.y;
+  const tx = Math.round(actor.x), ty = Math.round(actor.y);
+  for (const prop of zone.props) {
+    if (prop.visible && !prop.visible()) continue;
+    const def = PROPS[prop.type];
+    if (!def || !def.solid) continue;
+    if (tx >= prop.x && tx < prop.x + def.w && ty >= prop.y && ty < prop.y + def.h) {
+      depth = Math.max(depth, (prop.x + def.w - 1) + (prop.y + def.h - 1) - 0.1 + 0.05);
+    }
+  }
+  return depth;
+}
+
 export class WorldRenderer {
   constructor(canvas) {
     this.canvas = canvas;
@@ -135,12 +152,12 @@ export class WorldRenderer {
 
     for (const npc of npcs) {
       if (npc.def.visible && !npc.def.visible()) continue;
-      drawables.push({ depth: npc.actor.x + npc.actor.y, kind: 'npc', npc });
+      drawables.push({ depth: actorDepth(zone, npc.actor), kind: 'npc', npc });
     }
     for (const remote of remotes) {
-      drawables.push({ depth: remote.actor.x + remote.actor.y, kind: 'remote', remote });
+      drawables.push({ depth: actorDepth(zone, remote.actor), kind: 'remote', remote });
     }
-    drawables.push({ depth: player.x + player.y, kind: 'player' });
+    drawables.push({ depth: actorDepth(zone, player), kind: 'player' });
 
     drawables.sort((a, b) => a.depth - b.depth);
 

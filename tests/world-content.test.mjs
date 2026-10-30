@@ -40,7 +40,7 @@ test('every building door opens onto the street and each street door leads back 
 
 test('furniture faces the right way and sits against the walls', () => {
   const office = ZONES.office;
-  const lizChair = office.props.find((prop) => prop.type === 'officechair');
+  const lizChair = office.props.find((prop) => prop.type === 'officechair' && typeof prop.broken === 'function');
   assert.deepEqual({ x: lizChair.x, y: lizChair.y }, { x: 1, y: 9 });
   assert.equal(typeof lizChair.broken, 'function'); assert.equal(lizChair.broken(), true, 'broken until the upgrade');
   const liz = office.npcs.find((npc) => npc.id === 'secretary');
@@ -50,6 +50,7 @@ test('furniture faces the right way and sits against the walls', () => {
   assert.equal(espresso.type, 'coffeemachine'); assert.equal(typeof espresso.visible, 'function');
 
   const jim = ZONES.corner_office;
+  assert.equal(jim.props.some((prop) => prop.type === 'plant'), false, 'no plant in Jim’s office');
   assert.ok(jim.props.filter((prop) => prop.type === 'clientchair').every((prop) => prop.facing === 'n'), 'client chairs face Jim’s desk');
   assert.equal(jim.props.find((prop) => prop.type === 'barcart').y, 1, 'bar cart against the back wall');
   assert.equal(jim.props.find((prop) => prop.type === 'executivedesk').screen, 'n');
@@ -66,6 +67,11 @@ test('furniture faces the right way and sits against the walls', () => {
 
   const apartment = ZONES.apartment;
   assert.equal(apartment.props.find((prop) => prop.type === 'plant').x, 1);
+  const beds = apartment.props.filter((prop) => ['bed', 'bigbed'].includes(prop.type));
+  assert.deepEqual(beds.map((prop) => prop.type), ['bed', 'bigbed']);
+  assert.ok(beds.every((prop) => prop.x === 1 && prop.y === 1 && prop.interact?.action === 'rest' && typeof prop.visible === 'function'));
+  assert.equal(beds[0].visible(), true); assert.equal(beds[1].visible(), false, 'the queen bed needs the mattress upgrade');
+  assert.deepEqual([PROPS.bigbed.w, PROPS.bigbed.h], [2, 2]);
   assert.equal(apartment.props.find((prop) => prop.type === 'coffeemachine').y, 1);
   const pet = apartment.npcs.find((npc) => npc.id === 'pet');
   assert.equal(pet.wander, true); assert.equal(pet.talk, 'pet'); assert.equal(typeof pet.visible, 'function'); assert.equal(pet.visible(), false);
@@ -98,9 +104,15 @@ test('the main office connects the requested workspaces and filing cabinet', () 
   ));
   assert.equal(office.npcs.find((npc) => npc.id === 'secretary').name, 'Liz Loza, Secretary');
   assert.equal(office.npcs.find((npc) => npc.id === 'paralegal').name, 'Riley Readsalot, Paralegal');
-  for (const required of ['officechair', 'plant', 'dotpainting']) {
+  for (const required of ['officechair', 'plant', 'fridge']) {
     assert.ok(office.props.some((prop) => prop.type === required), `missing office upgrade prop ${required}`);
   }
+  assert.equal(office.props.some((prop) => prop.type === 'dotpainting'), false, 'the dot painting is gone');
+  const fridge = office.props.find((prop) => prop.type === 'fridge');
+  assert.equal(fridge.interact?.action, 'snack'); assert.equal(typeof fridge.visible, 'function'); assert.equal(fridge.stocked(), true);
+  const riley = office.npcs.find((npc) => npc.id === 'paralegal');
+  assert.equal(riley.seated, true);
+  assert.ok(office.props.some((prop) => prop.type === 'officechair' && prop.x === riley.x && prop.y === riley.y && typeof prop.visible === 'function'), 'Riley has a chair on the same tile');
   assert.equal(typeof office.props.find((prop) => prop.type === 'desk').phone, 'function');
   assert.equal(office.props.some((prop) => prop.type === 'sofa'), false);
 });

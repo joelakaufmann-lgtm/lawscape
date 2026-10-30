@@ -28,6 +28,7 @@ function newRunId() {
 }
 
 export const BASE_MAX_ETHICS = 100;
+export const MISSED_LIMIT = 300; // study-list entries kept per character
 export const MONEYBAGS_MAX_ETHICS = 50;
 
 export function freshState() {
@@ -73,6 +74,8 @@ export function freshState() {
     arcadeCredits: 0,      // Briefcase Dash rounds already paid for
     drunkPenaltyFor: 0,    // slowUntil value of the drinking episode already charged at work
     lastEspressoAt: 0,     // epoch ms of the last office espresso (cooldown)
+    lastSnackAt: 0,        // epoch ms of the last office fridge snack (cooldown)
+    missed: [],            // wrong answers to review: [{ id, choiceIndex, at }], newest last
     pet: null,             // null | { kind: 'cat' | 'dog', name, adoptedAt }
     upgrades: [],
     zone: 'office',
@@ -160,8 +163,9 @@ export function normalizeSave(data) {
     if (!next.apprenticeship[key] || typeof next.apprenticeship[key] !== 'object' || Array.isArray(next.apprenticeship[key])) next.apprenticeship[key] = {};
   }
   if (!Array.isArray(next.upgrades)) next.upgrades = [];
-  next.upgrades = [...new Set(next.upgrades.map((id) => id === 'office_window' ? 'work_phone' : id))];
-  for (const key of ['slowUntil', 'docReviewStartedAt', 'lastDocReviewAt', 'lastStudyTickAt', 'endedAt', 'lastRestAt', 'billableStudyMs', 'arcadeCredits', 'drunkPenaltyFor', 'lastEspressoAt']) {
+  const renamed = { office_window: 'work_phone', artwork: 'snack_fridge' }; // pre-0.7.0 and pre-0.9.0 ids
+  next.upgrades = [...new Set(next.upgrades.map((id) => renamed[id] || id))];
+  for (const key of ['slowUntil', 'docReviewStartedAt', 'lastDocReviewAt', 'lastStudyTickAt', 'endedAt', 'lastRestAt', 'billableStudyMs', 'arcadeCredits', 'drunkPenaltyFor', 'lastEspressoAt', 'lastSnackAt']) {
     if (!Number.isFinite(next[key]) || next[key] < 0) next[key] = 0;
   }
   if (!next.packCorrect || typeof next.packCorrect !== 'object' || Array.isArray(next.packCorrect)) next.packCorrect = {};
@@ -171,6 +175,9 @@ export function normalizeSave(data) {
   if (next.practicePack === 'canada-test') next.practicePack = 'canada';
   if (typeof next.hintScenarioId !== 'string') next.hintScenarioId = null;
   if (!Array.isArray(next.seen)) next.seen = [];
+  next.missed = Array.isArray(next.missed)
+    ? next.missed.filter((m) => m && typeof m === 'object' && typeof m.id === 'string' && Number.isInteger(m.choiceIndex)).map((m) => ({ id: m.id, choiceIndex: m.choiceIndex, at: Number.isFinite(m.at) ? m.at : 0 })).slice(-MISSED_LIMIT)
+    : [];
   if (!next.pos || !Number.isFinite(next.pos.x) || !Number.isFinite(next.pos.y)) next.pos = { x: 6, y: 10 };
   next.ethics = Math.min(next.ethics, playerMaxEthics(next));
   if (next.ethics <= 0) next.runStatus = 'ended';

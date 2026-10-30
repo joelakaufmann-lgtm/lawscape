@@ -18,6 +18,8 @@ export const ARCADE_PLAY_COST = 5;
 export const ARCADE_ROUNDS_PER_PLAY = 3;
 export const ESPRESSO_ETHICS_RESTORE = 5;
 export const ESPRESSO_COOLDOWN_MS = 90_000;
+export const SNACK_ETHICS_RESTORE = 8;
+export const SNACK_COOLDOWN_MS = 120_000;
 export const DRUNK_AT_WORK_ETHICS_DAMAGE = 10;
 // Arriving impaired at the firm or the courthouse costs Ethics; home, the
 // street and The Sidebar never do.

@@ -25,6 +25,7 @@ import { pendingAttempt, taskAttempts, capstoneReady } from './apprenticeship.js
 import { WRITING_TASKS, CAPSTONE, COSMETICS } from './data/apprenticeship.js';
 import { PET_COST, PET_KINDS, DEFAULT_PET_NAME } from './data/pets.js';
 import { ALL_MAIL_SCENARIOS, canAccessBarMail, practiceInbox, billableMessageOpen } from './data/mail.js';
+import { missedScenarios, buildStudyList } from './study-list.js';
 import { BAR_DRINKS, movementMultiplier, archiveDisbarredRun, readBillableBoard } from './lounge.js';
 import { appearanceLook, normalizeAppearance, randomAppearance, randomGender } from './data/appearance.js';
 import { mountAppearanceEditor } from './ui/appearance.js';
@@ -49,6 +50,7 @@ import {
   LAWYER_ASSISTANCE_URL,
   formatBillableTime,
   rileyHintEligible,
+  ETHICS_TIPS,
 } from './data/work.js';
 import {
   GAME_VERSION,
@@ -344,6 +346,7 @@ function runAction(action, prop = null) {
       drinkCoffee();
       break;
     case 'espresso': drinkEspresso(); break;
+    case 'snack': eatSnack(); break;
     case 'eat_ramen': eatApartmentFood('ramen'); break;
     case 'cook_meal': eatApartmentFood('meal'); break;
     case 'watch_tv': watchTV(); break;
@@ -415,7 +418,7 @@ function lizLines() {
   const phoneOwned = hasUpgrade('work_phone');
   const chair = hasUpgrade('liz_chair');
   const plants = hasUpgrade('houseplants');
-  const artwork = hasUpgrade('artwork');
+  const fridge = hasUpgrade('snack_fridge');
   const improvedOffice = paralegal && phoneOwned;
   const lines = [
     'You have emails to answer and documents to review.',
@@ -432,7 +435,7 @@ function lizLines() {
   if (plants) {
     lines.push('Can you please water the plants?', 'These plants help make this place feel like less of a prison.');
   }
-  if (artwork) lines.push('This beautiful painting sure does add to the warmth of this office.');
+  if (fridge) lines.push('Somebody keeps eating my yoghurt. I have started labelling it.', 'The snack fridge is the best thing that has happened to this office since the stapler.');
   if (improvedOffice) {
     lines.push('Hello, how are you?', 'I’m proud of the work we do for our clients.');
   }
@@ -554,8 +557,11 @@ function currentDifficulty() {
 const VALID_PACKS = new Set(PRACTICE_PACKS.map(pack => pack.id));
 
 let mailMode = 'inbox', mailFolder = 'all', writingTaskId = null, questionAnswered = false;
+// The folder last shown in the inbox list, so reopening BarMail (B key, toolbar)
+// returns to the view the player left instead of resetting to "All mail".
+let lastMailFolder = 'all';
 
-function openEmail(folder = 'all', taskId = null) {
+function openEmail(folder = lastMailFolder, taskId = null) {
   if (!canAccessBarMail(state, !!claimedDesk)) {
     toast('BarMail is on your office computer. The Work Phone unlocks access everywhere.');
     return;
@@ -567,6 +573,7 @@ function openEmail(folder = 'all', taskId = null) {
   $('email-appname').textContent = state.zone === 'associates' && claimedDesk ? `BarMail — Open Desk ${claimedDesk}`
     : hasUpgrade('work_phone') && state.zone !== 'office' ? 'BarMail — Work Phone' : 'BarMail — Office Computer';
   mailFolder = folder;
+  if (folder !== 'writing' || !taskId) lastMailFolder = folder;
   mailMode = taskId ? 'writing' : 'inbox';
   writingTaskId = taskId;
   currentScenario = null;
@@ -581,6 +588,13 @@ function openEmail(folder = 'all', taskId = null) {
   hoverLabel(null);
 }
 
+// Copy for an emptied tier: what a new round does and what unlocks the next level.
+function exhaustedTierCopy(pool) {
+  const next = state.casesDone < 5 ? 5 : state.casesDone < 12 ? 12 : null;
+  const unlock = next ? ` Answer ${next - state.casesDone} more question${next - state.casesDone === 1 ? '' : 's'} in any pack to reach Level ${pool.difficulty + 1}.` : ' You are at the top level for this pack.';
+  return `You have answered every ${pool.levelLabel} question in this pack. A new study round shows the same questions again so you can retry them.${unlock}`;
+}
+
 function renderInbox() {
   const pool = practiceInbox(state,ALL_MAIL_SCENARIOS);
   const isCanada = state.practicePack === 'canada';
@@ -590,13 +604,14 @@ function renderInbox() {
   $('email-inbox').innerHTML = `<header class="mail-inbox-heading"><div><span class="mail-eyebrow">HARDSELL &amp; FIRESTONE · INTERNAL MAIL</span><h2>${showPractice && showWriting ? 'Your inbox' : showWriting ? 'Writing assignments' : 'Ethics practice inbox'}</h2><p>Open a subject line to read and reply. All senders and correspondence are synthetic.</p></div><span class="mail-device">${hasUpgrade('work_phone') ? 'Work phone connected' : 'Office terminal'}</span></header>`
     + (pendingAttempt(state) ? '<p class="mail-notice">A partner reply is pending. You can read your mail; another graded submission waits for that reply.</p>' : '')
     + (isCanada ? '<p class="mail-notice">Canada pack · Ontario, BC and Saskatchewan. Questions pay gold and cost Ethics like every pack; practitioner review of the answer key is pending. <a href="canada-test/review.html" target="_blank" rel="noopener">Reviewer notes</a></p>' : '')
+    + (state.practicePack === 'juris' ? '<p class="mail-notice">LawScape original dilemmas use mixed Arizona/Nevada rule labels for a fictional firm. They are not jurisdiction-specific practice; some cited rules (for example ER 3.10) exist in one state and not the other.</p>' : '')
     + (showWriting ? `<h3 class="mail-group-title">Partner correspondence · ${isCanada ? '5 Canadian email assignments' : 'Writing'}</h3><div class="mail-list">${writingTasks.map((task) => {
       const latest = isCanada ? canadaProgress(state).emailAttempts.filter(a => a.taskId === task.id).at(-1) : taskAttempts(state,task.id).at(-1);
       const locked = task.id === 'capstone' && !capstoneReady(state);
       const status = isCanada ? canadaProgress(state).drafts[task.id] ? 'Draft saved' : latest ? 'Committed · authored guidance' : 'Test assignment' : locked ? 'Complete six replies and two files' : latest?.status === 'pending' ? 'Sent · awaiting partner' : latest ? 'Partner replied' : state.apprenticeship.drafts[task.id] ? 'Draft saved' : 'New assignment';
       return `<button type="button" class="mail-row" data-writing="${task.id}" ${locked ? 'disabled' : ''}><span class="mail-sender">${e(task.partner)}</span><span class="mail-subject">${e(task.title)}<small>${e(task.skill)} · ${e(task.prompt.slice(0,105))}…</small></span><span class="mail-status">${status}</span></button>`;
     }).join('')}</div>` : '')
-    + (showPractice ? `<h3 class="mail-group-title">Ethics practice · ${pool.levelLabel} · ${pool.unread.length} unanswered</h3><div class="mail-list">${pool.unread.map((s) => `<button type="button" class="mail-row" data-scenario="${e(s.id)}"><span class="mail-sender">${e(s.from)}<small>${e(s.role)}</small></span><span class="mail-subject">${e(s.subject)}<small>${e(s.body.slice(0,95))}…</small></span><span class="mail-status">${s.jurisdiction || (s.sourceType === 'mpre-style' ? 'MPRE-style' : s.sourceType === 'sqe-style' ? 'SQE-style' : 'LawScape original')}</span></button>`).join('')}</div>${!pool.unread.length ? '<p class="mail-notice">You have answered this tier’s mail for this practice pack.</p><button type="button" id="mail-new-round">Start another study round</button>' : ''}` : '');
+    + (showPractice ? `<h3 class="mail-group-title">Ethics practice · ${pool.levelLabel} · ${pool.unread.length} unanswered</h3><div class="mail-list">${pool.unread.map((s) => `<button type="button" class="mail-row" data-scenario="${e(s.id)}"><span class="mail-sender">${e(s.from)}<small>${e(s.role)}</small></span><span class="mail-subject">${e(s.subject)}<small>${e(s.body.slice(0,95))}…</small></span><span class="mail-status">${s.jurisdiction || (s.sourceType === 'mpre-style' ? 'MPRE-style' : s.sourceType === 'sqe-style' ? 'SQE-style' : 'LawScape original · AZ/NV mixed')}</span></button>`).join('')}</div>${!pool.unread.length ? `<p class="mail-notice">${exhaustedTierCopy(pool)}</p><button type="button" id="mail-new-round">Start another study round</button>` : ''}` : '');
   $('email-inbox').querySelectorAll('[data-writing]').forEach((row) => row.onclick = () => openEmail('writing',row.dataset.writing));
   $('email-inbox').querySelectorAll('[data-scenario]').forEach((row) => row.onclick = () => openScenario(row.dataset.scenario));
   if ($('mail-new-round')) $('mail-new-round').onclick = () => {
@@ -705,13 +720,11 @@ function renderScenarioResult(s, choice, result) {
   if (result.correct) {
     verdictEl.textContent = '✔ Sound professional judgment.';
     verdictEl.className = 'good';
-    const successContext = s.sourceType === 'sqe-style'
-      ? 'That is the defensible course under the SRA framework — careful judgment on client, '
-        + 'court, money, and compliance duties is how practising certificates stay safe.'
-      : 'That is the defensible course — engagement decisions, trust money, and candor calls '
-        + 'like this one are exactly where licenses are won and lost.';
-    explainEl.textContent = `${s.rule}. ${s.explanation || successContext}`;
-    const bonus = result.multiplier > 1 ? ` <span class="muted">· streak bonus ×${result.multiplier}</span>` : '';
+    explainEl.textContent = `${s.rule}. ${s.explanation || s.choices.find((c) => c.grade === 'correct')?.why || ''}`.trim();
+    const factors = [`${result.base ?? result.earned} base`];
+    if (result.goldMult && result.goldMult !== 1) factors.push(`× ${result.goldMult.toFixed(2).replace(/0$/, '')} upgrades`);
+    if (result.multiplier > 1) factors.push(`× ${result.multiplier} streak`);
+    const bonus = factors.length > 1 ? ` <span class="muted">· ${factors.join(' ')}</span>` : '';
     const streakNote = result.healed > 0 ? `<span class="gain">+${result.healed} Ethics (streak x${result.streak}!)</span>`
       : result.streak >= 2 ? `<span class="muted">streak x${result.streak} · Ethics already full</span>`
       : `<span class="muted">streak x${result.streak} — one more for an Ethics heal</span>`;
@@ -728,7 +741,8 @@ function renderScenarioResult(s, choice, result) {
     explainEl.textContent = `Why you lost Ethics — ${choice.why}`;
     const rileyNote = result.rileyHalved ? ' · Riley cut the damage in half' : '';
     deltaEl.innerHTML = `<span class="loss">−${result.dmg} Ethics</span> &nbsp; `
-      + `<span class="muted">wrong-answer streak x${result.wrongStreak}${rileyNote}</span>`;
+      + `<span class="muted">wrong-answer streak x${result.wrongStreak}${rileyNote}</span>`
+      + `<br><span class="muted">Recover Ethics: two correct answers in a row heal 10, rest at your apartment, or have a coffee or espresso. This question is on your study list (Record → Export).</span>`;
   }
   if (s.sourceUrl) appendScenarioSource(explainEl, s);
   updateHUD();
@@ -969,7 +983,7 @@ function openRuleLibrary() {
     if (set.resources?.length) {
       const heading = document.createElement('h3');
       heading.className = 'rule-resource-heading';
-      heading.textContent = 'California reference files';
+      heading.textContent = `${set.tabLabel || set.title} reference files`;
       body.appendChild(heading);
 
       const resources = document.createElement('div');
@@ -1050,7 +1064,7 @@ function openRuleLibrary() {
     const button = document.createElement('button');
     button.dataset.set = set.id;
     button.textContent = set.tabLabel
-      || (set.id === 'nevada' ? 'Nevada NRPC' : 'Arizona ER');
+      || (set.id === 'nevada' ? 'Nevada NRPC' : set.id === 'arizona' ? 'Arizona ER' : set.title);
     button.onclick = () => selectSet(set);
     tabs.appendChild(button);
   }
@@ -1208,6 +1222,37 @@ function openRecord() {
     <div class="row-item"><div class="grow"><h4>Gold</h4></div><div class="meta">🪙 ${Math.floor(state.gold)}</div></div>
     <div class="row-item"><div class="grow"><h4>Ethics</h4></div><div class="meta">⚖ ${state.ethics}/${maxEthics()}</div></div>
     <div class="row-item"><div class="grow"><h4>Upgrades owned</h4></div><div class="meta">${state.upgrades.length}</div></div>`;
+  renderStudyList(body);
+}
+
+// Questions answered wrongly, with a Markdown export for revision outside the game.
+function renderStudyList(body) {
+  const items = missedScenarios(state, ALL_MAIL_SCENARIOS);
+  const row = document.createElement('div');
+  row.className = 'row-item';
+  row.innerHTML = `<div class="grow"><h4>Questions to review</h4><p>${items.length ? 'Every question you answered wrongly, until you answer it correctly. Export a Markdown study list to keep.' : 'No missed questions yet. Wrong answers collect here for revision.'}</p>
+    ${items.length ? `<ul class="study-list">${items.slice(0, 12).map(({ scenario }) => `<li><b>${escapeHtml(scenario.subject)}</b> <small>${escapeHtml(scenario.jurisdiction || scenario.sourceType)}</small></li>`).join('')}${items.length > 12 ? `<li><small>and ${items.length - 12} more</small></li>` : ''}</ul>` : ''}</div>
+    <div class="meta">${items.length}</div>`;
+  if (items.length) {
+    const actions = document.createElement('div');
+    actions.className = 'sidebar-compose-actions';
+    const download = document.createElement('button'); download.type = 'button'; download.className = 'small'; download.textContent = 'Export study list (.md)';
+    download.onclick = () => {
+      const markdown = buildStudyList(state, ALL_MAIL_SCENARIOS, Date.now());
+      const url = URL.createObjectURL(new Blob([markdown], { type: 'text/markdown' }));
+      const a = document.createElement('a'); a.href = url; a.download = `lawscape-study-list-${new Date().toISOString().slice(0, 10)}.md`; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast('Study list exported.');
+    };
+    const copy = document.createElement('button'); copy.type = 'button'; copy.className = 'small'; copy.textContent = 'Copy as text';
+    copy.onclick = () => {
+      const markdown = buildStudyList(state, ALL_MAIL_SCENARIOS, Date.now());
+      navigator.clipboard?.writeText(markdown).then(() => toast('Study list copied.'), () => toast('Copy blocked by the browser; use Export instead.'));
+    };
+    actions.append(download, copy);
+    row.querySelector('.grow').appendChild(actions);
+  }
+  body.appendChild(row);
 }
 
 function doRest() {
@@ -1223,8 +1268,31 @@ function drinkCoffee() {
 }
 
 function drinkEspresso() {
-  act({ type: 'espresso' }).then(({ result }) => {
+  dispatch({ type: 'espresso' }).then(({ result }) => {
+    updateHUD();
     toast(`You pull a double shot. +${result.healed} Ethics.${result.sobered ? ' The fog lifts.' : ''}`);
+  }).catch((error) => {
+    if (!/heating up/.test(error.message)) { toast(error.message); return; }
+    // Waiting for the machine: a moment with a random professional rule.
+    const rule = randomRuleThought();
+    showDialogue({ name: 'Espresso Machine', text: `${error.message} While it heats up, you think about ${rule}` });
+  });
+}
+
+function randomRuleThought() {
+  if (hasUpgrade('subscription')) {
+    const set = RULE_LIBRARY[Math.floor(Math.random() * RULE_LIBRARY.length)];
+    const rules = (set?.rules || []).filter((rule) => rule.text);
+    const rule = rules[Math.floor(Math.random() * rules.length)];
+    if (rule) return `${set.citation} ${rule.number} — ${rule.title}.`;
+  }
+  const tip = ETHICS_TIPS[Math.floor(Math.random() * ETHICS_TIPS.length)];
+  return `a rule of thumb: ${tip.charAt(0).toLowerCase()}${tip.slice(1)}`;
+}
+
+function eatSnack() {
+  act({ type: 'snack' }).then(({ result }) => {
+    toast(`You grab a snack from the office fridge. +${result.healed} Ethics.`);
   }).catch(() => {});
 }
 
@@ -1392,7 +1460,7 @@ function openHelp() {
     <div class="row-item"><div class="grow"><h4>Your first five minutes</h4><p>Open <b>Journal</b> for a guided firm assignment, or <b>BarMail</b> in your office for a quick ethics question. Open a subject line, read the facts, choose a response and read the explanation.</p></div></div>
     <div class="row-item"><div class="grow"><h4>Choose your practice</h4><p>Use <b>Journal → Firm jurisdictions</b> or BarMail’s practice selector: LawScape original dilemmas (where new attorneys start), California, New York, US MPRE-style, England &amp; Wales SQE-style, or Canada. Mixed practice includes all six. The inbox shows your current difficulty tier.</p></div></div>
     <div class="row-item"><div class="grow"><h4>Move, explore, customize</h4><p>Click or tap to walk and interact; WASD and arrow keys also move. Use <b>Travel</b> for locations and <b>Journal → Wardrobe</b> to change your attorney. The Work Phone unlocks BarMail outside your office.</p></div></div>
-    <div class="row-item"><div class="grow"><h4>Gold and Ethics</h4><p>Correct ethics answers earn gold. Repeated wrong answers cause increasing Ethics damage. Correct streaks and resting in your apartment help restore Ethics. At zero Ethics the character run ends: gold, upgrades and drafts are reset. Read feedback before the next reply.</p></div></div>
+    <div class="row-item"><div class="grow"><h4>Gold and Ethics</h4><p>Correct ethics answers earn gold, multiplied by your correct streak. Repeated wrong answers cause increasing Ethics damage. Correct streaks, resting in your apartment, coffee, the office espresso machine and the snack fridge restore Ethics. At zero Ethics the character run ends: gold, upgrades and drafts are reset. Wrong answers collect on your study list (Record), which you can export as Markdown. The HUD clock is billable study time: it counts only while a question or assignment is open.</p></div></div>
     <div class="row-item"><div class="grow"><h4>Your first firm day</h4><p>Read the two synthetic files, flag evidence and complete six writing assignments to unlock the capstone. Committing locks each reply until the partner responds. Checklist choices receive authored feedback and study gold without Ethics damage; your prose is saved for self-comparison, not graded by live AI.</p></div></div>
     <div class="row-item"><div class="grow"><h4>Research and local play</h4><p>The Ethics Treatise Shelf upgrade opens Nevada, Arizona and California reference material. Progress and Sidebar table notes stay in this browser, with no account or cross-device sync. The Sidebar has scripted characters; shared chat and live courtroom hearings are planned.</p></div></div>
     <div class="row-item"><div class="grow"><h4>Need help?</h4><p><a href="docs/PLAYING.html" target="_blank" rel="noopener">Player guide</a> · <a href="docs/JURISDICTIONS.html" target="_blank" rel="noopener">Jurisdictions and sources</a>. <b>Email HR · Report a bug</b> prepares a GitHub report for you to review and submit. Nothing is sent automatically. This is unofficial educational practice, not legal advice.</p></div></div>`;

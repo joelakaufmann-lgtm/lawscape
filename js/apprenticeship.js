@@ -8,6 +8,12 @@ export function freshApprenticeship() {
 }
 
 export function taskById(id) { return [...WRITING_TASKS, CAPSTONE].find((task) => task.id === id); }
+// The partner's authored reply, chosen by how many of the three checklist
+// picks were right, so a 3/3 answer is not greeted with the rebuke written for 0/3.
+export function partnerReply(task, correct = 0) {
+  const replies = task.replies || {};
+  return replies[correct] || replies[Math.max(...Object.keys(replies).map(Number).filter((n) => n <= correct), 0)] || task.reply || '';
+}
 export function activeRun(player) { return player.ethics > 0 && player.runStatus !== 'ended'; }
 export function pendingAttempt(player) { return player.apprenticeship.attempts.find((a) => a.status === 'pending' && a.runId === player.runId); }
 export function taskAttempts(player, id) { return player.apprenticeship.attempts.filter((a) => a.taskId === id && a.runId === player.runId); }

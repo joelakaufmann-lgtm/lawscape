@@ -48,7 +48,8 @@ const newYork = headings.map((heading, i) => {
   };
 });
 const shorts = await read('content/questions/new-york/short-scenarios.json');
-newYork.push(...shorts.map(s => ({ ...s, ...metadata('New York', 'content/questions/new-york/SHORT-QUESTIONS.md', nyUrl) })));
+// Short dilemmas pay by difficulty like every other question (not their hand-set gold).
+newYork.push(...shorts.map(s => ({ ...s, gold: reward(s.difficulty), ...metadata('New York', 'content/questions/new-york/SHORT-QUESTIONS.md', nyUrl) })));
 assert.equal(california.length, 20); assert.equal(newYork.length, 33);
 for (const s of [...california, ...newYork]) {
   assert.equal(s.choices.filter(c => c.grade === 'correct').length, 1, s.id);

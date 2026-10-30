@@ -905,6 +905,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 #email-back { margin-bottom: 15px; font-size: 11px; }
 #email-writing-body { min-height: 0; flex: 1; display: flex; overflow: hidden; background: #f5f1e7; }
 #email-writing-body #desk-body { width: 100%; padding: 28px 38px; }
+/* Canada email assignments render straight into the writing host, so the
+   section itself has to be the scroll container. */
+#email-writing-body > .canada-email { flex: 1; min-height: 0; width: 100%; max-width: none; overflow-y: auto; overscroll-behavior: contain; margin: 0; }
 #room-tools { position: absolute; top: 141px; left: 12px; display: flex; flex-wrap: wrap; gap: 6px; max-width: calc(100vw - 24px); }
 #room-tools #room-action { position: static; }
 #room-tools button { padding: 8px 10px; font: 11px/1.4 Verdana,sans-serif; background: #3f5d4b; }

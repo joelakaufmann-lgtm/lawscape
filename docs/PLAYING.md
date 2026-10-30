@@ -65,7 +65,12 @@ Correct ethics answers earn gold, and a streak of correct answers multiplies it
 correct streak starts healing after two answers. Rest in your apartment and use
 available food and coffee interactions to recover. Office and apartment upgrades
 affect play; wardrobe accessories, jewelry and formal wear make your earnings
-visible. Five correct England & Wales answers earn a powdered barrister's wig;
+visible. Every wrong answer goes on your **study list** until you answer that
+question correctly; open **Record** to see it and export it as a Markdown file
+(or copy it) with your reply, the preferred reply and its rationale. The
+**Ethics Treatise Shelf** upgrade opens a searchable library of the Nevada,
+Arizona, California and New York rules, the FLSC Model Code (Canada) and the
+SRA Standards (England & Wales). Five correct England & Wales answers earn a powdered barrister's wig;
 the tuxedo and evening gown need the apartment Wardrobe Rack. With 2,000 gold
 you can adopt a cat or a dog from the apartment furniture catalog and name it.
 

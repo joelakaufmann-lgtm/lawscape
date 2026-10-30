@@ -1,6 +1,6 @@
 # LawScape Roadmap
 
-Updated October 29, 2026 · Release 0.8.0 · Direction: Astra Plan v1.4
+Updated October 30, 2026 · Release 0.9.0 · Direction: Astra Plan v1.4
 
 Legal learning should be fun, including learning how attorneys in different
 jurisdictions approach the same dilemma. LawScape puts that learning inside
@@ -53,6 +53,10 @@ and room chat are the next major work. The local release stays single-player.
   on the originals; question packs open directly from Firm jurisdictions.
   Source-review limits are recorded in the [catalog](docs/JURISDICTIONS.md);
   references remain available on the shelf.
+- Six treatise shelves with verbatim rule text: Nevada, Arizona, California,
+  New York, the FLSC Model Code and the SRA Standards; a per-question authored
+  rationale on every pack; a missed-question study list with Markdown export;
+  score-conditioned partner feedback (0.9.0).
 - **Juris Avenue:** a walkable street joining the law office, the apartments,
   the courthouse and The Sidebar, shared online. Travel stays as a shortcut.
 - Wardrobe jewelry and accessories, formal wear behind the Wardrobe Rack, an

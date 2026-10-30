@@ -45,6 +45,7 @@ the catalog for other jurisdiction proposals.
 - [California questions and answers](../content/questions/california/QUESTIONS.md) and [source review](../content/questions/california/SOURCES.md).
 - [New York emails and answers](../content/questions/new-york/NY_Ethics_Email_Scenarios.md), [short questions](../content/questions/new-york/SHORT-QUESTIONS.md) and [source review](../content/questions/new-york/SOURCES.md).
 - [MPRE authoring sources](../content/README.md) and [England & Wales questions](../content/questions/england-wales/SQE_Ethics_Email_Scenarios_UK.md).
+- Treatise shelf extracts (verbatim, with source and retrieval notes in each file): [New York Rules of Professional Conduct](../content/references/new-york/rpc.md), [FLSC Model Code of Professional Conduct](../content/references/canada/flsc-model-code.md) and [SRA Standards and Regulations](../content/references/england-wales/sra-standards.md), alongside the Nevada, Arizona and [California](../content/references/california/rpc.md) snapshots.
 
 The in-game Ethics Treatise Shelf still contains Nevada, Arizona and California
 reference snapshots. The California files live under `content/references/california/`.
