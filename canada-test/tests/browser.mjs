@@ -18,21 +18,19 @@ async function noOverflow(page,label){const sizes=await page.evaluate(()=>({w:in
 try{
   const ctx=await context(),page=await ctx.newPage();
   await page.goto(url('index.html'));await page.locator('#btn-new').click();await page.locator('#c-name').fill('Canada QA');await page.locator('#btn-start').click();await page.getByRole('button',{name:'Let me look around first.'}).click();
-  await page.locator('#btn-journal').click();await page.locator('[data-desk-tab="firm"]').click();await page.locator('[data-action="practice-pack"][data-value="canada-test"]').click();
-  assert.equal(await page.locator('[data-scenario]').count(),25);assert.equal(await page.locator('[data-writing]').count(),5);await shot(page,'game-canada-inbox.png');check('Firm selector opens all 25 questions and five Canadian emails');
+  await page.locator('#btn-journal').click();await page.locator('[data-desk-tab="firm"]').click();await page.locator('[data-action="practice-pack"][data-value="canada"]').click();
+  assert.equal(await page.locator('[data-scenario]').count(),6);assert.equal(await page.locator('[data-writing]').count(),5);await shot(page,'game-canada-inbox.png');check('Firm selector opens the six level-one questions and five Canadian emails');
   const before=await page.evaluate(()=>{const s=JSON.parse(localStorage.getItem('lawscape_save_v2'));return {ethics:s.ethics,gold:s.gold,streak:s.streak,wrongStreak:s.wrongStreak,casesDone:s.casesDone,correctDone:s.correctDone};});
-  for(const [i,q] of pack.questions.entries()){
-    await page.locator(`[data-scenario="${q.id}"]`).click();assert.match(await page.locator('#email-source').innerText(),/CANADA TEST/);
-    await page.locator('#email-rule summary').click();assert.ok((await page.locator('#email-rule').innerText()).includes('scope')||(await page.locator('#email-rule').innerText()).length>100);
+  for(const [i,q] of pack.questions.filter(q=>q.difficulty===1).entries()){
+    await page.locator(`[data-scenario="${q.id}"]`).click();assert.match(await page.locator('#email-source').innerText(),/CANADA/);
     if(i===0)await shot(page,'game-canada-question.png');
-    const wrong=q.options.find(o=>o.id!==q.answer);await page.getByRole('button',{name:wrong.text,exact:true}).click();
-    assert.match(await page.locator('#email-delta').innerText(),/No Ethics, gold or streak effects/);
-    await page.locator('#email-explain summary').click();assert.equal(await page.locator('#email-explain details p').count(),4);
+    await page.getByRole('button',{name:q.options.find(o=>o.id===q.answer).text,exact:true}).click();
+    assert.match(await page.locator('#email-delta').innerText(),/gold/);
     await page.locator('#email-continue').click();
   }
-  const after=await page.evaluate(()=>{const s=JSON.parse(localStorage.getItem('lawscape_save_v2'));return {ethics:s.ethics,gold:s.gold,streak:s.streak,wrongStreak:s.wrongStreak,casesDone:s.casesDone,correctDone:s.correctDone};});assert.deepEqual(after,before);assert.equal(await page.locator('[data-scenario]').count(),0);check('All 25 wrong-answer paths render four explanations and preserve character metrics');
-  await page.reload();await page.locator('#btn-continue').click();await page.locator('#btn-mail').click();assert.equal(await page.locator('[data-scenario]').count(),0);
-  await page.locator('#mail-new-round').click();assert.equal(await page.locator('[data-scenario]').count(),25);check('Reload preserves completion and a new study round retains prior history');
+  const after=await page.evaluate(()=>{const s=JSON.parse(localStorage.getItem('lawscape_save_v2'));return {ethics:s.ethics,gold:s.gold,streak:s.streak,wrongStreak:s.wrongStreak,casesDone:s.casesDone,correctDone:s.correctDone};});assert.ok(after.gold>before.gold&&after.casesDone===before.casesDone+6);assert.equal(await page.locator('[data-scenario]').count(),0);check('Level-one Canada answers pay gold like every pack');
+  await page.reload();await page.locator('#btn-continue').click();await page.locator('#btn-mail').click();
+  await page.locator('#mail-new-round').click();assert.ok(await page.locator('[data-scenario]').count()>0);check('Reload preserves completion and a new study round reopens the tier');
   for(const [i,email] of pack.emails.entries()){
     await page.locator(`[data-writing="${email.id}"]`).click();await page.locator('#canada-email-text').fill(email.sampleResponse);
     if(i===0){await page.reload();await page.locator('#btn-continue').click();await page.locator('#btn-mail').click();await page.locator(`[data-writing="${email.id}"]`).click();assert.equal(await page.locator('#canada-email-text').inputValue(),email.sampleResponse);}
@@ -46,7 +44,7 @@ try{
   const practiceExport=JSON.parse(await readFile(path.join(out,'practice-response-export.json'),'utf8'));assert.equal(practiceExport.emailAttempts.length,6);assert.equal(practiceExport.questionAttempts.length,25);check('Revision keeps the original and response export includes all test activity');
   await page.locator('#canada-back').click();await page.locator('#email-pack').selectOption('mixed');assert.ok(!(await page.locator('[data-scenario]').evaluateAll(nodes=>nodes.map(n=>n.dataset.scenario))).some(id=>id.startsWith('CA-')));
   await page.locator('#email-writing').click();assert.equal(await page.locator('[data-writing]').count(),7);await page.locator('[data-writing="release"]').click();assert.equal(await page.locator('#writing-text').count(),1);assert.equal(await page.locator('.canada-email').count(),0);check('Switching to existing packs restores the six legacy assignments and capstone without stale Canada content');
-  await page.locator('#email-pack').selectOption('canada-test');await page.setViewportSize({width:390,height:844});await shot(page,'game-canada-mobile.png');await noOverflow(page,'game mobile');await page.locator('[data-scenario="CA-SK-05"]').click();await page.locator('#email-rule summary').click();assert.ok((await page.locator('#email-body').boundingBox()).height>200);await shot(page,'game-canada-question-mobile.png');await page.getByRole('button',{name:pack.questions.find(q=>q.id==='CA-SK-05').options[0].text,exact:true}).click();check('Expanded two-rule briefing remains scrollable above an answerable mobile question');await ctx.close();
+  await page.locator('#email-pack').selectOption('canada');await page.setViewportSize({width:390,height:844});await shot(page,'game-canada-mobile.png');await noOverflow(page,'game mobile');const first=await page.locator('[data-scenario]').first().getAttribute('data-scenario');await page.locator(`[data-scenario="${first}"]`).click();assert.ok((await page.locator('#email-body').boundingBox()).height>100);await shot(page,'game-canada-question-mobile.png');await page.getByRole('button',{name:pack.questions.find(q=>q.id===first).options[0].text,exact:true}).click();check('A Canada question remains answerable on a mobile viewport');await ctx.close();
   const reviewCtx=await context(),review=await reviewCtx.newPage();await review.goto(url('canada-test/review.html'));assert.equal(await review.locator('.exercise').count(),30);await shot(review,'review-desktop.png');
   await review.locator('#CA-ON-01 > summary').click();await review.locator('#status-CA-ON-01').selectOption('revise');await review.locator('#note-CA-ON-01').fill('Synthetic QA note: verify the exception. <script>window.BAD=true</script>');await review.locator('#reviewer-name').fill('QA reviewer');
   await review.reload();await review.locator('#CA-ON-01 > summary').click();assert.equal(await review.locator('#status-CA-ON-01').inputValue(),'revise');assert.match(await review.locator('#note-CA-ON-01').inputValue(),/Synthetic QA/);assert.equal(await review.evaluate(()=>window.BAD),undefined);

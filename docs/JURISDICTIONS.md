@@ -2,11 +2,12 @@
 
 [Play LawScape](https://joelakaufmann-lgtm.github.io/lawscape/) · [Player guide](PLAYING.md)
 
-## Playable now — 171 questions
+## Playable now — 196 questions
 
 Open **Journal → Firm jurisdictions → Play** or use the **BarMail practice-pack
-selector**. Mixed practice draws from all five packs. Each inbox shows the
-current difficulty tier; these are whole-pack totals.
+selector**. New attorneys start on the LawScape original dilemmas; Mixed
+practice draws from all six packs. Each inbox shows the current difficulty tier;
+these are whole-pack totals.
 
 | Pack | Questions | Coverage and status |
 | --- | ---: | --- |
@@ -14,6 +15,7 @@ current difficulty tier; these are whole-pack totals.
 | New York | 33 | 28 four-choice emails and five short scenarios; source check September 27, 2026 |
 | US MPRE-style | 69 | Original model-rule/exam-style practice, not state-specific advice |
 | England & Wales SQE-style | 28 | Original England and Wales ethics practice |
+| Canada | 25 | Ontario, BC and Saskatchewan practice; **practitioner review pending** |
 | LawScape original dilemmas | 21 | Retained fictional dilemmas with mixed Arizona/Nevada source labels |
 
 All packs are unofficial educational practice, not official examination content.
@@ -26,17 +28,17 @@ original-dilemma answers were preserved, not revalidated in this release.
 
 The fictional **State of Juris** apprenticeship offers six writing assignments,
 two synthetic files and one capstone. It uses supplied office policies and
-authored checklist feedback. These activities are not included in the 171-question
+authored checklist feedback. These activities are not included in the 196-question
 total and do not imply a reviewed real-jurisdiction firm curriculum.
 
-Full jurisdiction-specific firm curricula remain future work. **Canada · TEST
-PACK** is selectable in this local test build: 25 additional questions and five
-email assignments covering Ontario, BC and Saskatchewan. It requires Canadian
-practitioner review and is excluded from mixed practice. No Canadian answer
-changes Ethics, gold, streaks or the released-question tiers. See the
-[Canada review package](../canada-test/review.html). This local test has not been
-published to the live site. Use the request form below the catalog for other
-jurisdiction proposals.
+Full jurisdiction-specific firm curricula remain future work. The **Canada**
+pack's 25 questions covering Ontario, BC and Saskatchewan play like every other
+pack (gold by difficulty, Ethics damage, streaks, difficulty tiers, Mixed
+practice). Its answer key has not yet received Canadian practitioner review;
+the inbox, the question badge and the catalog say so. The pack's five email
+assignments are an ungraded writing exercise. See the
+[Canada review package](../canada-test/review.html). Use the request form below
+the catalog for other jurisdiction proposals.
 
 ## Sources and reference material
 

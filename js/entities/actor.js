@@ -2,7 +2,7 @@
 // follows an A* path of tile steps. Drawing is a layered paper-doll figure.
 
 import { PAL, shade } from '../engine/palette.js';
-import { drawRobotButler } from './robots.js';
+import { drawRobotButler, drawPet } from './robots.js';
 
 export class Actor {
   constructor(x, y, look = {}, opts = {}) {
@@ -60,6 +60,7 @@ export class Actor {
   draw(ctx, sx, sy, t, isPlayer = false) {
     const look = this.look;
     if (look.robotButler) { drawRobotButler(ctx,sx,sy,t); return; }
+    if (look.pet) { drawPet(ctx,sx,sy,t,look.pet,this.facing,this.walking); return; }
     const seated = ['reviewing', 'watching', 'sitting'].includes(this.activity);
     const walking = this.walking && !seated;
     const stride = walking ? Math.sin(t * 9) : 0;
@@ -67,9 +68,15 @@ export class Actor {
     const skin = PAL.skin[look.skin ?? 0] || PAL.skin[0];
     const hair = PAL.hair[look.hair ?? 0] || PAL.hair[0];
     const eye = PAL.eyes[look.eye ?? 0] || PAL.eyes[0];
-    const suit = look.suit || PAL.navy;
-    const shirt = look.shirt || '#f3eee1';
+    // Formal wear from the wardrobe replaces the suit while equipped.
+    const tux = look.formal === 'tuxedo', gown = look.formal === 'gown';
+    const suit = tux ? '#141418' : (look.suit || PAL.navy);
+    // shade() takes hex only, so every gown tone derives from the hex suit color.
+    const gownBase = look.suit || PAL.navy;
+    const gownColor = shade(gownBase, -0.08), gownLight = shade(gownBase, -0.01), gownDark = shade(gownBase, -0.28), gownSeam = shade(gownBase, 0.06);
+    const shirt = tux ? '#f7f4ec' : (look.shirt || '#f3eee1');
     const tie = look.tie || PAL.burgundy;
+    const wig = !!look.wig;
     const style = look.hairStyle ?? 0;
     const beard = look.facialHair ?? 0;
     const face = look.faceShape ?? 0;
@@ -108,8 +115,15 @@ export class Actor {
     }
     ctx.translate(0, lift);
 
+    // A powdered wig replaces the hair entirely: tail and side rolls behind,
+    // cap and frontal roll in front of the head.
+    if (wig) {
+      round(-6.4,-77,13,22,[6,6,3,3],'#dcd8cc');
+      for (const side of [-1,1]) { ellipse(side*6.6,-70,2.6,2,'#e6e2d8'); ellipse(side*6.8,-66,2.3,1.8,'#e6e2d8'); }
+      poly([[-5,-65.5],[-1.5,-64],[-5,-62.5]],'#15151a'); poly([[5,-65.5],[1.5,-64],[5,-62.5]],'#15151a');
+    }
     // Rear hair is attached to the skull and sits behind the shoulders.
-    if ([1, 8, 10, 11, 15].includes(style)) {
+    if (!wig && [1, 8, 10, 11, 15].includes(style)) {
       const length = style === 8 ? 14 : 24;
       round(-6.4, -77, 13, length, [6,6,3,3], shade(hair, -0.06));
       if ([1, 15].includes(style)) {
@@ -128,7 +142,7 @@ export class Actor {
         }
       }
     }
-    if ([2,9].includes(style)) {
+    if (!wig && [2,9].includes(style)) {
       const rootY = style === 9 ? -77 : -69;
       const sway = walking ? stride * 1.4 : 0;
       // Curved taper grows from the back of the head; never a floating rectangle.
@@ -141,46 +155,96 @@ export class Actor {
       ellipse(-5.3,rootY,2,1.2,'#b59458');
       line([[-7,rootY+2],[-8+sway,rootY+10],[-7+sway,rootY+17]], shade(hair,.12),.65);
     }
-    if (style === 3) ellipse(-4.3,-77,3.6,3.5,hair);
-    if (style === 15) ellipse(-4,-73,2.4,2.5,hair);
+    if (!wig && style === 3) ellipse(-4.3,-77,3.6,3.5,hair);
+    if (!wig && style === 15) ellipse(-4,-73,2.4,2.5,hair);
 
     // Legs articulate from the hip, with separate knee and shoe placement.
-    for (const side of [-1,1]) {
+    // A skirt shows hosiery-toned legs; a gown covers them to the floor.
+    if (gown) {
+      if (seated) {
+        for (const side of [-1,1]) round(side*8.2-2.8,-21,7.8,4,1.5,'#272b30');
+        poly([[-waist,-37],[waist,-37],[waist+9,-28],[waist+9,-18.5],[-waist-9,-18.5],[-waist-9,-28]],gownColor);
+        poly([[0,-37],[waist,-37],[waist+9,-28],[waist+9,-18.5],[0,-18.5]],gownLight);
+        line([[-waist-9,-18.5],[waist+9,-18.5]],gownDark,.8);
+      } else {
+        for (const side of [-1,1]) round(side*4.4-2.8,-3,7.8,4,1.5,'#272b30');
+        const sway = stride * 1.5;
+        poly([[-waist,-37],[waist,-37],[waist+6+sway,-1.5],[-waist-6+sway,-1.5]],gownColor);
+        poly([[0,-37],[waist,-37],[waist+6+sway,-1.5],[0+sway*.5,-1.5]],gownLight);
+        line([[-waist-6+sway,-1.5],[waist+6+sway,-1.5]],gownDark,.8);
+        line([[1,-34],[1.5+sway*.5,-4]],gownSeam,.5);
+      }
+    }
+    for (const side of gown ? [] : [-1,1]) {
       const step = side * stride;
       const footY = seated ? -lift : -Math.max(0, step) * 3.2;
       const hipX = side * 3.8;
       const kneeX = side * (seated ? 7.5 : 4.1) + step * 1.5;
       const kneeY = seated ? -30 : -17;
       const footX = side * (seated ? 8.2 : 4.4) + step * 2;
-      poly([[hipX-3.1,-36],[hipX+3.1,-36],[kneeX+2.6,kneeY],[footX+2,footY-2],[footX-2.5,footY-2],[kneeX-2.8,kneeY]], skirt ? shade(skin,-.025) : shade(suit,side < 0 ? -.17 : -.085));
-      if (!skirt) line([[hipX,-32],[kneeX,kneeY],[footX,footY-5]],shade(suit,side < 0 ? -.10 : .015),.6);
+      poly([[hipX-3.1,-36],[hipX+3.1,-36],[kneeX+2.6,kneeY],[footX+2,footY-2],[footX-2.5,footY-2],[kneeX-2.8,kneeY]], skirt ? shade(skin,-.07) : shade(suit,side < 0 ? -.17 : -.085));
+      if (!skirt) line([[hipX,-32],[kneeX,kneeY],[footX,footY-5]],tux ? '#2a2a33' : shade(suit,side < 0 ? -.10 : .015),tux ? .9 : .6);
       round(footX-2.8,footY-3,7.8,4,1.5,'#272b30');
       line([[footX-1.6,footY-2],[footX+3,footY-2]],'#515451',.6);
     }
-    if (skirt) {
-      const hem = seated ? -25 : -19;
-      poly([[-waist,-37],[waist,-37],[waist+2,hem],[-waist-2,hem]],shade(suit,-.08));
-      poly([[1,-35],[waist,-36],[waist+2,hem],[3,hem]],shade(suit,.025));
-      line([[-waist-1.5,hem],[waist+1.5,hem]],shade(suit,-.18),.8);
-      line([[1,hem-6],[1,hem]],shade(suit,-.22),.65);
+    if (skirt && !gown) {
+      // Pencil skirt: waistband, a slight flare at the hip, knee-length hem.
+      round(-waist-.4,-38.5,waist*2+.8,2.2,.5,shade(suit,-.22));
+      if (seated) {
+        poly([[-waist-.2,-36.5],[waist+.2,-36.5],[waist+5,-30],[waist+4.6,-26],[-waist-4.6,-26],[-waist-5,-30]],shade(suit,-.1));
+        poly([[0,-36.5],[waist+.2,-36.5],[waist+5,-30],[waist+4.6,-26],[0,-26]],shade(suit,-.02));
+        line([[-waist-4.8,-26],[waist+4.8,-26]],shade(suit,-.25),.8);
+      } else {
+        const hem = -16, lead = stride * .5;
+        poly([[-waist-.2,-36.5],[waist+.2,-36.5],[waist+1.1,-28],[waist+.6+lead,hem],[-waist-.6+lead,hem],[-waist-1.1,-28]],shade(suit,-.1));
+        poly([[0,-36.5],[waist+.2,-36.5],[waist+1.1,-28],[waist+.6+lead,hem],[lead*.5,hem]],shade(suit,-.02));
+        line([[0,-34],[lead*.5,hem]],shade(suit,-.16),.5);
+        line([[-waist-.8+lead,hem],[waist+.8+lead,hem]],shade(suit,-.25),.8);
+      }
     }
 
-    // Jacket shoulders taper into the waist. The shirt is a real inset layer.
-    poly([[-4.5,-62],[-shoulder,-58],[-shoulder+.8,-49],[-waist,-36],[-waist-1,-32],[0,-33],[waist+1,-32],[waist,-36],[shoulder-.8,-49],[shoulder,-58],[4.5,-62]],suit);
-    poly([[-shoulder,-58],[-4,-58],[-1,-42],[-2,-33],[-waist-1,-32],[-waist,-44]],shade(suit,-.13));
-    poly([[4,-59],[shoulder,-57],[waist,-42],[waist+1,-32],[1,-34],[1,-47]],shade(suit,.07));
-    poly([[-3.7,-61],[3.7,-61],[2.4,-42],[-2.4,-42]],shirt);
-    poly([[-2.8,-60],[0,-57],[-2.1,-54],[-4.5,-60]],shade(shirt,-.1));
-    poly([[2.8,-60],[0,-57],[2.1,-54],[4.5,-60]],shade(shirt,.025));
-    poly([[-1.1,-56],[1.2,-56],[1.7,-44],[0,-42],[-1.7,-44]],tie);
-    poly([[-1.4,-58],[1.4,-58],[1,-55],[-1,-55]],shade(tie,-.08));
-    poly([[-4,-62],[-7,-57],[-4.5,-53],[-5.5,-51],[-1.5,-43],[-2,-53]],shade(suit,.15));
-    poly([[4,-62],[7,-57],[4.5,-53],[5.5,-51],[1.5,-43],[2,-53]],shade(suit,.19));
-    line([[.7,-42],[.7,-35]],shade(suit,-.15),.75);
-    ellipse(.7,-39,.65,.65,'#b8ada0');
-    line([[4.6,-48],[7.3,-48]],shade(suit,-.2),.65);
-    poly([[5,-49],[6,-50.3],[7,-49]],shirt);
-    line([[-6,-38],[-3,-38]],shade(suit,-.22),.65);
+    if (gown) {
+      // Décolletage, then a fitted bodice with thin straps. No jacket or tie.
+      poly([[-shoulder+1,-61],[shoulder-1,-61],[shoulder-2,-56],[-shoulder+2,-56]],skin);
+      poly([[-shoulder+1.4,-57],[shoulder-1.4,-57],[waist+1,-36],[-waist-1,-36]],gownColor);
+      poly([[0,-57],[shoulder-1.4,-57],[waist+1,-36],[0,-36]],gownLight);
+      line([[-shoulder+2,-57],[-shoulder+3,-61]],gownColor,.8); line([[shoulder-2,-57],[shoulder-3,-61]],gownColor,.8);
+      line([[-waist-1,-36.5],[waist+1,-36.5]],gownDark,.6);
+    } else {
+      // Jacket shoulders taper into the waist. The shirt is a real inset layer.
+      poly([[-4.5,-62],[-shoulder,-58],[-shoulder+.8,-49],[-waist,-36],[-waist-1,-32],[0,-33],[waist+1,-32],[waist,-36],[shoulder-.8,-49],[shoulder,-58],[4.5,-62]],suit);
+      poly([[-shoulder,-58],[-4,-58],[-1,-42],[-2,-33],[-waist-1,-32],[-waist,-44]],shade(suit,-.13));
+      poly([[4,-59],[shoulder,-57],[waist,-42],[waist+1,-32],[1,-34],[1,-47]],shade(suit,.07));
+      poly([[-3.7,-61],[3.7,-61],[2.4,-42],[-2.4,-42]],shirt);
+      poly([[-2.8,-60],[0,-57],[-2.1,-54],[-4.5,-60]],shade(shirt,-.1));
+      poly([[2.8,-60],[0,-57],[2.1,-54],[4.5,-60]],shade(shirt,.025));
+      if (tux) {
+        // Bow tie, shirt studs and satin lapels.
+        poly([[-3.2,-57.6],[-.4,-56.3],[-3.2,-55]],'#111115'); poly([[3.2,-57.6],[.4,-56.3],[3.2,-55]],'#111115');
+        round(-.8,-57.1,1.6,1.6,.4,'#1c1c22');
+        for (const y of [-52,-49,-46]) ellipse(0,y,.55,.55,'#e9e4d6');
+        poly([[-4,-62],[-7,-57],[-4.5,-53],[-5.5,-51],[-1.5,-43],[-2,-53]],'#2a2a33');
+        poly([[4,-62],[7,-57],[4.5,-53],[5.5,-51],[1.5,-43],[2,-53]],'#30303a');
+        line([[-6.2,-56],[-2.6,-46]],'#ffffff22',.6); line([[6.2,-56],[2.6,-46]],'#ffffff22',.6);
+      } else {
+        poly([[-1.1,-56],[1.2,-56],[1.7,-44],[0,-42],[-1.7,-44]],tie);
+        poly([[-1.4,-58],[1.4,-58],[1,-55],[-1,-55]],shade(tie,-.08));
+        poly([[-4,-62],[-7,-57],[-4.5,-53],[-5.5,-51],[-1.5,-43],[-2,-53]],shade(suit,.15));
+        poly([[4,-62],[7,-57],[4.5,-53],[5.5,-51],[1.5,-43],[2,-53]],shade(suit,.19));
+      }
+      line([[.7,-42],[.7,-35]],shade(suit,-.15),.75);
+      ellipse(.7,-39,.65,.65,'#b8ada0');
+      line([[4.6,-48],[7.3,-48]],shade(suit,-.2),.65);
+      poly([[5,-49],[6,-50.3],[7,-49]],look.pocketSquare || shirt);
+      if (look.pocketSquare) poly([[4.6,-49],[5.6,-50.8],[6.6,-49.6],[7.5,-49]],look.pocketSquare);
+      line([[-6,-38],[-3,-38]],shade(suit,-.22),.65);
+    }
+    if (look.necklace) {
+      for (let i = 0; i < 7; i++) {
+        const x = -3.6 + i * 1.2, y = -59.6 + Math.sin(i / 6 * Math.PI) * 2.2;
+        ellipse(x+.2,y+.3,.8,.8,'#00000033'); ellipse(x,y,.8,.8,look.necklace);
+      }
+    }
 
     // Arms, cuffs and hands are separate tapered shapes, with a restrained swing.
     for (const side of [-1,1]) {
@@ -188,8 +252,9 @@ export class Actor {
       const elbowX = side * (shoulder + 1.7);
       const handX = seated ? side * 6 : side * (shoulder + 1.1) + swing * .45;
       const handY = seated ? -36 : -35 + swing;
-      poly([[side*(shoulder-1),-58],[side*(shoulder+2),-56],[elbowX+side*1.5,-45],[handX+side*1.6,handY],[handX-side*1.8,handY+1],[elbowX-side*2,-45]],shade(suit,side < 0 ? -.075 : .025));
-      line([[handX-1.4,handY],[handX+1.5,handY]],shirt,1.5);
+      poly([[side*(shoulder-1),-58],[side*(shoulder+2),-56],[elbowX+side*1.5,-45],[handX+side*1.6,handY],[handX-side*1.8,handY+1],[elbowX-side*2,-45]],gown ? shade(skin,side < 0 ? -.05 : .02) : shade(suit,side < 0 ? -.075 : .025));
+      if (!gown) line([[handX-1.4,handY],[handX+1.5,handY]],shirt,1.5);
+      if (look.watch && side < 0) { round(handX-2.2,handY-.2,4.4,1.6,.5,look.watch); ellipse(handX,handY+.6,1,1,'#efe6c8'); }
       ellipse(handX,handY+2.2,1.8,3,skin);
       line([[handX+.8,handY+1],[handX+.8,handY+3]],shade(skin,-.13),.5);
     }
@@ -238,7 +303,12 @@ export class Actor {
     if ([3,6].includes(beard)) poly([[headX-1.5,-66],[headX+1.5,-66],[headX+1.8,-63],[headX,-62.2],[headX-1.8,-63]],hair);
 
     // Front hair: distinct original silhouettes; scalp/face remain visible.
-    if (style !== 5) {
+    if (wig) {
+      round(headX-5.4,-80.5,10.8,7,[4,4,2,2],'#e8e4da');
+      ellipse(headX,-78.5,5.2,2.2,'#f0ece2');
+      for (const side of [-1,1]) { ellipse(headX+side*5.6,-72.5,2.4,1.9,'#ebe7dd'); ellipse(headX+side*5.8,-69,2.2,1.7,'#e6e2d8'); }
+      line([[headX-4,-77.5],[headX+4,-77.5]],'#d2cdc0',.5);
+    } else if (style !== 5) {
       const short = style === 6;
       ctx.fillStyle = hair; ctx.beginPath();
       ctx.moveTo(headX-5,-70.5);
@@ -263,7 +333,17 @@ export class Actor {
       if ([10,11].includes(style)) for (const x of [-3,-1,1,3]) line([[headX+x,-77],[headX+x*.8,-75]],shade(hair,.13),.65);
       if (style===7) for (const x of [-2,0,2]) line([[headX+x,-75.4],[headX+x-1,-77.7]],shade(hair,.13),.6);
     }
-    if (look.glasses) {
+    if (look.earrings) {
+      for (const side of [-1,1]) {
+        line([[headX+side*5.1,-69.4],[headX+side*5.3,-67.4]],look.earrings,.6);
+        ellipse(headX+side*5.3,-66.6,.8,.8,look.earrings);
+      }
+    }
+    if (look.sunglasses) {
+      for (const x of [-2.1,2.1]) { round(headX+x-1.9,-73.3,3.8,2.7,.9,'#1a1c20'); line([[headX+x-1.2,-72.7],[headX+x-.2,-72.7]],'#ffffff55',.5); }
+      line([[headX-.4,-72.4],[headX+.4,-72.4]],'#1a1c20',.6);
+      line([[headX-3.9,-72.2],[headX-5,-72.6]],'#1a1c20',.6);
+    } else if (look.glasses) {
       ctx.strokeStyle = '#3b3f3d'; ctx.lineWidth = .55;
       for (const x of [-2.1,2.1]) { ctx.beginPath(); ctx.roundRect(headX+x-1.75,-73,3.5,2.2,.7); ctx.stroke(); }
       line([[headX-.4,-72.4],[headX+.4,-72.4]],'#3b3f3d',.5);

@@ -142,11 +142,20 @@ function papers(ctx,ox,oy,u,v,lift) {
     stroke(ctx,[[11,6],[11,17]],'#253e55',1.2);
   });
 }
-function monitor(ctx,ox,oy,u,v,lift) {
+// `back` turns the screen toward the person seated north of the desk: the
+// camera sees the panel's rear instead of the display.
+function monitor(ctx,ox,oy,u,v,lift,back=false) {
   const c=p(ox,oy,u,v);
   surface(ctx,ox,oy,u+.1,v+.08,lift,()=>roundRect(ctx,0,0,14,8,1,'#646f73'));
   face(ctx,ox,oy,u,v,lift,()=>{
     roundRect(ctx,11,-12,3,14,1,'#7b898c');
+    if(back){
+      roundRect(ctx,-4,-37,37,26,2,'#2e3a40');
+      roundRect(ctx,6,-31,18,13,1,'#3b474e');
+      for(let y=-29;y<-20;y+=2.4)stroke(ctx,[[8,y],[22,y]],'#242d33',.7);
+      ctx.fillStyle='#8fa3a8';ctx.beginPath();ctx.arc(14.5,-15.5,1.2,0,Math.PI*2);ctx.fill();
+      return;
+    }
     roundRect(ctx,-4,-37,37,26,2,'#17252d');
     roundRect(ctx,-2,-35,33,21,1,'#d3e2df');
     ctx.fillStyle='#305c63';ctx.fillRect(-2,-35,33,4);
@@ -166,7 +175,7 @@ function workstation(ctx,ox,oy,prop={},executive=false) {
     for(let y=-24;y<-4;y+=8){ctx.strokeStyle='#453c31';ctx.lineWidth=.6;ctx.strokeRect(1,y,14,7);ctx.fillStyle='#bba474';ctx.fillRect(5,y+3,6,1.2);}
   });
   const monitors=typeof prop.monitors==='function'?prop.monitors():1;
-  for(let i=0;i<monitors;i++)monitor(ctx,ox,oy,.25+i*.88,-.16,lift+4);
+  for(let i=0;i<monitors;i++)monitor(ctx,ox,oy,.25+i*.88,-.16,lift+4,prop.screen==='n');
   surface(ctx,ox,oy,.28,.32,lift+5,()=>{
     roundRect(ctx,-2,0,26,9,1,'#35494b');
     for(let y=1;y<7;y+=2)for(let x=0;x<22;x+=3){ctx.fillStyle='#b7c1b8';ctx.fillRect(x,y,2,1.2);}
@@ -327,14 +336,17 @@ export const PROPS = {
       ctx.fillRect(a.x + 12, a.y - 45, 3, 3); ctx.fillRect(a.x + 30, a.y - 39, 3, 3);
     },
   },
+  // `facing:'n'` puts the backrest on the camera side so the seat opens toward
+  // the back wall (benches facing the judge, chairs facing a desk).
   bench: {
     w:2,h:1,solid:true,
-    draw(ctx,ox,oy) {
+    draw(ctx,ox,oy,prop) {
+      const n=prop?.facing==='n';
       for(const u of [-.3,1.2])box(ctx,ox,oy,u,-.12,.12,.5,17,'#594531');
       box(ctx,ox,oy,-.4,-.24,1.85,.62,5,'#94704a',17);
-      for(const z of [24,34])box(ctx,ox,oy,-.4,-.29,1.85,.12,8,'#a07b52',z);
-      for(const u of [-.39,1.34])box(ctx,ox,oy,u,-.3,.1,.15,43,'#6b4c34');
-      face(ctx,ox,oy,-.38,-.17,0,()=>{for(const y of [-27,-37])stroke(ctx,[[2,y],[55,y]],'#dfc18a44',.7);});
+      for(const z of [24,34])box(ctx,ox,oy,-.4,n?.26:-.29,1.85,.12,8,'#a07b52',z);
+      for(const u of [-.39,1.34])box(ctx,ox,oy,u,n?.24:-.3,.1,.15,43,'#6b4c34');
+      face(ctx,ox,oy,-.38,n?.38:-.17,0,()=>{for(const y of [-27,-37])stroke(ctx,[[2,y],[55,y]],'#dfc18a44',.7);});
     },
   },
   lamppost: {
@@ -368,16 +380,21 @@ export const PROPS = {
   // Building facades framing the square. Doorway gap is drawn dark; the
   // actual portal is the glowing tile in front (renderer draws that).
   facade: {
-    w: 4, h: 1, solid: true,
+    w: 4, h: 1, solid: true, noShadow: true,
     draw(ctx, ox, oy, prop) {
       const styles = {
         office: { wall: PAL.wood, trim: PAL.navy, sign: 'LAW OFFICE' },
         court: { wall: PAL.marble, trim: PAL.navy, sign: 'COURTHOUSE' },
         library: { wall: PAL.archiveGreen, trim: PAL.brass, sign: 'LAW LIBRARY' },
         apartment: { wall: PAL.burgundy, trim: PAL.parchment, sign: 'APARTMENTS' },
+        sidebar: { wall: '#3a2f2a', trim: PAL.brass, sign: 'THE SIDEBAR' },
       };
       const s = styles[prop.style] || styles.office;
       box(ctx, ox, oy, -0.5, -0.5, 4, 1, 74, s.wall);
+      // Upper-floor windows, lit, on the street-facing wall.
+      face(ctx, ox, oy, -0.5, 0.5, 0, () => {
+        for (let i = 0; i < 4; i++) { if (prop.style === 'court' && (i === 0 || i === 3)) continue; ctx.fillStyle = '#e9d58a'; ctx.fillRect(8 + i * 30, -66, 12, 10); ctx.fillStyle = '#00000033'; ctx.fillRect(8 + i * 30, -61, 12, 1); ctx.fillRect(13.5 + i * 30, -66, 1, 10); }
+      });
       // doorway (dark opening) on the south-west face, centered
       const d1 = p(ox, oy, 1.4, 0.5), d2 = p(ox, oy, 2.6, 0.5);
       ctx.fillStyle = shade(PAL.ink, -0.05);
@@ -559,22 +576,28 @@ export const PROPS = {
     w: 2, h: 1, solid: true,
     draw(ctx,ox,oy,prop) {
       const full=typeof prop.full==='function'?prop.full():true;
+      // The face is 1.8 tiles (57.6 px) wide: a centred upright splits it into
+      // two bays and books are laid out per bay so they never cross an upright.
+      const W=57.6, label=prop.label||'ETHICS TREATISES';
       box(ctx,ox,oy,-.4,-.22,1.8,.44,72,'#71503a',4);
       face(ctx,ox,oy,-.4,.22,4,()=>{
-        ctx.fillStyle='#312c25';ctx.fillRect(3,-68,51,65);
-        for(const x of [1,27,54]){ctx.fillStyle='#a78154';ctx.fillRect(x,-68,2,65);}
+        ctx.fillStyle='#312c25';ctx.fillRect(1.5,-68,W-3,65);
+        for(const x of [0,W/2-1,W-2]){ctx.fillStyle='#a78154';ctx.fillRect(x,-68,2,65);}
+        const bays=[[2.5,W/2-1],[W/2+1,W-2.5]];
         for(let row=0;row<3;row++) {
-          const base=-5-row*21;
-          for(let i=0;i<(full?11:row===0?4:0);i++) {
-            const x=4+i*4.4, height=13+(i*7+row)%5;
-            ctx.fillStyle=['#703e3d','#283e51','#485943','#9a7846'][(i+row)%4];ctx.fillRect(x,base-height,3.5,height);
-            ctx.fillStyle='#ddc385';ctx.fillRect(x+.3,base-height+2,2.9,.7);ctx.fillRect(x+.3,base-2,2.9,.7);
-            ctx.fillStyle='#ddcda1';ctx.fillRect(x+.8,base-height+5,1.8,3);
-            ctx.fillStyle='#ffffff12';ctx.fillRect(x+.3,base-height,.5,height);
-          }
-          ctx.fillStyle='#a37d51';ctx.fillRect(2,base,52,2);ctx.fillStyle='#483524';ctx.fillRect(2,base+2,52,1);
+          const base=-5-row*21, perBay=full?5:row===0?2:0;
+          bays.forEach(([left],bay)=>{
+            for(let i=0;i<perBay;i++) {
+              const n=bay*5+i, x=left+i*4.6, height=13+(n*7+row)%5;
+              ctx.fillStyle=['#703e3d','#283e51','#485943','#9a7846'][(n+row)%4];ctx.fillRect(x,base-height,3.5,height);
+              ctx.fillStyle='#ddc385';ctx.fillRect(x+.3,base-height+2,2.9,.7);ctx.fillRect(x+.3,base-2,2.9,.7);
+              ctx.fillStyle='#ddcda1';ctx.fillRect(x+.8,base-height+5,1.8,3);
+              ctx.fillStyle='#ffffff12';ctx.fillRect(x+.3,base-height,.5,height);
+            }
+          });
+          ctx.fillStyle='#a37d51';ctx.fillRect(0,base,W,2);ctx.fillStyle='#483524';ctx.fillRect(0,base+2,W,1);
         }
-        ctx.fillStyle='#ccb474';ctx.fillRect(13,-74,31,5);ctx.fillStyle='#302f27';ctx.font='3.4px Verdana';ctx.fillText('ETHICS TREATISES',14,-70.5);
+        ctx.fillStyle='#ccb474';ctx.fillRect(W/2-17,-74,34,5);ctx.fillStyle='#302f27';ctx.font='3.4px Verdana';ctx.textAlign='center';ctx.fillText(label,W/2,-70.5);ctx.textAlign='start';
       });
       box(ctx,ox,oy,-.46,-.27,1.92,.54,4,'#93734b',76);
       box(ctx,ox,oy,-.44,-.26,1.88,.52,5,'#71503a');
@@ -582,24 +605,34 @@ export const PROPS = {
   },
   clientchair: {
     w:1,h:1,solid:true,
-    draw(ctx,ox,oy) {
+    draw(ctx,ox,oy,prop) {
+      const n=prop?.facing==='n';
       for(const u of [-.25,.22])for(const v of [-.22,.24])box(ctx,ox,oy,u,v,.09,.09,16,'#503e31');
       box(ctx,ox,oy,-.3,-.28,.65,.65,7,'#6f4146',16);
-      box(ctx,ox,oy,-.3,-.33,.65,.12,28,'#63383f',21);
-      face(ctx,ox,oy,-.25,-.2,21,()=>{roundRect(ctx,0,-25,17,21,3,'#81565a');ctx.strokeStyle='#ae818166';ctx.lineWidth=.5;ctx.strokeRect(2,-23,13,17);});
+      box(ctx,ox,oy,-.3,n?.21:-.33,.65,.12,28,'#63383f',21);
+      if(n) face(ctx,ox,oy,-.25,.33,21,()=>{roundRect(ctx,0,-25,17,21,3,shade('#63383f',-.08));stroke(ctx,[[2,-14],[15,-14]],'#ae818133',.5);});
+      else face(ctx,ox,oy,-.25,-.2,21,()=>{roundRect(ctx,0,-25,17,21,3,'#81565a');ctx.strokeStyle='#ae818166';ctx.lineWidth=.5;ctx.strokeRect(2,-23,13,17);});
       for(const u of [-.34,.3])box(ctx,ox,oy,u,-.05,.09,.42,3,'#8b6647',28);
     },
   },
+  // `broken:()=>bool` draws Liz's pre-upgrade chair: a missing caster, a sagging
+  // seat and a backrest that leans and is held together with tape.
   officechair: {
     w:1,h:1,solid:true,
-    draw(ctx,ox,oy) {
+    draw(ctx,ox,oy,prop) {
+      const n=prop?.facing==='n', broken=typeof prop?.broken==='function'?prop.broken():false;
+      const sag=broken?5:0, cushion=broken?'#3e4e4f':'#43595b';
       const c=p(ox,oy,0,0);ctx.strokeStyle='#88958f';ctx.lineWidth=2;
-      for(let i=0;i<5;i++){const a=i*Math.PI*2/5;const x=c.x+Math.cos(a)*15,y=c.y+Math.sin(a)*6;stroke(ctx,[[c.x,c.y-6],[x,y]],'#87928b',2);roundRect(ctx,x-2,y-1,4,3,1,'#202b30');}
-      box(ctx,ox,oy,-.05,-.05,.1,.1,20,'#87948f');
-      box(ctx,ox,oy,-.3,-.25,.65,.62,7,'#344a4c',19);
-      box(ctx,ox,oy,-.3,-.34,.65,.14,30,'#283c41',26);
-      face(ctx,ox,oy,-.26,-.2,26,()=>{roundRect(ctx,0,-27,17,25,4,'#43595b');for(let y=-24;y<-4;y+=3)stroke(ctx,[[2,y],[15,y]],'#728b8244',.6);});
-      for(const u of [-.34,.3]){box(ctx,ox,oy,u,.03,.07,.12,14,'#7a8983',16);box(ctx,ox,oy,u-.02,-.07,.13,.45,3,'#263a3e',30);}
+      for(let i=0;i<(broken?4:5);i++){const a=i*Math.PI*2/5;const x=c.x+Math.cos(a)*15,y=c.y+Math.sin(a)*6;stroke(ctx,[[c.x,c.y-6],[x,y]],'#87928b',2);roundRect(ctx,x-2,y-1,4,3,1,'#202b30');}
+      if(broken){const l=p(ox,oy,.38,.35);roundRect(ctx,l.x-2,l.y-1,4,3,1,'#202b30');stroke(ctx,[[l.x-3,l.y+2],[l.x+4,l.y+1]],'#87928b',1.2);}
+      box(ctx,ox,oy,-.05,-.05,.1,.1,20-sag,'#87948f');
+      box(ctx,ox,oy,-.3,-.25,.65,.62,7,'#344a4c',19-sag);
+      if(broken){ctx.save();ctx.translate(c.x,c.y);ctx.transform(1,0,-.2,1,0,0);ctx.translate(-c.x,-c.y);}
+      box(ctx,ox,oy,-.3,n?.2:-.34,.65,.14,30,'#283c41',26-sag);
+      if(n) face(ctx,ox,oy,-.26,.34,26-sag,()=>{roundRect(ctx,0,-27,17,25,4,shade(cushion,-.12));stroke(ctx,[[2,-15],[15,-15]],'#728b8233',.6);if(broken)roundRect(ctx,3,-18,11,2,.5,'#b8a37a');});
+      else face(ctx,ox,oy,-.26,-.2,26-sag,()=>{roundRect(ctx,0,-27,17,25,4,cushion);for(let y=-24;y<-4;y+=3)stroke(ctx,[[2,y],[15,y]],'#728b8244',.6);if(broken)roundRect(ctx,3,-18,11,2,.5,'#b8a37a');});
+      if(broken)ctx.restore();
+      for(const u of [-.34,.3]){box(ctx,ox,oy,u,.03,.07,.12,14,'#7a8983',16-sag);box(ctx,ox,oy,u-.02,-.07,.13,.45,3,'#263a3e',30-sag);}
     },
   },
   cabinet: {

@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { freshState, state, reset, load, save, damageEthics } from '../js/state.js';
 import { WRITING_TASKS, CAPSTONE, DOCUMENT_PACKS, evidenceAt } from '../js/data/apprenticeship.js';
-import { PARTNER_DELAY_MS, saveDraft, commitWriting, settleReplies, submitReview, buyCosmetic, capstoneReady, requestJurisdiction, requestIssueUrl } from '../js/apprenticeship.js';
+import { PARTNER_DELAY_MS, saveDraft, commitWriting, settleReplies, submitReview, buyCosmetic, equipCosmetic, cosmeticLock, grantUnlocks, capstoneReady, requestJurisdiction, requestIssueUrl } from '../js/apprenticeship.js';
+import { COSMETICS } from '../js/data/apprenticeship.js';
 
 function draft(player, task, overrides = {}) {
   saveDraft(player, task.id, { text: `A record-based reply for ${task.title}. Please verify the unresolved facts before taking the next step.`, issue: task.issue, action: task.action, evidence: task.evidence, ...overrides });
@@ -112,6 +113,31 @@ test('the complete first-day arc unlocks and pays the capstone, with separate co
   assert.throws(() => buyCosmetic(player, 'tie-brass'), /already/);
 });
 
+test('formal wear needs the Wardrobe Rack and is worn one outfit at a time; the wig is earned, not bought', () => {
+  const player = freshState(); player.gold = 1000;
+  assert.throws(() => buyCosmetic(player, 'outfit-tuxedo'), /Wardrobe Rack/);
+  player.upgrades.push('wardrobe_rack');
+  buyCosmetic(player, 'outfit-tuxedo');
+  assert.deepEqual(player.apprenticeship.equipped, ['outfit-tuxedo']); assert.equal(player.gold, 700);
+  buyCosmetic(player, 'outfit-gown');
+  assert.deepEqual(player.apprenticeship.equipped, ['outfit-gown'], 'the gown replaces the tuxedo');
+  assert.deepEqual(player.apprenticeship.cosmetics, ['outfit-tuxedo', 'outfit-gown']);
+  equipCosmetic(player, 'outfit-tuxedo', true);
+  assert.deepEqual(player.apprenticeship.equipped, ['outfit-tuxedo']);
+  equipCosmetic(player, 'outfit-tuxedo', false);
+  assert.deepEqual(player.apprenticeship.equipped, []);
+  assert.throws(() => equipCosmetic(player, 'sunglasses', true), /do not own/);
+  buyCosmetic(player, 'sunglasses'); buyCosmetic(player, 'necklace-pearl');
+  assert.deepEqual(player.apprenticeship.equipped, ['sunglasses', 'necklace-pearl'], 'accessories stack');
+  assert.match(cosmeticLock(player, COSMETICS.find((item) => item.id === 'wig-powdered')), /SQE.*\(0\/5\)/);
+  assert.throws(() => buyCosmetic(player, 'wig-powdered'), /SQE/);
+  player.packCorrect = { sqe: 5 };
+  assert.deepEqual(grantUnlocks(player), ['wig-powdered']);
+  assert.deepEqual(grantUnlocks(player), [], 'granted once');
+  assert.ok(player.apprenticeship.cosmetics.includes('wig-powdered')); assert.ok(!player.apprenticeship.equipped.includes('wig-powdered'));
+  assert.equal(player.gold, 1000 - 300 - 300 - 60 - 80);
+});
+
 test('a pending attempt resumes after save/load without duplicate rewards', () => {
   storage(); reset();
   draft(state, WRITING_TASKS[0]); commitWriting(state, WRITING_TASKS[0].id, 0); save();
@@ -144,7 +170,7 @@ test('legacy saves migrate additively, retain identity/economy and reject future
   assert.equal(load(), true);
   assert.equal(state.name, 'Legacy Attorney'); assert.equal(state.gold, 120); assert.equal(state.ethics, 70);
   assert.deepEqual(state.upgrades, ['houseplants']);
-  assert.equal(state.schemaVersion, 6); assert.ok(state.runId); assert.deepEqual(state.apprenticeship.attempts, []);
+  assert.equal(state.schemaVersion, 7); assert.ok(state.runId); assert.deepEqual(state.apprenticeship.attempts, []);
   items.set('lawscape_save_v2', '{broken'); assert.equal(load(), false);
   items.set('lawscape_save_v2', '{"schemaVersion":99}'); assert.equal(load(), false);
   assert.equal(state.gold, 120);

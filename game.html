@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="A new way to learn legal ethics: a playable law firm with 171 questions across California, New York, US MPRE-style, England & Wales and original office dilemmas.">
+<meta name="description" content="A new way to learn legal ethics: a playable law firm with 196 questions across California, New York, Canada, US MPRE-style, England & Wales and original office dilemmas.">
 <meta name="theme-color" content="#17233b">
 <meta property="og:type" content="website">
 <meta property="og:title" content="LawScape — Legal Ethics RPG">
-<meta property="og:description" content="Build your practice. Explore legal ethics. 171 ethics questions, seven locations and a guided fictional firm apprenticeship.">
+<meta property="og:description" content="Build your practice. Explore legal ethics. 196 ethics questions, nine locations and a guided fictional firm apprenticeship.">
 <meta property="og:image" content="assets/og-lawscape.png">
 <meta name="twitter:card" content="summary_large_image">
 <title>LawScape — Legal Ethics RPG</title>
@@ -89,12 +89,13 @@
           <button id="email-inbox-open" type="button">📥 All mail</button><button id="email-writing" type="button">✎ Writing assignments</button>
           <label id="email-pack-label" for="email-pack">Practice pack
             <select id="email-pack">
+              <option value="juris">LawScape original dilemmas</option>
               <option value="mixed">Mixed practice</option>
               <option value="ca">California</option>
               <option value="ny">New York</option>
-              <option value="sqe">England &amp; Wales SQE Ethics</option>
               <option value="mpre">US MPRE</option>
-              <option value="juris">LawScape original dilemmas</option>
+              <option value="sqe">England &amp; Wales SQE Ethics</option>
+              <option value="canada">Canada</option>
             </select>
           </label>
           <button id="email-hr-open" type="button" title="Report a bug or complain about the working conditions of this virtual law firm">✍ Email HR · Report a bug</button>
@@ -153,7 +154,7 @@
         <div class="brand-seal" aria-hidden="true">§</div>
         <h1>LawScape</h1>
         <p class="tagline">Read the file. Make the call. Build your practice.</p>
-        <p class="title-mission">A new way to learn legal ethics.<br><span>171 questions, including California and New York. Choose your practice in Firm jurisdictions.</span></p>
+        <p class="title-mission">A new way to learn legal ethics.<br><span>196 questions, including California, New York and Canada. Start with the original dilemmas, then choose your practice in Firm jurisdictions.</span></p>
         <div class="title-features" aria-label="Game features">
           <span><b>6</b> writing assignments</span>
           <span><b>2</b> synthetic matters</span>
@@ -169,11 +170,11 @@
           <p><b>Keyboard:</b> WASD or arrow keys move. B opens BarMail, R opens your record, T opens travel, and Escape closes a window.</p>
         </details>
         <button id="btn-reset" class="hidden small danger-link">Reset saved game</button>
-        <p class="thesis">Your first firm day starts with a file, an impatient partner, and a draft that is suspiciously confident. Inspect the evidence, commit your reply, earn something worth wearing. Explore seven rooms, meet Derek Balam in court, and take a break at The Sidebar.</p>
+        <p class="thesis">Your first firm day starts with a file, an impatient partner, and a draft that is suspiciously confident. Inspect the evidence, commit your reply, earn something worth wearing. Walk Juris Avenue between nine locations, meet Derek Balam in court, and take a break at The Sidebar.</p>
         <p class="disclaimer">LawScape is a fictional educational game. It is not legal advice
         and does not create an attorney-client relationship. US and England-and-Wales rules
         are simplified for gameplay — always read the operative text.</p>
-        <p class="hr-note">Version <span id="game-version">0.7.0</span> · Beta — spotted a bug? <a href="https://github.com/joelakaufmann-lgtm/lawscape/issues" target="_blank" rel="noopener">Email HR · Report a bug</a>. Review your report on GitHub before submitting.</p>
+        <p class="hr-note">Version <span id="game-version">0.8.0</span> · Beta — spotted a bug? <a href="https://github.com/joelakaufmann-lgtm/lawscape/issues" target="_blank" rel="noopener">Email HR · Report a bug</a>. Review your report on GitHub before submitting.</p>
       </div>
     </div>
 
@@ -188,6 +189,7 @@
         <div class="creator-identity">
           <label for="c-name">Name<input id="c-name" type="text" maxlength="24" placeholder="Alex Barrister"></label>
           <div><span class="field-label">Gender</span><div id="c-gender" class="pill-row" role="group" aria-label="Gender"></div></div>
+          <div><span class="field-label">Not sure?</span><button id="btn-creator-random" type="button" class="small">Surprise me</button></div>
         </div>
         <div id="c-appearance"></div>
         <p class="creator-stakes">Your first office is the fictional State of Juris. Real-jurisdiction firm packs need source review; you can request one from your desk. Existing ethics dilemmas carry consequences: zero Ethics ends the run and resets gold, upgrades and apprenticeship progress.</p>

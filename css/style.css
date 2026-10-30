@@ -953,6 +953,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .arcade-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .arcade-help { font: 13px/1.5 Verdana, sans-serif; color: #e6d9b8; }
 .arcade-help kbd { display: inline-block; padding: 1px 6px; border: 1px solid var(--brass); border-radius: 4px; background: #3a1d27; font: bold 12px Verdana, sans-serif; }
+.arcade-coin { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 8px; font-size: 12px; }
+.arcade-coin button { font: 11px/1.4 Verdana, sans-serif; padding: 6px 10px; }
 .arcade-touch { display: flex; gap: 8px; }
 .arcade-touch button { min-width: 72px; background: #6e2436; user-select: none; -webkit-user-select: none; }
 .arcade-status { min-height: 1.4em; font: 13px/1.4 Verdana, sans-serif; color: var(--parchment); }

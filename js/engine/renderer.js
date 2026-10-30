@@ -14,6 +14,8 @@ const TILE_COLORS = {
   'w': PAL.wood,
   'r': PAL.burgundy,
   'g': '#5e7a68',
+  'p': '#b3ada0',   // street pavement
+  'a': '#454a52',   // street asphalt
 };
 
 const WALL_COLORS = {
@@ -57,6 +59,9 @@ export class WorldRenderer {
     this.cam.x = w / 2 - pp.x;
     this.cam.y = h / 2 - pp.y + 40;
     ctx.translate(this.cam.x, this.cam.y);
+
+    // ---- distant skyline behind an outdoor zone ----
+    if (zone.outdoor) this.drawSkyline(zone);
 
     // ---- ground ----
     for (let y = 0; y < zone.h; y++) {
@@ -194,12 +199,36 @@ export class WorldRenderer {
     ctx.textAlign = 'start';
   }
 
+  // A seeded row of dark towers along the back of the street so the empty
+  // background reads as a city block rather than a void.
+  drawSkyline(zone) {
+    const { ctx } = this;
+    for (let x = -4; x <= zone.w + 4; x++) {
+      const seed = (x * 73 + 11) % 17;
+      const s = gridToScreen(x, -1.5);
+      const height = 90 + seed * 9, width = 26 + (seed % 4) * 6;
+      ctx.fillStyle = seed % 3 === 0 ? '#1f2730' : '#232c36';
+      ctx.fillRect(s.x - width / 2, s.y - height - 40, width, height);
+      ctx.fillStyle = 'rgba(233,213,138,0.35)';
+      for (let wy = 0; wy < height - 20; wy += 14) if ((seed + wy) % 5 !== 0) ctx.fillRect(s.x - width / 2 + 6, s.y - height - 32 + wy, 4, 5);
+    }
+  }
+
   // Surface detail in tile space: x runs along +u, y along +v, 32 units per tile.
   drawFloorDetail(zone, ch, x, y, s, base) {
     const { ctx } = this;
     ctx.save();
     ctx.transform(1, 0.5, -1, 0.5, s.x, s.y - TILE_H / 2);
-    if (ch === 'w') {
+    if (ch === 'p') {
+      // Paving slabs with seams, and a kerb edge where the pavement meets the road.
+      ctx.fillStyle = 'rgba(0,0,0,0.12)';
+      ctx.fillRect(0, 15.5, 32, 0.8); ctx.fillRect(15.5, 0, 0.8, 32);
+      if (y + 1 < zone.h && zone.tile(x, y + 1) === 'a') { ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fillRect(0, 28, 32, 4); }
+    } else if (ch === 'a') {
+      ctx.fillStyle = 'rgba(0,0,0,0.18)';
+      for (let i = 0; i < 3; i++) ctx.fillRect((x * 13 + y * 7 + i * 11) % 30, (x * 5 + i * 9) % 30, 1.5, 1.5);
+      if (y > 0 && zone.tile(x, y - 1) === 'a' && (y + 1 >= zone.h || zone.tile(x, y + 1) !== 'a')) { ctx.fillStyle = '#d9c98a'; ctx.fillRect(6, 0, 14, 1.4); }
+    } else if (ch === 'w') {
       // Four boards per tile, each with its own tone, seams and staggered end joints.
       for (let row = 0; row < 4; row++) {
         const n = (x * 7 + y * 13 + row * 5) % 7;

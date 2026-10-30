@@ -1,4 +1,5 @@
 import { PAL } from '../engine/palette.js';
+import { COSMETICS } from './apprenticeship.js';
 
 // The first six hair IDs and the first six color indices match legacy saves.
 export const HAIR_STYLES = ['Side part', 'Long waves', 'Low ponytail', 'Neat bun', 'Natural curls', 'Bald',
@@ -31,12 +32,32 @@ export function normalizeAppearance(value = {}) {
 }
 
 // Used everywhere: creator, wardrobe, journal portrait and walking actor.
+// Equipped wardrobe items layer their `look` fields (tie, briefcase, formal,
+// wig, necklace, sunglasses, earrings, watch, pocketSquare) over the base.
 export function appearanceLook(value, equipped = []) {
   const a = normalizeAppearance(value);
-  return { ...a, suit: a.suitColor, shirt: a.shirtColor,
-    tie: equipped.includes('tie-brass') ? '#cba64b' : a.tieColor,
-    briefcase: equipped.includes('case-oxblood') ? '#713c46' : '#694c35' };
+  const look = { ...a, suit: a.suitColor, shirt: a.shirtColor, tie: a.tieColor, briefcase: '#694c35' };
+  for (const id of equipped) {
+    const item = COSMETICS.find((cosmetic) => cosmetic.id === id);
+    if (item?.look) Object.assign(look, item.look);
+  }
+  return look;
 }
+
+// "Surprise me" in the creator. Deterministic for a given rng so tests can
+// replay it; every result passes normalizeAppearance unchanged.
+const pickIndex = (rng, n) => Math.min(n - 1, Math.max(0, Math.floor(rng() * n)));
+const pickItem = (rng, list) => list[pickIndex(rng, list.length)];
+export const GENDER_IDS = ['male', 'female', 'nonbinary'];
+export function randomAppearance(rng = Math.random) {
+  return normalizeAppearance({
+    skin: pickIndex(rng, PAL.skin.length), hair: pickIndex(rng, PAL.hair.length), hairStyle: pickIndex(rng, HAIR_STYLES.length),
+    eye: pickIndex(rng, PAL.eyes.length), facialHair: rng() < 0.55 ? 0 : pickIndex(rng, FACIAL_HAIR.length), faceShape: pickIndex(rng, FACE_SHAPES.length),
+    suitColor: pickItem(rng, PAL.suits), tieColor: pickItem(rng, PAL.ties), shirtColor: pickItem(rng, PAL.shirts),
+    outfit: pickItem(rng, OUTFITS).id, silhouette: pickItem(rng, ['tailored', 'relaxed', 'slim']), glasses: rng() < 0.3,
+  });
+}
+export function randomGender(rng = Math.random) { return pickItem(rng, GENDER_IDS); }
 
 export function appearanceDescription(value) {
   const a = normalizeAppearance(value);

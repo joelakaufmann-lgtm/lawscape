@@ -57,15 +57,104 @@ test('three wrong answers in a row disbar a fresh attorney and the envelope repo
   assert.throws(() => run(p, { type: 'rest' }), /ended/);
 });
 
-test('Canada test answers never touch the economy and are recorded once per round', () => {
-  const p = office(); p.practicePack = 'canada-test';
-  const before = JSON.stringify({ ...p, canada: null });
-  const s = practiceInbox(p, ALL_MAIL_SCENARIOS).unread[0];
-  const out = run(p, { type: 'answer_scenario', scenarioId: s.id, choiceIndex: 0 });
-  assert.equal(out.result.testPack, true); assert.equal(typeof out.result.matchesProposedKey, 'boolean');
-  assert.equal(JSON.stringify({ ...p, canada: null }), before);
-  assert.equal(p.canada.questionAttempts.length, 1);
-  assert.throws(() => run(p, { type: 'buy_hint', scenarioId: s.id }), /not open|briefing/);
+test('Canada questions apply the full economy, count toward their pack and accept the old pack id', () => {
+  const p = office(); p.practicePack = 'canada';
+  const { s, i } = scenario(p, 'correct');
+  assert.equal(s.sourceType, 'canada-style'); assert.ok(s.gold >= 35);
+  const out = run(p, { type: 'answer_scenario', scenarioId: s.id, choiceIndex: i });
+  assert.equal(out.result.earned, s.gold); assert.equal(p.gold, s.gold); assert.equal(p.packCorrect.canada, 1); assert.equal(p.streak, 1);
+  const wrong = scenario(p, 'wrong');
+  run(p, { type: 'answer_scenario', scenarioId: wrong.s.id, choiceIndex: wrong.i });
+  assert.equal(p.ethics, 70); assert.equal(p.streak, 0);
+  assert.equal(run(p, { type: 'set_practice_pack', id: 'canada-test' }).result.id, 'canada');
+  assert.equal(freshState().practicePack, 'juris', 'new attorneys start on the LawScape originals');
+});
+
+test('consecutive correct answers multiply gold up to x1.5 and a wrong answer resets the bonus', () => {
+  const p = office(); p.practicePack = 'mixed'; p.casesDone = 12;
+  for (const expected of [1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.5]) {
+    const { s, i } = scenario(p, 'correct');
+    const out = run(p, { type: 'answer_scenario', scenarioId: s.id, choiceIndex: i });
+    assert.equal(out.result.multiplier, expected); assert.equal(out.result.earned, Math.round(s.gold * expected));
+  }
+  p.upgrades.push('monitor');
+  const boosted = scenario(p, 'correct');
+  assert.equal(run(p, { type: 'answer_scenario', scenarioId: boosted.s.id, choiceIndex: boosted.i }).result.earned, Math.round(boosted.s.gold * 1.15 * 1.5));
+  const wrong = scenario(p, 'wrong');
+  run(p, { type: 'answer_scenario', scenarioId: wrong.s.id, choiceIndex: wrong.i });
+  const reset = scenario(p, 'correct');
+  assert.equal(run(p, { type: 'answer_scenario', scenarioId: reset.s.id, choiceIndex: reset.i }).result.multiplier, 1);
+});
+
+test('five correct SQE answers grant the powdered wig once, owned but not worn', () => {
+  const p = office(); p.practicePack = 'sqe'; p.casesDone = 12;
+  const granted = [];
+  for (let n = 0; n < 6; n++) {
+    const { s, i } = scenario(p, 'correct');
+    granted.push(run(p, { type: 'answer_scenario', scenarioId: s.id, choiceIndex: i }).result.unlocked);
+  }
+  assert.deepEqual(granted, [[], [], [], [], ['wig-powdered'], []]);
+  assert.equal(p.packCorrect.sqe, 6);
+  assert.ok(p.apprenticeship.cosmetics.includes('wig-powdered')); assert.ok(!p.apprenticeship.equipped.includes('wig-powdered'));
+  assert.equal(run(p, { type: 'apprenticeship_equip', id: 'wig-powdered', worn: true }).result.worn, true);
+  assert.deepEqual(p.apprenticeship.equipped, ['wig-powdered']);
+});
+
+test('arriving at the firm or court impaired costs 10 Ethics once per drink; home, the street and the lounge are safe', () => {
+  const p = freshState(); p.zone = 'sidebar'; p.gold = 20;
+  run(p, { type: 'bar_drink', id: 'ale' }, 1000);
+  assert.equal(run(p, { type: 'set_zone', zone: 'street' }, 1500).result.ethicsLost, 0);
+  assert.equal(run(p, { type: 'set_zone', zone: 'apartment' }, 2000).result.ethicsLost, 0);
+  const office = run(p, { type: 'set_zone', zone: 'office' }, 3000);
+  assert.deepEqual(office.result, { zone: 'office', ethicsLost: 10, disbarred: false }); assert.equal(p.ethics, 90);
+  assert.equal(run(p, { type: 'set_zone', zone: 'corner_office' }, 4000).result.ethicsLost, 0, 'one charge per drink');
+  p.zone = 'sidebar'; run(p, { type: 'bar_drink', id: 'ale' }, 5000);
+  assert.equal(run(p, { type: 'set_zone', zone: 'office' }, 6000).result.ethicsLost, 10); assert.equal(p.ethics, 80);
+  assert.equal(run(p, { type: 'set_zone', zone: 'courtroom' }, 50_000).result.ethicsLost, 0, 'sober again');
+  p.ethics = 10; p.zone = 'sidebar'; run(p, { type: 'bar_drink', id: 'ale' }, 60_000);
+  const out = run(p, { type: 'set_zone', zone: 'courtroom' }, 61_000);
+  assert.equal(out.result.disbarred, true); assert.equal(out.ended, true); assert.equal(p.runStatus, 'ended');
+});
+
+test('the office espresso machine heals on a cooldown and sobers an impaired attorney', () => {
+  const p = office();
+  assert.throws(() => run(p, { type: 'espresso' }, 1000), /espresso machine/);
+  p.upgrades.push('espresso'); p.ethics = 50;
+  p.zone = 'sidebar'; assert.throws(() => run(p, { type: 'espresso' }, 1000), /main office/); p.zone = 'office';
+  assert.deepEqual(run(p, { type: 'espresso' }, 1000).result, { healed: 5, sobered: false }); assert.equal(p.ethics, 55);
+  assert.throws(() => run(p, { type: 'espresso' }, 31_000), /heating up/);
+  assert.equal(run(p, { type: 'espresso' }, 91_000).result.healed, 5);
+  p.ethics = 100; assert.throws(() => run(p, { type: 'espresso' }, 200_000), /already full/);
+  p.slowUntil = 250_000;
+  const out = run(p, { type: 'espresso' }, 200_000);
+  assert.equal(out.result.sobered, true); assert.equal(p.slowUntil, 200_000); assert.equal(p.ethics, 100);
+});
+
+test('Briefcase Dash costs 5 gold for three rounds and credits are consumed per run', () => {
+  const p = freshState(); p.zone = 'office'; p.gold = 10;
+  assert.throws(() => run(p, { type: 'arcade_play' }), /Sidebar/);
+  p.zone = 'sidebar'; p.gold = 3; assert.throws(() => run(p, { type: 'arcade_play' }), /need 5 gold/);
+  p.gold = 10; assert.deepEqual(run(p, { type: 'arcade_play' }).result, { cost: 5, credits: 3 }); assert.equal(p.gold, 5);
+  assert.throws(() => run(p, { type: 'arcade_play' }), /still have credits/);
+  for (const left of [2, 1, 0]) assert.equal(run(p, { type: 'arcade_round' }).result.credits, left);
+  assert.throws(() => run(p, { type: 'arcade_round' }), /Insert 5 gold/);
+  assert.equal(p.gold, 5);
+});
+
+test('pet adoption happens once, from the apartment, with a sanitised name', () => {
+  const p = freshState(); p.zone = 'office'; p.gold = 5000;
+  assert.throws(() => run(p, { type: 'adopt_pet', kind: 'dog', name: 'Rex' }), /apartment/);
+  p.zone = 'apartment';
+  assert.throws(() => run(p, { type: 'adopt_pet', kind: 'dragon', name: 'Rex' }), /cat or a dog/);
+  p.gold = 100; assert.throws(() => run(p, { type: 'adopt_pet', kind: 'dog', name: 'Rex' }), /2000 gold/);
+  p.gold = 5000;
+  const out = run(p, { type: 'adopt_pet', kind: 'dog', name: `  ${'A'.repeat(30)}  ` });
+  assert.equal(out.result.name, 'A'.repeat(24)); assert.equal(out.result.cost, 2000); assert.equal(p.gold, 3000); assert.equal(p.pet.kind, 'dog');
+  assert.throws(() => run(p, { type: 'adopt_pet', kind: 'cat', name: 'Two' }), /already/);
+  const q = freshState(); q.zone = 'apartment'; q.gold = 2000;
+  assert.equal(run(q, { type: 'adopt_pet', kind: 'cat', name: '   ' }).result.name, 'Counsel');
+  assert.equal(normalizeSave({ pet: { kind: 'dragon', name: 'x' } }).pet, null);
+  assert.deepEqual(normalizeSave({ pet: { kind: 'cat', name: '  Tabby  Cat ', adoptedAt: 'x' } }).pet, { kind: 'cat', name: 'Tabby Cat', adoptedAt: 0 });
 });
 
 test('upgrades deduct gold, add Ethics capacity and refuse duplicates, and a failed purchase leaves state untouched', () => {
@@ -183,8 +272,10 @@ test('creating a character resets everything except the supplied identity', () =
 
 test('normalizeSave repairs new fields, replaceState preserves client-only keys and local seeds carry identity only', () => {
   const next = normalizeSave({ schemaVersion: 5, gold: 12, docReviewStartedAt: -5, hintScenarioId: 7, pos: 'x' });
-  assert.equal(next.schemaVersion, 6); assert.equal(next.docReviewStartedAt, 0); assert.equal(next.hintScenarioId, null); assert.deepEqual(next.pos, { x: 6, y: 10 });
-  assert.equal(normalizeSave({ schemaVersion: 7 }), null);
+  assert.equal(next.schemaVersion, 7); assert.equal(next.docReviewStartedAt, 0); assert.equal(next.hintScenarioId, null); assert.deepEqual(next.pos, { x: 6, y: 10 });
+  assert.equal(normalizeSave({ schemaVersion: 8 }), null);
+  assert.equal(normalizeSave({ practicePack: 'canada-test' }).practicePack, 'canada');
+  assert.deepEqual(normalizeSave({ packCorrect: [1], arcadeCredits: -2 }).packCorrect, {});
   replaceState(freshState()); state.pos = { x: 1, y: 2 };
   replaceState({ ...freshState(), gold: 5, pos: { x: 9, y: 9 } }, { preserve: ['pos'] });
   assert.equal(state.gold, 5); assert.deepEqual(state.pos, { x: 1, y: 2 });

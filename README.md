@@ -10,8 +10,8 @@ and improve your office while protecting your Ethics.
 ![An attorney exploring the LawScape office](media/demo-30s/captures/office-full.png)
 
 Free to play. No account, installation or API key required. The current release
-is **0.7.0**, with the expanded avatar creator, all seven locations, and California
-and New York practice. Prefer a quick look first? [Watch the 30-second demo](media/lawscape-demo-30s.mp4).
+is **0.8.0**, with a walkable street joining nine locations, a bigger wardrobe,
+adoptable pets, and California, New York and Canada practice. Prefer a quick look first? [Watch the 30-second demo](media/lawscape-demo-30s.mp4).
 
 ## Your first five minutes
 
@@ -20,10 +20,13 @@ and New York practice. Prefer a quick look first? [Watch the 30-second demo](med
    computer for a quick ethics question.
 3. Open a subject line, read the facts, choose your response and read the
    explanation. In writing assignments, review the supplied file before replying.
-4. Use **Journal → Firm jurisdictions** to choose a question pack. Each pack
-   opens directly in BarMail; **Mixed practice** draws from all five.
-5. Explore with **Travel**, talk to the partners, visit The Sidebar, and use
-   **Journal → Wardrobe** to change your look. Gold buys accessories and upgrades.
+4. Use **Journal → Firm jurisdictions** to choose a question pack. New attorneys
+   start on the original dilemmas; each pack opens directly in BarMail and
+   **Mixed practice** draws from all six.
+5. Walk out onto Juris Avenue to reach the courthouse, The Sidebar and your
+   apartment (or use **Travel** as a shortcut), talk to the partners, and use
+   **Journal → Wardrobe** to change your look. Gold buys accessories, jewelry,
+   formal wear, upgrades and a pet.
 
 Click or tap to walk and interact. WASD and arrow keys also move your attorney.
 The Work Phone upgrade lets you use BarMail outside the office.
@@ -36,16 +39,16 @@ The Work Phone upgrade lets you use BarMail outside the office.
 | New York | 33 | 28 workplace emails and five short dilemmas |
 | US MPRE-style | 69 | Model-rule and exam-style study |
 | England & Wales SQE-style | 28 | Ethics in England and Wales |
+| Canada | 25 | Ontario, BC and Saskatchewan practice; practitioner review pending |
 | LawScape original dilemmas | 21 | Fictional office dilemmas with mixed Arizona/Nevada rule labels |
 
-**171 questions total.** The inbox shows your current difficulty tier, so you
+**196 questions total.** The inbox shows your current difficulty tier, so you
 will not see every question at once. Every original question remains included.
 
 The fictional **State of Juris apprenticeship** adds six writing assignments,
 two synthetic document files and one connected capstone. These activities are
-separate from the question count. This local build also contains a **Canada test
-pack: 25 additional questions and five emails**, with practitioner review pending.
-Canada is opt-in, outside mixed practice, and has no Ethics, gold or streak effects.
+separate from the question count. The Canada pack also carries **five ungraded
+email assignments**; practitioner review of the Canadian answer key is pending.
 Full continuing-matter curricula remain planned.
 [Open the Canada review package](canada-test/review.html) or
 [see coverage, sources and review status](docs/JURISDICTIONS.md).

@@ -22,10 +22,11 @@ import { updateHUD, setZoneName, toast, hoverLabel, drawMinimap } from './ui/hud
 import { showDialogue, hideDialogue, dialogueOpen } from './ui/dialogue.js';
 import { createApprenticeshipUI, escapeHtml } from './ui/apprenticeship.js';
 import { pendingAttempt, taskAttempts, capstoneReady } from './apprenticeship.js';
-import { WRITING_TASKS, CAPSTONE } from './data/apprenticeship.js';
+import { WRITING_TASKS, CAPSTONE, COSMETICS } from './data/apprenticeship.js';
+import { PET_COST, PET_KINDS, DEFAULT_PET_NAME } from './data/pets.js';
 import { ALL_MAIL_SCENARIOS, canAccessBarMail, practiceInbox, billableMessageOpen } from './data/mail.js';
 import { BAR_DRINKS, movementMultiplier, archiveDisbarredRun, readBillableBoard } from './lounge.js';
-import { appearanceLook, normalizeAppearance } from './data/appearance.js';
+import { appearanceLook, normalizeAppearance, randomAppearance, randomGender } from './data/appearance.js';
 import { mountAppearanceEditor } from './ui/appearance.js';
 import { mountArcade } from './ui/arcade.js';
 import { SIDEBAR_ROOM, SIDEBAR_TOPICS, sidebarTopic } from './data/sidebar.js';
@@ -34,7 +35,7 @@ import { RULE_LIBRARY } from './data/rules.js';
 import { PRACTICE_PACKS } from './data/practice-packs.js';
 import { CANADA_PACK } from './data/canada.js';
 import { canadaProgress } from './canada.js';
-import { renderCanadaEmail, canadaRulesHtml } from './ui/canada.js';
+import { renderCanadaEmail } from './ui/canada.js';
 import {
   APARTMENT_FOOD_COST,
   DOC_REVIEW_CYCLE_MS,
@@ -92,7 +93,7 @@ const desk = createApprenticeshipUI({
     if (!inGame) return;
     act({ type: 'set_practice_pack', id: pack }).then(() => {
       if (!canAccessBarMail(state, !!claimedDesk)) enterZone('office');
-      openEmail(pack === 'canada-test' ? 'all' : 'practice');
+      openEmail(pack === 'canada' ? 'all' : 'practice');
     }).catch(() => {});
   },
   onWriting: (id) => openEmail('writing', id),
@@ -130,17 +131,43 @@ function isWalkable(x, y) {
 
 function buildNpcs() {
   if (zone.id === 'sidebar') zone.props.find((prop) => prop.type === 'scoreboard').entries = readBillableBoard();
-  npcs = (zone.npcs || []).map((def) => ({
-    def,
-    actor: new Actor(def.x, def.y, def.look, { npc: def }),
-  }));
+  npcs = (zone.npcs || []).map((def) => {
+    const actor = new Actor(def.x, def.y, typeof def.look === 'function' ? def.look() : def.look, { npc: def, speed: def.speed || 3 });
+    if (def.seated) actor.activity = 'sitting';
+    if (def.facing) actor.facing = def.facing;
+    return { def, actor, wander: def.wander ? { nextAt: 0 } : null };
+  });
+}
+
+// Wandering NPCs (the apartment pet) stroll to a random free tile every few
+// seconds; everyone else stays put.
+function updateNpcs(dt) {
+  const t = now();
+  for (const npc of npcs) {
+    if (!npc.wander || (npc.def.visible && !npc.def.visible())) continue;
+    npc.actor.update(dt);
+    if (npc.actor.walking || t < npc.wander.nextAt) continue;
+    for (let tries = 0; tries < 20; tries++) {
+      const x = 1 + Math.floor(Math.random() * Math.max(1, zone.w - 2)), y = 1 + Math.floor(Math.random() * Math.max(1, zone.h - 2));
+      if (!isWalkable(x, y) || (x === player.tileX && y === player.tileY) || zone.portals.some((portal) => portal.x === x && portal.y === y)) continue;
+      const path = findPath(isWalkable, zone.w, zone.h, npc.actor.tileX, npc.actor.tileY, x, y);
+      if (path && path.length) { npc.actor.setPath(path); break; }
+    }
+    npc.wander.nextAt = t + 2000 + Math.random() * 2000;
+  }
 }
 
 function enterZone(id, pos = null) {
   if (docReview.active) stopDocumentReview(false);
   stopWatchingTV();
   state.zone = id;
-  dispatch({ type: 'set_zone', zone: id }, { persist: false }).catch(() => {});
+  dispatch({ type: 'set_zone', zone: id }, { persist: false }).then(({ result, ended }) => {
+    // Arriving at work impaired costs Ethics; the reducer decides, we only report it.
+    if (!result?.ethicsLost) return;
+    updateHUD();
+    if (result.disbarred || ended) { gameOver(`${DEFAULT_GAMEOVER_TEXT} You reported to ${ZONES[id].name} impaired.`); return; }
+    toast(`Showing up at ${ZONES[id].name} impaired costs −${result.ethicsLost} Ethics. Sober up first.`);
+  }).catch(() => {});
   zone = currentZone();
   const p = pos || zone.spawn;
   state.pos = { x: p.x, y: p.y };
@@ -175,7 +202,7 @@ function targetAt(mx, my) {
       if (npc.actor.tileX === cx && npc.actor.tileY === cy) {
         return {
           tiles: [{ x: cx, y: cy }],
-          label: `Talk to ${npc.def.name}`,
+          label: npc.def.talk === 'pet' ? `Pet ${npc.def.name}` : `Talk to ${npc.def.name}`,
           approach: { x: cx, y: cy },
           run: () => talkTo(npc.def),
         };
@@ -316,6 +343,7 @@ function runAction(action, prop = null) {
     case 'flavor_coffee':
       drinkCoffee();
       break;
+    case 'espresso': drinkEspresso(); break;
     case 'eat_ramen': eatApartmentFood('ramen'); break;
     case 'cook_meal': eatApartmentFood('meal'); break;
     case 'watch_tv': watchTV(); break;
@@ -340,6 +368,13 @@ function talkTo(def) {
     });
   } else if (def.talk === 'sidebar_host') {
     openBartender();
+  } else if (def.talk === 'pet') {
+    const pet = state.pet;
+    if (!pet) return;
+    const lines = pet.kind === 'cat'
+      ? [`${pet.name} purrs and walks away mid-sentence.`, `${pet.name} knocks a treatise off the shelf and watches you pick it up.`, `${pet.name} sits on your briefcase. Court is adjourned.`]
+      : [`${pet.name} wags so hard the whole apartment shakes.`, `${pet.name} brings you a shoe. It is not your shoe.`, `${pet.name} has reviewed the file and finds it delicious.`];
+    showDialogue({ name: `${pet.name} the ${pet.kind}`, text: lines[Math.floor(Math.random() * lines.length)] });
   } else if (def.talk === 'jim') {
     const lines = [
       'Jim reminds you of his email that said “pls fix.”',
@@ -392,7 +427,8 @@ function lizLines() {
 
   if (!improvedOffice) lines.push('Get back to work.');
   if (!paralegal) lines.push('We should hire a paralegal.');
-  if (!chair) lines.push('I sure wish I could sit down.', 'I can’t wait to go home.');
+  if (!chair) lines.push('This chair has been broken since 1987. Every time I lean back, it leans further.', 'One caster is gone. I steer with my feet.', 'I can’t wait to go home.');
+  if (chair) lines.push('The new chair has five wheels. All of them.');
   if (plants) {
     lines.push('Can you please water the plants?', 'These plants help make this place feel like less of a prison.');
   }
@@ -451,7 +487,7 @@ function talkToLinda(def) {
         fn: () => {
           act({ type: 'buy_tip' }).then(({ result }) => {
             const tip = tipPool(state)[result.tipIndex];
-            showDialogue({ name: result.source === 'canada' ? 'Linda — Canada test guidance · review required' : 'Linda Firestone — US-source Ethics Tip', text: tip });
+            showDialogue({ name: result.source === 'canada' ? 'Linda — Canada rule briefing · review pending' : 'Linda Firestone — US-source Ethics Tip', text: tip });
           }).catch(() => {});
         },
       },
@@ -463,9 +499,14 @@ function talkToLinda(def) {
 // ---------------------------------------------------------------------------
 // Travel menu — the world beyond is the office complex, apartment, and court
 // ---------------------------------------------------------------------------
+// Quick travel (T key / Travel button). Walking out of any building door leads
+// onto Juris Avenue instead; this menu is the shortcut.
 function openTravelMenu() {
   if (docReview.active) stopDocumentReview(false);
   const choices = [];
+  if (state.zone !== 'street') {
+    choices.push({ label: 'Walk out to Juris Avenue', fn: () => enterZone('street') });
+  }
   if (state.zone !== 'office') {
     choices.push({ label: 'Go to the Law Office', fn: () => enterZone('office') });
   }
@@ -484,7 +525,7 @@ function openTravelMenu() {
   choices.push({ label: 'Stay here', fn: () => {} });
   showDialogue({
     name: 'Where to, counselor?',
-    text: 'You step out to the street. Where to?',
+    text: 'Quick travel. Where to?',
     choices,
   });
 }
@@ -542,13 +583,13 @@ function openEmail(folder = 'all', taskId = null) {
 
 function renderInbox() {
   const pool = practiceInbox(state,ALL_MAIL_SCENARIOS);
-  const isCanada = state.practicePack === 'canada-test';
+  const isCanada = state.practicePack === 'canada';
   const writingTasks = isCanada ? CANADA_PACK.emails.map(task => ({...task, partner: task.fromName, skill: task.jurisdiction})) : [...WRITING_TASKS,CAPSTONE];
   const showPractice = mailFolder !== 'writing', showWriting = mailFolder !== 'practice';
   const e = escapeHtml;
   $('email-inbox').innerHTML = `<header class="mail-inbox-heading"><div><span class="mail-eyebrow">HARDSELL &amp; FIRESTONE · INTERNAL MAIL</span><h2>${showPractice && showWriting ? 'Your inbox' : showWriting ? 'Writing assignments' : 'Ethics practice inbox'}</h2><p>Open a subject line to read and reply. All senders and correspondence are synthetic.</p></div><span class="mail-device">${hasUpgrade('work_phone') ? 'Work phone connected' : 'Office terminal'}</span></header>`
     + (pendingAttempt(state) ? '<p class="mail-notice">A partner reply is pending. You can read your mail; another graded submission waits for that reply.</p>' : '')
-    + (isCanada ? '<p class="mail-notice canada-banner"><b>CANADA TEST PACK · Practitioner review required.</b> Ontario, BC and Saskatchewan exercises. All 25 questions are available at every level. No Ethics, gold or streak effects. <a href="canada-test/overview.html" target="_blank" rel="noopener">Review overview</a> · <a href="canada-test/review.html" target="_blank" rel="noopener">Full content and reviewer notes</a></p>' : '')
+    + (isCanada ? '<p class="mail-notice">Canada pack · Ontario, BC and Saskatchewan. Questions pay gold and cost Ethics like every pack; practitioner review of the answer key is pending. <a href="canada-test/review.html" target="_blank" rel="noopener">Reviewer notes</a></p>' : '')
     + (showWriting ? `<h3 class="mail-group-title">Partner correspondence · ${isCanada ? '5 Canadian email assignments' : 'Writing'}</h3><div class="mail-list">${writingTasks.map((task) => {
       const latest = isCanada ? canadaProgress(state).emailAttempts.filter(a => a.taskId === task.id).at(-1) : taskAttempts(state,task.id).at(-1);
       const locked = task.id === 'capstone' && !capstoneReady(state);
@@ -610,12 +651,7 @@ function openScenario(id) {
     ? `You need ${RILEY_HINT_COST} gold for Riley to research this rule.`
     : 'Pay Riley to research the relevant rule before you answer.';
   hintEl.classList.toggle('hidden', !canAskRiley);
-  if (s.isTestPack) {
-    sourceEl.textContent = `${s.jurisdiction} · CANADA TEST · practitioner review required`;
-    hintEl.classList.add('hidden');
-    ruleEl.innerHTML = `<details class="canada-rules"><summary>Free rule briefing · source scope</summary>${canadaRulesHtml(s.ruleIds)}</details>`;
-    ruleEl.classList.remove('hidden');
-  }
+  if (s.sourceType === 'canada-style') sourceEl.textContent = `${s.jurisdiction} · CANADA · practitioner review pending`;
 
   const wrap = $('email-choices');
   wrap.innerHTML = '';
@@ -665,18 +701,6 @@ function renderScenarioResult(s, choice, result) {
   const verdictEl = $('email-verdict');
   const explainEl = $('email-explain');
   const deltaEl = $('email-delta');
-  if (result.testPack) {
-    verdictEl.textContent = result.matchesProposedKey ? 'Matches the proposed answer key.' : 'Compare this choice with the proposed answer key.';
-    verdictEl.className = result.matchesProposedKey ? 'good' : '';
-    const q = CANADA_PACK.questions.find(item => item.id === s.id);
-    explainEl.innerHTML = `<p>${escapeHtml(choice.why)}</p><p><b>Decisive fact:</b> ${escapeHtml(q.decisiveFact)}</p><details><summary>Review every option</summary>${q.options.map(o=>`<p><b>${escapeHtml(o.id)}${o.id===q.answer?' · Proposed answer':''}:</b> ${escapeHtml(o.text)}<br>${escapeHtml(o.explanation)}</p>`).join('')}</details>`;
-    appendScenarioSource(explainEl, s);
-    deltaEl.textContent = `Test practice only · No Ethics, gold or streak effects · ${save() ? 'Saved' : 'Session only — storage unavailable'}`;
-    $('email-replies').classList.add('hidden'); $('email-result').classList.remove('hidden');
-    $('email-continue').textContent = 'Back to Canada inbox';
-    $('email-continue').onclick = () => openEmail(mailFolder);
-    return;
-  }
   $('email-hint').classList.add('hidden');
   if (result.correct) {
     verdictEl.textContent = '✔ Sound professional judgment.';
@@ -687,9 +711,15 @@ function renderScenarioResult(s, choice, result) {
       : 'That is the defensible course — engagement decisions, trust money, and candor calls '
         + 'like this one are exactly where licenses are won and lost.';
     explainEl.textContent = `${s.rule}. ${s.explanation || successContext}`;
-    deltaEl.innerHTML = `<span class="gain">+${result.earned} gold</span>`
-      + (result.healed > 0 ? ` &nbsp; <span class="gain">+${result.healed} Ethics (streak x${result.streak}!)</span>`
-                           : ` &nbsp; <span class="muted">streak x${result.streak} — one more for an Ethics heal</span>`);
+    const bonus = result.multiplier > 1 ? ` <span class="muted">· streak bonus ×${result.multiplier}</span>` : '';
+    const streakNote = result.healed > 0 ? `<span class="gain">+${result.healed} Ethics (streak x${result.streak}!)</span>`
+      : result.streak >= 2 ? `<span class="muted">streak x${result.streak} · Ethics already full</span>`
+      : `<span class="muted">streak x${result.streak} — one more for an Ethics heal</span>`;
+    deltaEl.innerHTML = `<span class="gain">+${result.earned} gold</span>${bonus} &nbsp; ${streakNote}`;
+    if (result.unlocked?.length) {
+      const names = result.unlocked.map((id) => COSMETICS.find((item) => item.id === id)?.label || id).join(', ');
+      toast(`Wardrobe unlocked: ${names}. Find it in Journal → Wardrobe.`);
+    }
   } else {
     verdictEl.textContent = result.grade === 'very_wrong'
       ? '✖ Serious ethics violation.'
@@ -753,7 +783,7 @@ function closeEmail() {
 $('email-close').addEventListener('click', closeEmail);
 $('email-pack').addEventListener('change', (event) => {
   act({ type: 'set_practice_pack', id: event.target.value })
-    .then(() => openEmail(state.practicePack === 'canada-test' ? 'all' : 'practice')).catch(() => {});
+    .then(() => openEmail(state.practicePack === 'canada' ? 'all' : 'practice')).catch(() => {});
 });
 $('email-inbox-open').addEventListener('click', () => openEmail());
 $('email-back').addEventListener('click', () => openEmail(mailFolder));
@@ -881,7 +911,13 @@ function openArcade() {
   if (state.zone !== 'sidebar') return;
   const body = openPanel('Briefcase Dash — The Sidebar Arcade');
   $('panel-inner').classList.add('arcade-panel');
-  mountArcade(body, { look: playerLook() });
+  mountArcade(body, {
+    look: playerLook(),
+    credits: () => state.arcadeCredits || 0,
+    gold: () => state.gold,
+    insertCoin: () => act({ type: 'arcade_play' }),
+    startRound: () => act({ type: 'arcade_round' }),
+  });
 }
 
 function openJudgeStatus() {
@@ -1106,6 +1142,50 @@ function openShop(title, catalog) {
     row.appendChild(btn);
     body.appendChild(row);
   }
+  if (catalog === APARTMENT_UPGRADES) appendPetRow(body);
+}
+
+// Pet adoption lives in the apartment's furniture catalog: pick a kind, name
+// it, pay the fee once. The pet then wanders the apartment.
+function appendPetRow(body) {
+  const row = document.createElement('div');
+  row.className = 'row-item';
+  const pet = state.pet;
+  row.innerHTML = `<div class="grow"><h4>Adopt a pet</h4><p>${pet
+    ? `${escapeHtml(pet.name)} the ${pet.kind} already lives here.`
+    : 'A cat or a dog to keep you company at home. You name it. No grading effect; considerable morale effect.'}</p></div>
+    <div class="meta">🪙 ${PET_COST}</div>`;
+  const btn = document.createElement('button');
+  btn.className = 'small';
+  if (pet) { btn.textContent = 'Adopted'; btn.disabled = true; }
+  else { btn.textContent = 'Adopt'; btn.disabled = state.gold < PET_COST; btn.onclick = openAdoptionForm; }
+  row.appendChild(btn);
+  body.appendChild(row);
+}
+
+function openAdoptionForm() {
+  const body = openPanel('Adopt a pet');
+  let kind = PET_KINDS[0].id;
+  body.innerHTML = `<div class="help-lede"><p>Choose a companion and give them a name (up to 24 characters). The adoption fee is ${PET_COST} gold, paid once.</p></div>
+    <div id="pet-kind" class="pill-row" role="group" aria-label="Pet"></div>
+    <p id="pet-kind-note" class="muted"></p>
+    <label class="desk-label" for="pet-name">Name</label><input id="pet-name" type="text" maxlength="24" placeholder="${DEFAULT_PET_NAME}">
+    <p id="pet-error" class="desk-error" role="alert"></p>
+    <div class="sidebar-compose-actions"><button type="button" id="pet-adopt">Adopt · ${PET_COST} gold</button><button type="button" id="pet-back" class="small">Back to catalog</button></div>`;
+  const kinds = () => {
+    pillRow($('pet-kind'), PET_KINDS.map((item) => item.label), (i) => PET_KINDS[i].id === kind, (i) => { kind = PET_KINDS[i].id; kinds(); });
+    $('pet-kind-note').textContent = PET_KINDS.find((item) => item.id === kind).note;
+  };
+  kinds();
+  $('pet-back').onclick = () => openShop('Apartment Upgrades', APARTMENT_UPGRADES);
+  $('pet-adopt').onclick = () => {
+    $('pet-adopt').disabled = true;
+    act({ type: 'adopt_pet', kind, name: $('pet-name').value }).then(({ result }) => {
+      $('panel').classList.add('hidden');
+      buildNpcs();
+      showDialogue({ name: `${result.name} the ${result.kind}`, text: `${result.name} moves in and immediately claims the rug. −${PET_COST} gold, +1 roommate.` });
+    }).catch((error) => { $('pet-error').textContent = error.message; $('pet-adopt').disabled = false; });
+  };
 }
 
 function openRecord() {
@@ -1139,6 +1219,12 @@ function doRest() {
 function drinkCoffee() {
   act({ type: 'coffee' }).then(({ result }) => {
     toast(`You drink a strong cup of coffee. +${result.healed} Ethics.`);
+  }).catch(() => {});
+}
+
+function drinkEspresso() {
+  act({ type: 'espresso' }).then(({ result }) => {
+    toast(`You pull a double shot. +${result.healed} Ethics.${result.sobered ? ' The fog lifts.' : ''}`);
   }).catch(() => {});
 }
 
@@ -1304,7 +1390,7 @@ function openHelp() {
   const body = openPanel('How to play');
   body.innerHTML = `
     <div class="row-item"><div class="grow"><h4>Your first five minutes</h4><p>Open <b>Journal</b> for a guided firm assignment, or <b>BarMail</b> in your office for a quick ethics question. Open a subject line, read the facts, choose a response and read the explanation.</p></div></div>
-    <div class="row-item"><div class="grow"><h4>Choose your practice</h4><p>Use <b>Journal → Firm jurisdictions</b> or BarMail’s practice selector: California, New York, US MPRE-style, England &amp; Wales SQE-style, or LawScape original dilemmas. Mixed practice includes all five. The inbox shows your current difficulty tier.</p></div></div>
+    <div class="row-item"><div class="grow"><h4>Choose your practice</h4><p>Use <b>Journal → Firm jurisdictions</b> or BarMail’s practice selector: LawScape original dilemmas (where new attorneys start), California, New York, US MPRE-style, England &amp; Wales SQE-style, or Canada. Mixed practice includes all six. The inbox shows your current difficulty tier.</p></div></div>
     <div class="row-item"><div class="grow"><h4>Move, explore, customize</h4><p>Click or tap to walk and interact; WASD and arrow keys also move. Use <b>Travel</b> for locations and <b>Journal → Wardrobe</b> to change your attorney. The Work Phone unlocks BarMail outside your office.</p></div></div>
     <div class="row-item"><div class="grow"><h4>Gold and Ethics</h4><p>Correct ethics answers earn gold. Repeated wrong answers cause increasing Ethics damage. Correct streaks and resting in your apartment help restore Ethics. At zero Ethics the character run ends: gold, upgrades and drafts are reset. Read feedback before the next reply.</p></div></div>
     <div class="row-item"><div class="grow"><h4>Your first firm day</h4><p>Read the two synthetic files, flag evidence and complete six writing assignments to unlock the capstone. Committing locks each reply until the partner responds. Checklist choices receive authored feedback and study gold without Ethics damage; your prose is saved for self-comparison, not graded by live AI.</p></div></div>
@@ -1583,6 +1669,11 @@ $('btn-new').addEventListener('click', () => {
   $('title-screen').classList.add('hidden');
   buildCreator();
   $('creator').classList.remove('hidden');
+});
+
+$('btn-creator-random').addEventListener('click', () => {
+  Object.assign(pick, randomAppearance(), { gender: randomGender() });
+  buildCreator();
 });
 
 $('btn-creator-back').addEventListener('click', () => {
@@ -1923,6 +2014,7 @@ function loop(frameNow) {
     desk.tick();
     player.speed = PLAYER_BASE_SPEED * movementMultiplier(state, now());
     player.update(dt);
+    updateNpcs(dt);
     updateDocumentReview(now());
     trackBillableStudy(dt);
     state.pos = { x: player.tileX, y: player.tileY };

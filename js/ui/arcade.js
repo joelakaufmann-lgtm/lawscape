@@ -3,10 +3,14 @@
 
 import { ARCADE, newArcadeRun, stepArcade, arcadeMeters, readArcadeBest, recordArcadeScore } from '../arcade.js';
 import { PAL, shade } from '../engine/palette.js';
+import { ARCADE_PLAY_COST, ARCADE_ROUNDS_PER_PLAY } from '../data/work.js';
 
 const W = 640, H = 240, GROUND = 196; // logical canvas size; GROUND is the sidewalk line
 
-export function mountArcade(body, { look = {}, onClose = () => {} } = {}) {
+// `credits`/`gold` read the player's state; `insertCoin` and `startRound`
+// dispatch the server-owned `arcade_play` / `arcade_round` actions and return
+// promises. Without them (tests, previews) the cabinet plays for free.
+export function mountArcade(body, { look = {}, credits = () => Infinity, gold = () => 0, insertCoin = null, startRound = null, onClose = () => {} } = {}) {
   body.innerHTML = `
     <div class="arcade">
       <div class="arcade-bezel">
@@ -17,6 +21,10 @@ export function mountArcade(body, { look = {}, onClose = () => {} } = {}) {
         <div class="arcade-touch">
           <button type="button" id="arcade-jump">Jump</button>
           <button type="button" id="arcade-duck">Duck</button>
+        </div>
+        <div class="arcade-coin">
+          <span>Credits: <b id="arcade-credits">0</b></span>
+          <button type="button" id="arcade-insert">Insert ${ARCADE_PLAY_COST} gold · ${ARCADE_ROUNDS_PER_PLAY} rounds</button>
         </div>
       </div>
       <p id="arcade-status" class="arcade-status" role="status"></p>
@@ -30,12 +38,32 @@ export function mountArcade(body, { look = {}, onClose = () => {} } = {}) {
 
   let run = newArcadeRun();
   let best = readArcadeBest();
-  let jumpQueued = false, duckHeld = false, recorded = false;
+  let jumpQueued = false, duckHeld = false, recorded = false, starting = false;
   let last = performance.now(), raf = 0, scroll = 0;
 
+  const creditsEl = body.querySelector('#arcade-credits'), insertBtn = body.querySelector('#arcade-insert');
+  const creditsLeft = () => credits();
+  function refreshCoin() {
+    const n = creditsLeft();
+    creditsEl.textContent = Number.isFinite(n) ? String(n) : '∞';
+    insertBtn.hidden = !insertCoin;
+    insertBtn.disabled = !insertCoin || n > 0 || gold() < ARCADE_PLAY_COST;
+  }
+  insertBtn.addEventListener('click', () => {
+    if (!insertCoin) return;
+    insertBtn.disabled = true;
+    Promise.resolve(insertCoin()).then(refreshCoin, refreshCoin);
+  });
+  refreshCoin();
+
+  // Space / tap: jump mid-run, otherwise spend a credit to start the next run.
   const restartOrJump = () => {
-    if (run.status === 'crashed' || run.status === 'arrived') { run = newArcadeRun(); recorded = false; }
-    jumpQueued = true;
+    if (run.status === 'running') { jumpQueued = true; return; }
+    if (starting) return;
+    const begin = () => { if (run.status !== 'ready') { run = newArcadeRun(); recorded = false; } jumpQueued = true; };
+    if (!startRound) { begin(); return; }
+    starting = true;
+    Promise.resolve(startRound()).then(begin).catch(() => {}).finally(() => { starting = false; refreshCoin(); });
   };
   const onKey = (event) => {
     if (!canvas.isConnected) return;
@@ -78,11 +106,15 @@ export function mountArcade(body, { look = {}, onClose = () => {} } = {}) {
       recorded = true;
       const result = recordArcadeScore(arcadeMeters(run));
       best = result.best;
+      const next = creditsLeft() > 0 ? 'Press Space to play again.' : `Out of credits. Insert ${ARCADE_PLAY_COST} gold for ${ARCADE_ROUNDS_PER_PLAY} more rounds.`;
       status.textContent = run.status === 'arrived'
-        ? `You made it to the office in ${run.time.toFixed(1)} seconds.${result.isNew ? ' New personal best!' : ''}`
-        : `Tripped by a ${run.hit} at ${arcadeMeters(run)} m.${result.isNew ? ' New personal best!' : ''} Press Space to try again.`;
+        ? `You made it to the office in ${run.time.toFixed(1)} seconds.${result.isNew ? ' New personal best!' : ''} ${next}`
+        : `Tripped by a ${run.hit} at ${arcadeMeters(run)} m.${result.isNew ? ' New personal best!' : ''} ${next}`;
+      refreshCoin();
     } else if (run.status === 'ready') {
-      status.textContent = 'Press Space or tap Jump to start walking to the office.';
+      status.textContent = creditsLeft() > 0
+        ? 'Press Space or tap Jump to start walking to the office.'
+        : `Insert ${ARCADE_PLAY_COST} gold for ${ARCADE_ROUNDS_PER_PLAY} rounds, then press Space.`;
     } else if (run.status === 'running') {
       status.textContent = '';
     }

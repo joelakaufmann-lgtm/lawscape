@@ -63,3 +63,42 @@ export function drawSleepingJudge(ctx,x,y,t) {
   ctx.fillText('z',23,-91-Math.sin(t)*2);ctx.fillText('Z',31,-101-Math.sin(t)*2);
   ctx.restore();
 }
+
+// Apartment pets. `pet` is { kind: 'cat' | 'dog', name }. Drawn at the
+// actor's ground point; `facing` flips the sprite and `walking` adds a bob.
+export function drawPet(ctx,x,y,t,pet,facing=1,walking=false) {
+  ctx.save(); ctx.translate(x,y);
+  oval(ctx,0,2,11,3.5,'#10191840');
+  ctx.scale(facing<0?-1:1,1);
+  ctx.translate(0,walking?Math.sin(t*10)*.8:0);
+  const swing=walking?Math.sin(t*10)*2:0;
+  if (pet?.kind==='dog') {
+    const coat='#8b6b4a', dark='#6d5238', light='#a98a66';
+    for (const [lx,s] of [[-6,1],[-2,-1],[3,1],[7,-1]]) rounded(ctx,lx-1.2+s*swing*.5,-6,2.6,6.5,1,dark);
+    const wag=walking?0:Math.sin(t*12)*6;
+    line(ctx,[[-10,-11],[-14,-16+wag]],coat,2.2);
+    oval(ctx,0,-9,11,5.5,coat);
+    oval(ctx,2,-7.5,7,3.2,light);
+    oval(ctx,10,-14,5,4.5,coat);
+    oval(ctx,14,-13,3,2,light);
+    oval(ctx,16.5,-13.5,1.1,.9,'#1d1a1a');
+    oval(ctx,8,-18,2.2,3.4,dark);
+    oval(ctx,11.5,-15.5,.75,.75,'#1d1a1a');
+    rounded(ctx,5,-11,5,1.8,.8,'#b4322e');
+    oval(ctx,8,-8.8,1,1,'#cba64b');
+  } else {
+    const coat='#c9a26a', stripe='#a9834f';
+    for (const [lx,s] of [[-5,1],[-2,-1],[2,1],[5,-1]]) rounded(ctx,lx-1+s*swing*.4,-5,2.2,5.5,1,coat);
+    const sway=Math.sin(t*2)*3;
+    line(ctx,[[-8,-9],[-13,-14+sway],[-11,-20+sway]],coat,1.8);
+    oval(ctx,0,-7.5,9,4.5,coat);
+    for (const sx of [-5,-1,3]) line(ctx,[[sx,-11],[sx+1,-6]],stripe,1.1);
+    oval(ctx,8,-12,4.5,4,coat);
+    polygon(ctx,[[5,-14],[6,-19],[8.5,-15]],coat); polygon(ctx,[[9,-15],[11,-19],[12,-14]],coat);
+    polygon(ctx,[[5.6,-14.6],[6.3,-17.6],[7.8,-15]],'#e4b9b0'); polygon(ctx,[[9.5,-15],[10.8,-17.6],[11.5,-14.6]],'#e4b9b0');
+    oval(ctx,7,-12.5,.7,.9,'#2a5a3a'); oval(ctx,10,-12.5,.7,.9,'#2a5a3a');
+    oval(ctx,11.8,-10.8,.7,.5,'#d58a8a');
+    for (const s of [-1,1]) line(ctx,[[12,-10.5],[15,-11.5+s]],'#e8dcc3',.5);
+  }
+  ctx.restore();
+}

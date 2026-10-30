@@ -6,7 +6,7 @@ import { CANADA_PACK, CANADA_SCENARIOS, CANADA_DIGEST } from '../js/data/canada.
 import { SCENARIOS } from '../js/data/ethics.js';
 import { practiceInbox, scenarioMatchesPack } from '../js/data/mail.js';
 import { freshState, state, load, save, reset } from '../js/state.js';
-import { canadaProgress, recordCanadaAnswer, nextCanadaRound, saveCanadaDraft, commitCanadaEmail, normalizeCanadaProgress } from '../js/canada.js';
+import { canadaProgress, saveCanadaDraft, commitCanadaEmail, normalizeCanadaProgress } from '../js/canada.js';
 
 test('Canada content has 25 distinct questions, five complete emails and reachable authority references', async () => {
   const raw=await readFile(new URL('../canada-test/pack.json',import.meta.url),'utf8');
@@ -33,29 +33,18 @@ test('Canada content has 25 distinct questions, five complete emails and reachab
     const words=email.sampleResponse.split(/\s+/).length; assert.ok(words>=100 && words<=200,`${email.id}: ${words} words`);
   }
 });
-test('Canada is opt-in and every question is reachable without altering the legacy difficulty ladder',()=>{
+test('Canada is a full pack: tiered like every pack, in Mixed practice, isolated from the other jurisdictions',()=>{
   const all=[...SCENARIOS,...CANADA_SCENARIOS];
-  for(const casesDone of [0,5,12,100]) {
-    const p={...freshState(),practicePack:'canada-test',casesDone};
-    assert.equal(practiceInbox(p,all).unread.length,25);
-    for(const pack of ['mixed','ca','ny','sqe','mpre','juris']) assert.ok(CANADA_SCENARIOS.every(q=>!scenarioMatchesPack(q,pack)));
-    assert.ok(SCENARIOS.every(q=>!scenarioMatchesPack(q,'canada-test')));
+  assert.ok(CANADA_SCENARIOS.every(q=>q.sourceType==='canada-style'&&!q.isTestPack&&[35,45,60].includes(q.gold)));
+  for(const [casesDone,expected] of [[0,6],[5,14],[12,5],[100,5]]) {
+    const p={...freshState(),practicePack:'canada',casesDone};
+    assert.equal(practiceInbox(p,all).unread.length,expected);
+    const mixed=practiceInbox({...freshState(),practicePack:'mixed',casesDone},all);
+    assert.ok(mixed.unread.some(q=>q.sourceType==='canada-style'),'Canada appears in Mixed');
+    for(const pack of ['ca','ny','sqe','mpre','juris']) assert.ok(CANADA_SCENARIOS.every(q=>!scenarioMatchesPack(q,pack)));
+    assert.ok(CANADA_SCENARIOS.every(q=>scenarioMatchesPack(q,'mixed')&&scenarioMatchesPack(q,'canada')));
+    assert.ok(SCENARIOS.every(q=>!scenarioMatchesPack(q,'canada')));
   }
-});
-test('Canada duplicate answers, all wrong choices and repeat rounds cannot change character rewards or Ethics',()=>{
-  const p={...freshState(),gold:200,ethics:25,streak:3,wrongStreak:2,casesDone:5,correctDone:3,practicePack:'canada-test'};
-  const before=JSON.stringify({...p,canada:null});
-  for(const q of CANADA_PACK.questions) {
-    const wrong=q.options.find(o=>o.id!==q.answer).id;
-    const first=recordCanadaAnswer(p,q.id,wrong,123);
-    assert.equal(recordCanadaAnswer(p,q.id,q.answer,456),first);
-  }
-  assert.equal(p.canada.questionAttempts.length,25);
-  assert.equal(practiceInbox(p,CANADA_SCENARIOS).unread.length,0);
-  nextCanadaRound(p); assert.equal(practiceInbox(p,CANADA_SCENARIOS).unread.length,25);
-  assert.equal(JSON.stringify({...p,canada:null}),before);
-  assert.throws(()=>recordCanadaAnswer(p,'missing','A'));
-  assert.throws(()=>recordCanadaAnswer(p,CANADA_PACK.questions[0].id,'X'));
 });
 test('email commits preserve originals, remain ungraded and survive revisions without rewards',()=>{
   const p=freshState(),id=CANADA_PACK.emails[0].id;
@@ -72,13 +61,15 @@ test('old saves migrate, Canada selections persist, and changed content archives
   try {
     const legacy={...freshState(),gold:432,ethics:62,practicePack:'canada-test'};delete legacy.canada;
     entries.set('lawscape_save_v2',JSON.stringify(legacy));assert.equal(load(),true);
-    recordCanadaAnswer(state,CANADA_PACK.questions[0].id,'A');saveCanadaDraft(state,CANADA_PACK.emails[0].id,'Saved draft');
-    assert.equal(save(),true);assert.equal(load(),true);assert.equal(state.practicePack,'canada-test');assert.equal(state.gold,432);assert.equal(state.ethics,62);
-    assert.equal(state.canada.questionAttempts.length,1);assert.equal(state.canada.drafts[CANADA_PACK.emails[0].id],'Saved draft');
+    assert.equal(state.practicePack,'canada','the pre-0.8.0 pack id maps to the full pack');
+    saveCanadaDraft(state,CANADA_PACK.emails[0].id,'Saved draft');
+    assert.equal(save(),true);assert.equal(load(),true);assert.equal(state.practicePack,'canada');assert.equal(state.gold,432);assert.equal(state.ethics,62);
+    assert.equal(state.canada.drafts[CANADA_PACK.emails[0].id],'Saved draft');
+    assert.equal('questionAttempts' in state.canada,false,'questions now use the shared seen list');
     const prior={...state.canada,digest:'older-content'};const next=normalizeCanadaProgress(prior);
-    assert.equal(next.questionAttempts.length,0);assert.equal(next.archives.length,1);assert.equal(next.archives[0].questionAttempts.length,1);
+    assert.deepEqual(next.drafts,{});assert.equal(next.archives.length,1);assert.equal(next.archives[0].drafts[CANADA_PACK.emails[0].id],'Saved draft');
     globalThis.localStorage.setItem=()=>{throw new Error('quota');};assert.equal(save(),false);
-    reset();assert.equal(canadaProgress(state).questionAttempts.length,0);
+    reset();assert.deepEqual(canadaProgress(state).drafts,{});
   } finally {delete globalThis.localStorage;}
 });
 test('downloaded source receipts match the exact original bytes',async()=>{

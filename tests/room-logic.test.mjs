@@ -62,6 +62,10 @@ test('walkability skips per-player upgrade props and blocks solid shared furnitu
   assert.equal(walkable('associates', 18, 5), false, 'out of bounds');
   assert.equal(walkable('office', 9, 8), true, 'second paralegal desk is a per-player upgrade');
   assert.equal(walkable('office', 6, 1), false, 'the office desk is shared furniture');
+  assert.equal(walkable('street', 4, 2), true, 'street spawn');
+  assert.equal(walkable('street', 0, 2), false, 'tree at the west end');
+  assert.equal(walkable('street', 1, 0), true, 'no wall rim outdoors');
+  assert.equal(walkable('street', 4, 0), false, 'facade');
 });
 
 test('move: good path is accepted and broadcast to everyone but the sender', () => {
@@ -300,7 +304,7 @@ test('a worst-case connection record fits a Durable Object attachment', () => {
   const conn = createConnection({ cid: 'x'.repeat(36), pid: 'abcdef012345', name: 'N'.repeat(LIMITS.nameChars) }, T0);
   conn.joined = true; conn.zone = 'associates'; conn.label = 'L'.repeat(LIMITS.labelChars);
   conn.path = Array.from({ length: LIMITS.pathSteps }, (_, i) => [10 + (i % 7), 10 + (i % 3)]);
-  conn.pathFrom = [17, 12]; conn.status = { kind: 'journal', taskId: 'capstone', pack: 'canada-test' };
+  conn.pathFrom = [17, 12]; conn.status = { kind: 'journal', taskId: 'capstone', pack: 'canada' };
   conn.look = { skin: 6, hair: 17, hairStyle: 15, eye: 5, facialHair: 6, faceShape: 2, suitColor: '#1f3a5f', tieColor: '#6e2436', shirtColor: '#f3eee1', outfit: 'trousers', silhouette: 'tailored', glasses: true, equipped: ['tie-brass', 'case-oxblood', 'pin-silver', 'frames-tortoise'] };
   conn.violations = [T0, T0, T0]; conn.desk = 'B3'; conn.deskSince = T0;
   assert.ok(JSON.stringify({ cid: conn.cid, seq: 1e9, conn }).length < 1900);

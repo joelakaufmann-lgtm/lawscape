@@ -18,7 +18,7 @@ test('all 118 released questions retain their content and identifiers after relo
 
 test('California and New York remain isolated at every tier, with readable sources and explanations', async () => {
   assert.deepEqual(PRACTICE_PACKS.map(pack => [pack.id, pack.count]),
-    [['mixed', 171], ['ca', 20], ['ny', 33], ['mpre', 69], ['sqe', 28], ['juris', 21], ['canada-test', 25]]);
+    [['juris', 21], ['mixed', 196], ['ca', 20], ['ny', 33], ['mpre', 69], ['sqe', 28], ['canada', 25]]);
   for (const [pack, jurisdiction] of [['ca', 'California'], ['ny', 'New York']]) {
     const reached = new Set();
     for (const casesDone of [0, 5, 12]) {

@@ -8,9 +8,12 @@
 import { freshApprenticeship } from './apprenticeship.js';
 import { normalizeAppearance } from './data/appearance.js';
 import { freshCanadaProgress, normalizeCanadaProgress } from './canada.js';
+import { petKind, sanitizePetName } from './data/pets.js';
 
 const SAVE_KEY = 'lawscape_save_v2'; // Preserve the legacy origin/key on migration.
-export const SCHEMA_VERSION = 6;
+// 7: arcade credits, drunk-at-work ledger, espresso cooldown, pet, per-pack
+//    correct counts, Canada promoted from 'canada-test' to 'canada'.
+export const SCHEMA_VERSION = 7;
 // 'local' writes the character to localStorage; 'server' means an online
 // account owns the character and save() must never write it to this browser.
 let persistence = 'local';
@@ -65,7 +68,12 @@ export function freshState() {
     moneybagsStolen: false,    // client gold taken from Jim Hardsell's safe
     moneybagsPurchases: 0,     // upgrade purchases made after taking the gold
     seen: [],              // scenario ids already served this cycle
-    practicePack: 'mixed', // 'mixed' | 'sqe' | 'mpre' | 'juris' | 'ca' | 'ny' | 'canada-test'
+    practicePack: 'juris', // 'juris' | 'mixed' | 'sqe' | 'mpre' | 'ca' | 'ny' | 'canada'; new attorneys start on the originals
+    packCorrect: {},       // correct answers per practice pack id, e.g. { sqe: 5 } (wardrobe unlocks)
+    arcadeCredits: 0,      // Briefcase Dash rounds already paid for
+    drunkPenaltyFor: 0,    // slowUntil value of the drinking episode already charged at work
+    lastEspressoAt: 0,     // epoch ms of the last office espresso (cooldown)
+    pet: null,             // null | { kind: 'cat' | 'dog', name, adoptedAt }
     upgrades: [],
     zone: 'office',
     pos: { x: 6, y: 10 },
@@ -153,9 +161,14 @@ export function normalizeSave(data) {
   }
   if (!Array.isArray(next.upgrades)) next.upgrades = [];
   next.upgrades = [...new Set(next.upgrades.map((id) => id === 'office_window' ? 'work_phone' : id))];
-  for (const key of ['slowUntil', 'docReviewStartedAt', 'lastDocReviewAt', 'lastStudyTickAt', 'endedAt', 'lastRestAt', 'billableStudyMs']) {
+  for (const key of ['slowUntil', 'docReviewStartedAt', 'lastDocReviewAt', 'lastStudyTickAt', 'endedAt', 'lastRestAt', 'billableStudyMs', 'arcadeCredits', 'drunkPenaltyFor', 'lastEspressoAt']) {
     if (!Number.isFinite(next[key]) || next[key] < 0) next[key] = 0;
   }
+  if (!next.packCorrect || typeof next.packCorrect !== 'object' || Array.isArray(next.packCorrect)) next.packCorrect = {};
+  next.pet = next.pet && typeof next.pet === 'object' && petKind(next.pet.kind)
+    ? { kind: next.pet.kind, name: sanitizePetName(next.pet.name), adoptedAt: Number.isFinite(next.pet.adoptedAt) ? next.pet.adoptedAt : 0 }
+    : null;
+  if (next.practicePack === 'canada-test') next.practicePack = 'canada';
   if (typeof next.hintScenarioId !== 'string') next.hintScenarioId = null;
   if (!Array.isArray(next.seen)) next.seen = [];
   if (!next.pos || !Number.isFinite(next.pos.x) || !Number.isFinite(next.pos.y)) next.pos = { x: 6, y: 10 };

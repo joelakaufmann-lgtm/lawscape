@@ -62,7 +62,8 @@ test('status messages clamp labels, set poses and keep the local label separatel
 });
 
 test('client messages are validated against zones, adjacency, desks and whitelists', () => {
-  assert.equal(SHARED_ZONES.includes('apartment'), false); assert.ok(SHARED_ZONES.includes('associates'));
+  assert.equal(SHARED_ZONES.includes('apartment'), false); assert.ok(SHARED_ZONES.includes('associates')); assert.ok(SHARED_ZONES.includes('street'));
+  assert.equal(validateClientMessage({ v: 1, t: 'join', zone: 'street', x: 4, y: 2 }).ok, true);
   assert.equal(validateClientMessage({ v: 1, t: 'join', zone: 'apartment', x: 1, y: 1 }).code, 'bad_zone');
   assert.equal(validateClientMessage({ v: 1, t: 'join', zone: 'office', x: 0, y: 5 }).code, 'bad_move');
   assert.equal(validateClientMessage({ v: 1, t: 'join', zone: 'office', x: 6, y: 10, seq: 2 }).ok, true);
@@ -82,7 +83,7 @@ test('client messages are validated against zones, adjacency, desks and whitelis
 });
 
 test('status labels are composed from trusted numbers and derived from interface context', () => {
-  assert.equal(composeStatusLabel('study', { pack: 'canada-test' }, { streak: 2 }), 'Studying Canada test · streak x2');
+  assert.equal(composeStatusLabel('study', { pack: 'canada' }, { streak: 2 }), 'Studying Canada · streak x2');
   assert.equal(composeStatusLabel('review', {}, { documentsReviewed: 4 }), 'Document review · cycle 5');
   assert.equal(composeStatusLabel('idle', { zone: 'sidebar' }), 'Exploring The Sidebar — Local Lounge');
   assert.equal(composeStatusLabel('journal', { taskId: 'missing' }), 'In the journal');

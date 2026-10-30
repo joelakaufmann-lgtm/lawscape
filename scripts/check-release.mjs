@@ -85,6 +85,6 @@ console.log(JSON.stringify({ version, commit: manifest.commit, files: manifest.f
   avatars: { hairStyles: HAIR_STYLES.length, hairColors: HAIR_COLORS.length, facialHair: FACIAL_HAIR.length },
   writingAssignments: WRITING_TASKS.length, syntheticFiles: DOCUMENT_PACKS.length,
   documents: DOCUMENT_PACKS.reduce((n, pack) => n + pack.documents.length, 0),
-  canadaTest: { version: CANADA_PACK.version, questions: CANADA_SCENARIOS.length, emailAssignments: CANADA_PACK.emails.length, practitionerReview: 'pending' },
+  canada: { version: CANADA_PACK.version, questions: CANADA_SCENARIOS.length, emailAssignments: CANADA_PACK.emails.length, practitionerReview: 'pending' },
 }, null, 2));
 console.log('Release package checks passed.');

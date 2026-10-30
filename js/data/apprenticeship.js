@@ -146,9 +146,21 @@ export const CAPSTONE = {
   reply: 'Lantern needs release authority (L2.1) and date confirmation (L4.1). Harbor needs instructions about the changed payment sequence (H3.1) and better inspection evidence (H4.1). Both AI drafts overstate the record (L5.1 and H5.1). Under H6.2, your handoff should preserve those distinctions and identify who owns each next action. You have survived a day in which “pls fix” was considered a complete brief.',
 };
 
+// Wardrobe catalog. `look` is layered onto appearanceLook() while equipped;
+// `slot` makes items mutually exclusive; `requires` names an upgrade that must
+// be owned before purchase; `unlock` grants the item for free once the player
+// has that many correct answers in that practice pack. Never a grading effect.
 export const COSMETICS = [
-  { id: 'tie-brass', label: 'Partner’s gold tie', price: 30, note: 'A little ambition. Absolutely no grading advantage.', tie: '#cba64b' },
-  { id: 'case-oxblood', label: 'Oxblood briefcase', price: 60, note: 'Carries documents and unreasonable expectations.', briefcase: '#713c46' },
+  { id: 'tie-brass', label: 'Partner’s gold tie', price: 30, note: 'A little ambition. Absolutely no grading advantage.', look: { tie: '#cba64b' } },
+  { id: 'case-oxblood', label: 'Oxblood briefcase', price: 60, note: 'Carries documents and unreasonable expectations.', look: { briefcase: '#713c46' } },
+  { id: 'pocket-square', label: 'Silk pocket square', price: 40, note: 'Folded once, with intent.', look: { pocketSquare: '#d9b656' } },
+  { id: 'earrings-gold', label: 'Gold earrings', price: 50, note: 'Catch the light during cross-examination.', look: { earrings: '#e6c45c' } },
+  { id: 'sunglasses', label: 'Sunglasses', price: 60, note: 'For the walk from the courthouse to The Sidebar.', look: { sunglasses: true } },
+  { id: 'necklace-pearl', label: 'Pearl necklace', price: 80, note: 'Seven pearls. Zero objections.', look: { necklace: '#f1ecdf' } },
+  { id: 'watch-gold', label: 'Gold wristwatch', price: 120, note: 'Billable to the tenth of an hour.', look: { watch: '#c9a53a' } },
+  { id: 'outfit-tuxedo', label: 'Tuxedo', price: 300, slot: 'formal', requires: 'wardrobe_rack', note: 'Satin lapels and a bow tie. Replaces the suit while worn.', look: { formal: 'tuxedo' } },
+  { id: 'outfit-gown', label: 'Evening gown', price: 300, slot: 'formal', requires: 'wardrobe_rack', note: 'Floor length, in your suit color. Replaces the suit while worn.', look: { formal: 'gown' } },
+  { id: 'wig-powdered', label: 'Powdered barrister’s wig', price: 0, unlock: { pack: 'sqe', correct: 5 }, note: 'Earned by answering five England & Wales questions correctly. Horsehair, allegedly.', look: { wig: true } },
 ];
 
 export function evidenceAt(anchor) {

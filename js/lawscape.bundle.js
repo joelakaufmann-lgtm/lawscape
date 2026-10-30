@@ -31,10 +31,11 @@
     const { showDialogue, hideDialogue, dialogueOpen } = require("js/ui/dialogue.js");
     const { createApprenticeshipUI, escapeHtml } = require("js/ui/apprenticeship.js");
     const { pendingAttempt, taskAttempts, capstoneReady } = require("js/apprenticeship.js");
-    const { WRITING_TASKS, CAPSTONE } = require("js/data/apprenticeship.js");
+    const { WRITING_TASKS, CAPSTONE, COSMETICS } = require("js/data/apprenticeship.js");
+    const { PET_COST, PET_KINDS, DEFAULT_PET_NAME } = require("js/data/pets.js");
     const { ALL_MAIL_SCENARIOS, canAccessBarMail, practiceInbox, billableMessageOpen } = require("js/data/mail.js");
     const { BAR_DRINKS, movementMultiplier, archiveDisbarredRun, readBillableBoard } = require("js/lounge.js");
-    const { appearanceLook, normalizeAppearance } = require("js/data/appearance.js");
+    const { appearanceLook, normalizeAppearance, randomAppearance, randomGender } = require("js/data/appearance.js");
     const { mountAppearanceEditor } = require("js/ui/appearance.js");
     const { mountArcade } = require("js/ui/arcade.js");
     const { SIDEBAR_ROOM, SIDEBAR_TOPICS, sidebarTopic } = require("js/data/sidebar.js");
@@ -43,7 +44,7 @@
     const { PRACTICE_PACKS } = require("js/data/practice-packs.js");
     const { CANADA_PACK } = require("js/data/canada.js");
     const { canadaProgress } = require("js/canada.js");
-    const { renderCanadaEmail, canadaRulesHtml } = require("js/ui/canada.js");
+    const { renderCanadaEmail } = require("js/ui/canada.js");
     const { APARTMENT_FOOD_COST, DOC_REVIEW_CYCLE_MS, DOC_REVIEW_REWARD, LINDA_TIP_COST, RILEY_HINT_COST, WHISKEY_ETHICS_DAMAGE, MONEYBAGS_SAFE_GOLD, MONEYBAGS_ETHICS_DAMAGE, LAWYER_ASSISTANCE_PHONE, LAWYER_ASSISTANCE_URL, formatBillableTime, rileyHintEligible, } = require("js/data/work.js");
     const { GAME_VERSION, HR_CATEGORIES, findHrCategory, hrIssueUrl, hrReportText, } = require("js/data/feedback.js");
 
@@ -82,7 +83,7 @@
         if (!inGame) return;
         act({ type: 'set_practice_pack', id: pack }).then(() => {
           if (!canAccessBarMail(state, !!claimedDesk)) enterZone('office');
-          openEmail(pack === 'canada-test' ? 'all' : 'practice');
+          openEmail(pack === 'canada' ? 'all' : 'practice');
         }).catch(() => {});
       },
       onWriting: (id) => openEmail('writing', id),
@@ -120,17 +121,43 @@
 
     function buildNpcs() {
       if (zone.id === 'sidebar') zone.props.find((prop) => prop.type === 'scoreboard').entries = readBillableBoard();
-      npcs = (zone.npcs || []).map((def) => ({
-        def,
-        actor: new Actor(def.x, def.y, def.look, { npc: def }),
-      }));
+      npcs = (zone.npcs || []).map((def) => {
+        const actor = new Actor(def.x, def.y, typeof def.look === 'function' ? def.look() : def.look, { npc: def, speed: def.speed || 3 });
+        if (def.seated) actor.activity = 'sitting';
+        if (def.facing) actor.facing = def.facing;
+        return { def, actor, wander: def.wander ? { nextAt: 0 } : null };
+      });
+    }
+
+    // Wandering NPCs (the apartment pet) stroll to a random free tile every few
+    // seconds; everyone else stays put.
+    function updateNpcs(dt) {
+      const t = now();
+      for (const npc of npcs) {
+        if (!npc.wander || (npc.def.visible && !npc.def.visible())) continue;
+        npc.actor.update(dt);
+        if (npc.actor.walking || t < npc.wander.nextAt) continue;
+        for (let tries = 0; tries < 20; tries++) {
+          const x = 1 + Math.floor(Math.random() * Math.max(1, zone.w - 2)), y = 1 + Math.floor(Math.random() * Math.max(1, zone.h - 2));
+          if (!isWalkable(x, y) || (x === player.tileX && y === player.tileY) || zone.portals.some((portal) => portal.x === x && portal.y === y)) continue;
+          const path = findPath(isWalkable, zone.w, zone.h, npc.actor.tileX, npc.actor.tileY, x, y);
+          if (path && path.length) { npc.actor.setPath(path); break; }
+        }
+        npc.wander.nextAt = t + 2000 + Math.random() * 2000;
+      }
     }
 
     function enterZone(id, pos = null) {
       if (docReview.active) stopDocumentReview(false);
       stopWatchingTV();
       state.zone = id;
-      dispatch({ type: 'set_zone', zone: id }, { persist: false }).catch(() => {});
+      dispatch({ type: 'set_zone', zone: id }, { persist: false }).then(({ result, ended }) => {
+        // Arriving at work impaired costs Ethics; the reducer decides, we only report it.
+        if (!result?.ethicsLost) return;
+        updateHUD();
+        if (result.disbarred || ended) { gameOver(`${DEFAULT_GAMEOVER_TEXT} You reported to ${ZONES[id].name} impaired.`); return; }
+        toast(`Showing up at ${ZONES[id].name} impaired costs −${result.ethicsLost} Ethics. Sober up first.`);
+      }).catch(() => {});
       zone = currentZone();
       const p = pos || zone.spawn;
       state.pos = { x: p.x, y: p.y };
@@ -165,7 +192,7 @@
           if (npc.actor.tileX === cx && npc.actor.tileY === cy) {
             return {
               tiles: [{ x: cx, y: cy }],
-              label: `Talk to ${npc.def.name}`,
+              label: npc.def.talk === 'pet' ? `Pet ${npc.def.name}` : `Talk to ${npc.def.name}`,
               approach: { x: cx, y: cy },
               run: () => talkTo(npc.def),
             };
@@ -306,6 +333,7 @@
         case 'flavor_coffee':
           drinkCoffee();
           break;
+        case 'espresso': drinkEspresso(); break;
         case 'eat_ramen': eatApartmentFood('ramen'); break;
         case 'cook_meal': eatApartmentFood('meal'); break;
         case 'watch_tv': watchTV(); break;
@@ -330,6 +358,13 @@
         });
       } else if (def.talk === 'sidebar_host') {
         openBartender();
+      } else if (def.talk === 'pet') {
+        const pet = state.pet;
+        if (!pet) return;
+        const lines = pet.kind === 'cat'
+          ? [`${pet.name} purrs and walks away mid-sentence.`, `${pet.name} knocks a treatise off the shelf and watches you pick it up.`, `${pet.name} sits on your briefcase. Court is adjourned.`]
+          : [`${pet.name} wags so hard the whole apartment shakes.`, `${pet.name} brings you a shoe. It is not your shoe.`, `${pet.name} has reviewed the file and finds it delicious.`];
+        showDialogue({ name: `${pet.name} the ${pet.kind}`, text: lines[Math.floor(Math.random() * lines.length)] });
       } else if (def.talk === 'jim') {
         const lines = [
           'Jim reminds you of his email that said “pls fix.”',
@@ -382,7 +417,8 @@
 
       if (!improvedOffice) lines.push('Get back to work.');
       if (!paralegal) lines.push('We should hire a paralegal.');
-      if (!chair) lines.push('I sure wish I could sit down.', 'I can’t wait to go home.');
+      if (!chair) lines.push('This chair has been broken since 1987. Every time I lean back, it leans further.', 'One caster is gone. I steer with my feet.', 'I can’t wait to go home.');
+      if (chair) lines.push('The new chair has five wheels. All of them.');
       if (plants) {
         lines.push('Can you please water the plants?', 'These plants help make this place feel like less of a prison.');
       }
@@ -441,7 +477,7 @@
             fn: () => {
               act({ type: 'buy_tip' }).then(({ result }) => {
                 const tip = tipPool(state)[result.tipIndex];
-                showDialogue({ name: result.source === 'canada' ? 'Linda — Canada test guidance · review required' : 'Linda Firestone — US-source Ethics Tip', text: tip });
+                showDialogue({ name: result.source === 'canada' ? 'Linda — Canada rule briefing · review pending' : 'Linda Firestone — US-source Ethics Tip', text: tip });
               }).catch(() => {});
             },
           },
@@ -453,9 +489,14 @@
     // ---------------------------------------------------------------------------
     // Travel menu — the world beyond is the office complex, apartment, and court
     // ---------------------------------------------------------------------------
+    // Quick travel (T key / Travel button). Walking out of any building door leads
+    // onto Juris Avenue instead; this menu is the shortcut.
     function openTravelMenu() {
       if (docReview.active) stopDocumentReview(false);
       const choices = [];
+      if (state.zone !== 'street') {
+        choices.push({ label: 'Walk out to Juris Avenue', fn: () => enterZone('street') });
+      }
       if (state.zone !== 'office') {
         choices.push({ label: 'Go to the Law Office', fn: () => enterZone('office') });
       }
@@ -474,7 +515,7 @@
       choices.push({ label: 'Stay here', fn: () => {} });
       showDialogue({
         name: 'Where to, counselor?',
-        text: 'You step out to the street. Where to?',
+        text: 'Quick travel. Where to?',
         choices,
       });
     }
@@ -532,13 +573,13 @@
 
     function renderInbox() {
       const pool = practiceInbox(state,ALL_MAIL_SCENARIOS);
-      const isCanada = state.practicePack === 'canada-test';
+      const isCanada = state.practicePack === 'canada';
       const writingTasks = isCanada ? CANADA_PACK.emails.map(task => ({...task, partner: task.fromName, skill: task.jurisdiction})) : [...WRITING_TASKS,CAPSTONE];
       const showPractice = mailFolder !== 'writing', showWriting = mailFolder !== 'practice';
       const e = escapeHtml;
       $('email-inbox').innerHTML = `<header class="mail-inbox-heading"><div><span class="mail-eyebrow">HARDSELL &amp; FIRESTONE · INTERNAL MAIL</span><h2>${showPractice && showWriting ? 'Your inbox' : showWriting ? 'Writing assignments' : 'Ethics practice inbox'}</h2><p>Open a subject line to read and reply. All senders and correspondence are synthetic.</p></div><span class="mail-device">${hasUpgrade('work_phone') ? 'Work phone connected' : 'Office terminal'}</span></header>`
         + (pendingAttempt(state) ? '<p class="mail-notice">A partner reply is pending. You can read your mail; another graded submission waits for that reply.</p>' : '')
-        + (isCanada ? '<p class="mail-notice canada-banner"><b>CANADA TEST PACK · Practitioner review required.</b> Ontario, BC and Saskatchewan exercises. All 25 questions are available at every level. No Ethics, gold or streak effects. <a href="canada-test/overview.html" target="_blank" rel="noopener">Review overview</a> · <a href="canada-test/review.html" target="_blank" rel="noopener">Full content and reviewer notes</a></p>' : '')
+        + (isCanada ? '<p class="mail-notice">Canada pack · Ontario, BC and Saskatchewan. Questions pay gold and cost Ethics like every pack; practitioner review of the answer key is pending. <a href="canada-test/review.html" target="_blank" rel="noopener">Reviewer notes</a></p>' : '')
         + (showWriting ? `<h3 class="mail-group-title">Partner correspondence · ${isCanada ? '5 Canadian email assignments' : 'Writing'}</h3><div class="mail-list">${writingTasks.map((task) => {
           const latest = isCanada ? canadaProgress(state).emailAttempts.filter(a => a.taskId === task.id).at(-1) : taskAttempts(state,task.id).at(-1);
           const locked = task.id === 'capstone' && !capstoneReady(state);
@@ -600,12 +641,7 @@
         ? `You need ${RILEY_HINT_COST} gold for Riley to research this rule.`
         : 'Pay Riley to research the relevant rule before you answer.';
       hintEl.classList.toggle('hidden', !canAskRiley);
-      if (s.isTestPack) {
-        sourceEl.textContent = `${s.jurisdiction} · CANADA TEST · practitioner review required`;
-        hintEl.classList.add('hidden');
-        ruleEl.innerHTML = `<details class="canada-rules"><summary>Free rule briefing · source scope</summary>${canadaRulesHtml(s.ruleIds)}</details>`;
-        ruleEl.classList.remove('hidden');
-      }
+      if (s.sourceType === 'canada-style') sourceEl.textContent = `${s.jurisdiction} · CANADA · practitioner review pending`;
 
       const wrap = $('email-choices');
       wrap.innerHTML = '';
@@ -655,18 +691,6 @@
       const verdictEl = $('email-verdict');
       const explainEl = $('email-explain');
       const deltaEl = $('email-delta');
-      if (result.testPack) {
-        verdictEl.textContent = result.matchesProposedKey ? 'Matches the proposed answer key.' : 'Compare this choice with the proposed answer key.';
-        verdictEl.className = result.matchesProposedKey ? 'good' : '';
-        const q = CANADA_PACK.questions.find(item => item.id === s.id);
-        explainEl.innerHTML = `<p>${escapeHtml(choice.why)}</p><p><b>Decisive fact:</b> ${escapeHtml(q.decisiveFact)}</p><details><summary>Review every option</summary>${q.options.map(o=>`<p><b>${escapeHtml(o.id)}${o.id===q.answer?' · Proposed answer':''}:</b> ${escapeHtml(o.text)}<br>${escapeHtml(o.explanation)}</p>`).join('')}</details>`;
-        appendScenarioSource(explainEl, s);
-        deltaEl.textContent = `Test practice only · No Ethics, gold or streak effects · ${save() ? 'Saved' : 'Session only — storage unavailable'}`;
-        $('email-replies').classList.add('hidden'); $('email-result').classList.remove('hidden');
-        $('email-continue').textContent = 'Back to Canada inbox';
-        $('email-continue').onclick = () => openEmail(mailFolder);
-        return;
-      }
       $('email-hint').classList.add('hidden');
       if (result.correct) {
         verdictEl.textContent = '✔ Sound professional judgment.';
@@ -677,9 +701,15 @@
           : 'That is the defensible course — engagement decisions, trust money, and candor calls '
             + 'like this one are exactly where licenses are won and lost.';
         explainEl.textContent = `${s.rule}. ${s.explanation || successContext}`;
-        deltaEl.innerHTML = `<span class="gain">+${result.earned} gold</span>`
-          + (result.healed > 0 ? ` &nbsp; <span class="gain">+${result.healed} Ethics (streak x${result.streak}!)</span>`
-                               : ` &nbsp; <span class="muted">streak x${result.streak} — one more for an Ethics heal</span>`);
+        const bonus = result.multiplier > 1 ? ` <span class="muted">· streak bonus ×${result.multiplier}</span>` : '';
+        const streakNote = result.healed > 0 ? `<span class="gain">+${result.healed} Ethics (streak x${result.streak}!)</span>`
+          : result.streak >= 2 ? `<span class="muted">streak x${result.streak} · Ethics already full</span>`
+          : `<span class="muted">streak x${result.streak} — one more for an Ethics heal</span>`;
+        deltaEl.innerHTML = `<span class="gain">+${result.earned} gold</span>${bonus} &nbsp; ${streakNote}`;
+        if (result.unlocked?.length) {
+          const names = result.unlocked.map((id) => COSMETICS.find((item) => item.id === id)?.label || id).join(', ');
+          toast(`Wardrobe unlocked: ${names}. Find it in Journal → Wardrobe.`);
+        }
       } else {
         verdictEl.textContent = result.grade === 'very_wrong'
           ? '✖ Serious ethics violation.'
@@ -743,7 +773,7 @@
     $('email-close').addEventListener('click', closeEmail);
     $('email-pack').addEventListener('change', (event) => {
       act({ type: 'set_practice_pack', id: event.target.value })
-        .then(() => openEmail(state.practicePack === 'canada-test' ? 'all' : 'practice')).catch(() => {});
+        .then(() => openEmail(state.practicePack === 'canada' ? 'all' : 'practice')).catch(() => {});
     });
     $('email-inbox-open').addEventListener('click', () => openEmail());
     $('email-back').addEventListener('click', () => openEmail(mailFolder));
@@ -871,7 +901,13 @@
       if (state.zone !== 'sidebar') return;
       const body = openPanel('Briefcase Dash — The Sidebar Arcade');
       $('panel-inner').classList.add('arcade-panel');
-      mountArcade(body, { look: playerLook() });
+      mountArcade(body, {
+        look: playerLook(),
+        credits: () => state.arcadeCredits || 0,
+        gold: () => state.gold,
+        insertCoin: () => act({ type: 'arcade_play' }),
+        startRound: () => act({ type: 'arcade_round' }),
+      });
     }
 
     function openJudgeStatus() {
@@ -1096,6 +1132,50 @@
         row.appendChild(btn);
         body.appendChild(row);
       }
+      if (catalog === APARTMENT_UPGRADES) appendPetRow(body);
+    }
+
+    // Pet adoption lives in the apartment's furniture catalog: pick a kind, name
+    // it, pay the fee once. The pet then wanders the apartment.
+    function appendPetRow(body) {
+      const row = document.createElement('div');
+      row.className = 'row-item';
+      const pet = state.pet;
+      row.innerHTML = `<div class="grow"><h4>Adopt a pet</h4><p>${pet
+        ? `${escapeHtml(pet.name)} the ${pet.kind} already lives here.`
+        : 'A cat or a dog to keep you company at home. You name it. No grading effect; considerable morale effect.'}</p></div>
+        <div class="meta">🪙 ${PET_COST}</div>`;
+      const btn = document.createElement('button');
+      btn.className = 'small';
+      if (pet) { btn.textContent = 'Adopted'; btn.disabled = true; }
+      else { btn.textContent = 'Adopt'; btn.disabled = state.gold < PET_COST; btn.onclick = openAdoptionForm; }
+      row.appendChild(btn);
+      body.appendChild(row);
+    }
+
+    function openAdoptionForm() {
+      const body = openPanel('Adopt a pet');
+      let kind = PET_KINDS[0].id;
+      body.innerHTML = `<div class="help-lede"><p>Choose a companion and give them a name (up to 24 characters). The adoption fee is ${PET_COST} gold, paid once.</p></div>
+        <div id="pet-kind" class="pill-row" role="group" aria-label="Pet"></div>
+        <p id="pet-kind-note" class="muted"></p>
+        <label class="desk-label" for="pet-name">Name</label><input id="pet-name" type="text" maxlength="24" placeholder="${DEFAULT_PET_NAME}">
+        <p id="pet-error" class="desk-error" role="alert"></p>
+        <div class="sidebar-compose-actions"><button type="button" id="pet-adopt">Adopt · ${PET_COST} gold</button><button type="button" id="pet-back" class="small">Back to catalog</button></div>`;
+      const kinds = () => {
+        pillRow($('pet-kind'), PET_KINDS.map((item) => item.label), (i) => PET_KINDS[i].id === kind, (i) => { kind = PET_KINDS[i].id; kinds(); });
+        $('pet-kind-note').textContent = PET_KINDS.find((item) => item.id === kind).note;
+      };
+      kinds();
+      $('pet-back').onclick = () => openShop('Apartment Upgrades', APARTMENT_UPGRADES);
+      $('pet-adopt').onclick = () => {
+        $('pet-adopt').disabled = true;
+        act({ type: 'adopt_pet', kind, name: $('pet-name').value }).then(({ result }) => {
+          $('panel').classList.add('hidden');
+          buildNpcs();
+          showDialogue({ name: `${result.name} the ${result.kind}`, text: `${result.name} moves in and immediately claims the rug. −${PET_COST} gold, +1 roommate.` });
+        }).catch((error) => { $('pet-error').textContent = error.message; $('pet-adopt').disabled = false; });
+      };
     }
 
     function openRecord() {
@@ -1129,6 +1209,12 @@
     function drinkCoffee() {
       act({ type: 'coffee' }).then(({ result }) => {
         toast(`You drink a strong cup of coffee. +${result.healed} Ethics.`);
+      }).catch(() => {});
+    }
+
+    function drinkEspresso() {
+      act({ type: 'espresso' }).then(({ result }) => {
+        toast(`You pull a double shot. +${result.healed} Ethics.${result.sobered ? ' The fog lifts.' : ''}`);
       }).catch(() => {});
     }
 
@@ -1294,7 +1380,7 @@
       const body = openPanel('How to play');
       body.innerHTML = `
         <div class="row-item"><div class="grow"><h4>Your first five minutes</h4><p>Open <b>Journal</b> for a guided firm assignment, or <b>BarMail</b> in your office for a quick ethics question. Open a subject line, read the facts, choose a response and read the explanation.</p></div></div>
-        <div class="row-item"><div class="grow"><h4>Choose your practice</h4><p>Use <b>Journal → Firm jurisdictions</b> or BarMail’s practice selector: California, New York, US MPRE-style, England &amp; Wales SQE-style, or LawScape original dilemmas. Mixed practice includes all five. The inbox shows your current difficulty tier.</p></div></div>
+        <div class="row-item"><div class="grow"><h4>Choose your practice</h4><p>Use <b>Journal → Firm jurisdictions</b> or BarMail’s practice selector: LawScape original dilemmas (where new attorneys start), California, New York, US MPRE-style, England &amp; Wales SQE-style, or Canada. Mixed practice includes all six. The inbox shows your current difficulty tier.</p></div></div>
         <div class="row-item"><div class="grow"><h4>Move, explore, customize</h4><p>Click or tap to walk and interact; WASD and arrow keys also move. Use <b>Travel</b> for locations and <b>Journal → Wardrobe</b> to change your attorney. The Work Phone unlocks BarMail outside your office.</p></div></div>
         <div class="row-item"><div class="grow"><h4>Gold and Ethics</h4><p>Correct ethics answers earn gold. Repeated wrong answers cause increasing Ethics damage. Correct streaks and resting in your apartment help restore Ethics. At zero Ethics the character run ends: gold, upgrades and drafts are reset. Read feedback before the next reply.</p></div></div>
         <div class="row-item"><div class="grow"><h4>Your first firm day</h4><p>Read the two synthetic files, flag evidence and complete six writing assignments to unlock the capstone. Committing locks each reply until the partner responds. Checklist choices receive authored feedback and study gold without Ethics damage; your prose is saved for self-comparison, not graded by live AI.</p></div></div>
@@ -1573,6 +1659,11 @@
       $('title-screen').classList.add('hidden');
       buildCreator();
       $('creator').classList.remove('hidden');
+    });
+
+    $('btn-creator-random').addEventListener('click', () => {
+      Object.assign(pick, randomAppearance(), { gender: randomGender() });
+      buildCreator();
     });
 
     $('btn-creator-back').addEventListener('click', () => {
@@ -1913,6 +2004,7 @@
         desk.tick();
         player.speed = PLAYER_BASE_SPEED * movementMultiplier(state, now());
         player.update(dt);
+        updateNpcs(dt);
         updateDocumentReview(now());
         trackBillableStudy(dt);
         state.pos = { x: player.tileX, y: player.tileY };
@@ -2017,9 +2109,12 @@
     const { freshApprenticeship } = require("js/apprenticeship.js");
     const { normalizeAppearance } = require("js/data/appearance.js");
     const { freshCanadaProgress, normalizeCanadaProgress } = require("js/canada.js");
+    const { petKind, sanitizePetName } = require("js/data/pets.js");
 
     const SAVE_KEY = 'lawscape_save_v2'; // Preserve the legacy origin/key on migration.
-    const SCHEMA_VERSION = 6;
+    // 7: arcade credits, drunk-at-work ledger, espresso cooldown, pet, per-pack
+    //    correct counts, Canada promoted from 'canada-test' to 'canada'.
+    const SCHEMA_VERSION = 7;
     // 'local' writes the character to localStorage; 'server' means an online
     // account owns the character and save() must never write it to this browser.
     let persistence = 'local';
@@ -2074,7 +2169,12 @@
         moneybagsStolen: false,    // client gold taken from Jim Hardsell's safe
         moneybagsPurchases: 0,     // upgrade purchases made after taking the gold
         seen: [],              // scenario ids already served this cycle
-        practicePack: 'mixed', // 'mixed' | 'sqe' | 'mpre' | 'juris' | 'ca' | 'ny' | 'canada-test'
+        practicePack: 'juris', // 'juris' | 'mixed' | 'sqe' | 'mpre' | 'ca' | 'ny' | 'canada'; new attorneys start on the originals
+        packCorrect: {},       // correct answers per practice pack id, e.g. { sqe: 5 } (wardrobe unlocks)
+        arcadeCredits: 0,      // Briefcase Dash rounds already paid for
+        drunkPenaltyFor: 0,    // slowUntil value of the drinking episode already charged at work
+        lastEspressoAt: 0,     // epoch ms of the last office espresso (cooldown)
+        pet: null,             // null | { kind: 'cat' | 'dog', name, adoptedAt }
         upgrades: [],
         zone: 'office',
         pos: { x: 6, y: 10 },
@@ -2162,9 +2262,14 @@
       }
       if (!Array.isArray(next.upgrades)) next.upgrades = [];
       next.upgrades = [...new Set(next.upgrades.map((id) => id === 'office_window' ? 'work_phone' : id))];
-      for (const key of ['slowUntil', 'docReviewStartedAt', 'lastDocReviewAt', 'lastStudyTickAt', 'endedAt', 'lastRestAt', 'billableStudyMs']) {
+      for (const key of ['slowUntil', 'docReviewStartedAt', 'lastDocReviewAt', 'lastStudyTickAt', 'endedAt', 'lastRestAt', 'billableStudyMs', 'arcadeCredits', 'drunkPenaltyFor', 'lastEspressoAt']) {
         if (!Number.isFinite(next[key]) || next[key] < 0) next[key] = 0;
       }
+      if (!next.packCorrect || typeof next.packCorrect !== 'object' || Array.isArray(next.packCorrect)) next.packCorrect = {};
+      next.pet = next.pet && typeof next.pet === 'object' && petKind(next.pet.kind)
+        ? { kind: next.pet.kind, name: sanitizePetName(next.pet.name), adoptedAt: Number.isFinite(next.pet.adoptedAt) ? next.pet.adoptedAt : 0 }
+        : null;
+      if (next.practicePack === 'canada-test') next.practicePack = 'canada';
       if (typeof next.hintScenarioId !== 'string') next.hintScenarioId = null;
       if (!Array.isArray(next.seen)) next.seen = [];
       if (!next.pos || !Number.isFinite(next.pos.x) || !Number.isFinite(next.pos.y)) next.pos = { x: 6, y: 10 };
@@ -2210,6 +2315,8 @@
   },
   "js/apprenticeship.js": (exports, require) => {
     const { CURRICULUM_VERSION, TRAINING_JURISDICTION, DOCUMENT_PACKS, WRITING_TASKS, CAPSTONE, COSMETICS, evidenceAt } = require("js/data/apprenticeship.js");
+    const { findUpgrade } = require("js/data/upgrades.js");
+    const { PRACTICE_PACKS } = require("js/data/practice-packs.js");
 
     const PARTNER_DELAY_MS = 5_000;
     function freshApprenticeship() {
@@ -2305,15 +2412,56 @@
       return receipt;
     }
 
+    // Why a wardrobe item cannot be bought yet, or null when it is available.
+    function cosmeticLock(player, item) {
+      if (item.requires && !player.upgrades.includes(item.requires)) {
+        const upgrade = findUpgrade(item.requires);
+        return `Needs the ${upgrade?.name || item.requires} (Furniture Catalog, ${upgrade?.cost || '?'} gold).`;
+      }
+      if (item.unlock) {
+        const have = player.packCorrect?.[item.unlock.pack] || 0;
+        if (have < item.unlock.correct) {
+          const pack = PRACTICE_PACKS.find((entry) => entry.id === item.unlock.pack);
+          return `Answer ${item.unlock.correct} ${pack?.label || item.unlock.pack} questions correctly (${have}/${item.unlock.correct}).`;
+        }
+      }
+      return null;
+    }
+
+    // Earned items join the wardrobe (owned, not worn) as soon as their
+    // threshold is met. Returns the ids granted by this call.
+    function grantUnlocks(player) {
+      const granted = [];
+      for (const item of COSMETICS) {
+        if (!item.unlock || player.apprenticeship.cosmetics.includes(item.id) || cosmeticLock(player, item)) continue;
+        player.apprenticeship.cosmetics.push(item.id);
+        granted.push(item.id);
+      }
+      return granted;
+    }
+
+    // Wear or put away an owned item. Items that share a `slot` (formal wear)
+    // are mutually exclusive.
+    function equipCosmetic(player, id, worn) {
+      const item = COSMETICS.find((cosmetic) => cosmetic.id === id);
+      if (!item || !player.apprenticeship.cosmetics.includes(id)) throw new Error('You do not own that item.');
+      const others = new Set(item.slot ? COSMETICS.filter((entry) => entry.slot === item.slot).map((entry) => entry.id) : [id]);
+      const kept = player.apprenticeship.equipped.filter((worn) => worn !== id && !(worn && others.has(worn)));
+      player.apprenticeship.equipped = worn ? [...kept, id] : kept;
+      return { id, worn: !!worn };
+    }
+
     function buyCosmetic(player, id) {
       if (!activeRun(player) || pendingAttempt(player)) throw new Error('Finish the pending partner reply before making a purchase.');
       const item = COSMETICS.find((cosmetic) => cosmetic.id === id);
       if (!item) throw new Error('Unknown wardrobe item.');
       if (player.apprenticeship.cosmetics.includes(id)) throw new Error('You already own this item.');
+      const lock = cosmeticLock(player, item);
+      if (lock) throw new Error(lock);
       if (player.gold < item.price) throw new Error(`You need ${item.price} gold.`);
       player.gold -= item.price;
       player.apprenticeship.cosmetics.push(id);
-      player.apprenticeship.equipped.push(id);
+      equipCosmetic(player, id, true);
       return item;
     }
 
@@ -2335,7 +2483,7 @@
       const body = `Jurisdiction: ${request.label}\n\nPractice interests: ${request.topic}\n\nReviewer offer / public sources: ${request.help || 'None supplied.'}\n\nProduct suggestion only. No real matter information. Saved locally in LawScape; submit this issue to send it to the maintainers.`;
       return `https://github.com/joelakaufmann-lgtm/lawscape/issues/new?title=${encodeURIComponent(`[Jurisdiction request] ${request.label}`)}&body=${encodeURIComponent(body)}`;
     }
-    Object.assign(exports, { PARTNER_DELAY_MS, freshApprenticeship, taskById, activeRun, pendingAttempt, taskAttempts, returnedTasks, capstoneReady, saveDraft, commitWriting, settleReplies, submitReview, buyCosmetic, requestJurisdiction, requestIssueUrl });
+    Object.assign(exports, { PARTNER_DELAY_MS, freshApprenticeship, taskById, activeRun, pendingAttempt, taskAttempts, returnedTasks, capstoneReady, saveDraft, commitWriting, settleReplies, submitReview, cosmeticLock, grantUnlocks, equipCosmetic, buyCosmetic, requestJurisdiction, requestIssueUrl });
   },
   "js/data/apprenticeship.js": (exports, require) => {
     // Original, fictional training records. These are not statements of real law.
@@ -2486,9 +2634,21 @@
       reply: 'Lantern needs release authority (L2.1) and date confirmation (L4.1). Harbor needs instructions about the changed payment sequence (H3.1) and better inspection evidence (H4.1). Both AI drafts overstate the record (L5.1 and H5.1). Under H6.2, your handoff should preserve those distinctions and identify who owns each next action. You have survived a day in which “pls fix” was considered a complete brief.',
     };
 
+    // Wardrobe catalog. `look` is layered onto appearanceLook() while equipped;
+    // `slot` makes items mutually exclusive; `requires` names an upgrade that must
+    // be owned before purchase; `unlock` grants the item for free once the player
+    // has that many correct answers in that practice pack. Never a grading effect.
     const COSMETICS = [
-      { id: 'tie-brass', label: 'Partner’s gold tie', price: 30, note: 'A little ambition. Absolutely no grading advantage.', tie: '#cba64b' },
-      { id: 'case-oxblood', label: 'Oxblood briefcase', price: 60, note: 'Carries documents and unreasonable expectations.', briefcase: '#713c46' },
+      { id: 'tie-brass', label: 'Partner’s gold tie', price: 30, note: 'A little ambition. Absolutely no grading advantage.', look: { tie: '#cba64b' } },
+      { id: 'case-oxblood', label: 'Oxblood briefcase', price: 60, note: 'Carries documents and unreasonable expectations.', look: { briefcase: '#713c46' } },
+      { id: 'pocket-square', label: 'Silk pocket square', price: 40, note: 'Folded once, with intent.', look: { pocketSquare: '#d9b656' } },
+      { id: 'earrings-gold', label: 'Gold earrings', price: 50, note: 'Catch the light during cross-examination.', look: { earrings: '#e6c45c' } },
+      { id: 'sunglasses', label: 'Sunglasses', price: 60, note: 'For the walk from the courthouse to The Sidebar.', look: { sunglasses: true } },
+      { id: 'necklace-pearl', label: 'Pearl necklace', price: 80, note: 'Seven pearls. Zero objections.', look: { necklace: '#f1ecdf' } },
+      { id: 'watch-gold', label: 'Gold wristwatch', price: 120, note: 'Billable to the tenth of an hour.', look: { watch: '#c9a53a' } },
+      { id: 'outfit-tuxedo', label: 'Tuxedo', price: 300, slot: 'formal', requires: 'wardrobe_rack', note: 'Satin lapels and a bow tie. Replaces the suit while worn.', look: { formal: 'tuxedo' } },
+      { id: 'outfit-gown', label: 'Evening gown', price: 300, slot: 'formal', requires: 'wardrobe_rack', note: 'Floor length, in your suit color. Replaces the suit while worn.', look: { formal: 'gown' } },
+      { id: 'wig-powdered', label: 'Powdered barrister’s wig', price: 0, unlock: { pack: 'sqe', correct: 5 }, note: 'Earned by answering five England & Wales questions correctly. Horsehair, allegedly.', look: { wig: true } },
     ];
 
     function evidenceAt(anchor) {
@@ -2501,2460 +2661,82 @@
     }
     Object.assign(exports, { CURRICULUM_VERSION, TRAINING_JURISDICTION, FIRM_PACKS, DOCUMENT_PACKS, WRITING_TASKS, CAPSTONE, COSMETICS, evidenceAt });
   },
-  "js/data/appearance.js": (exports, require) => {
-    const { PAL } = require("js/engine/palette.js");
+  "js/data/upgrades.js": (exports, require) => {
+    // Upgrade catalogs, priced in gold earned from BarMail ethics scenarios.
+    // Effects are applied in main.js (gold/damage math) and js/world/zones.js
+    // (visual prop changes).
 
-    // The first six hair IDs and the first six color indices match legacy saves.
-    const HAIR_STYLES = ['Side part', 'Long waves', 'Low ponytail', 'Neat bun', 'Natural curls', 'Bald',
-      'Close crop', 'Swept back', 'Chin-length bob', 'High ponytail', 'Braids', 'Locs', 'Tapered curls', 'Side-swept fringe', 'Textured crop', 'Half-up waves'];
-    const HAIR_COLORS = ['Soft black', 'Walnut brown', 'Golden blond', 'Silver', 'Auburn', 'Platinum',
-      'Espresso', 'Chestnut', 'Honey blond', 'Copper', 'Strawberry blond', 'Salt and pepper',
-      'Charcoal', 'Blue black', 'Burgundy', 'Midnight blue', 'Plum', 'Dusty rose'];
-    const FACIAL_HAIR = ['Clean shaven', 'Stubble', 'Moustache', 'Goatee', 'Short beard', 'Full beard', 'Moustache & goatee'];
-    const EYE_COLORS = ['Brown', 'Blue', 'Green', 'Hazel', 'Gray', 'Amber'];
-    const SKIN_COLORS = ['Porcelain', 'Light warm', 'Golden', 'Medium warm', 'Deep golden', 'Rich brown', 'Deep brown'];
-    const TIE_COLORS = ['Burgundy', 'Navy', 'Forest', 'Ochre', 'Plum', 'Teal', 'Rose', 'Charcoal', 'Steel', 'Ivory', 'Rust', 'Slate blue'];
-    const SUIT_COLORS = ['Navy', 'Charcoal', 'Burgundy', 'Forest', 'Oak'];
-    const SHIRT_COLORS = ['Ivory', 'Pale blue', 'Lilac', 'Blush', 'Sage', 'Charcoal'];
-    const FACE_SHAPES = ['Oval', 'Angular', 'Rounded'];
-    const OUTFITS = [{ id: 'trousers', label: 'Suit with trousers' }, { id: 'skirt', label: 'Suit with skirt' }];
-
-    function index(value, options, fallback = 0) { return Number.isInteger(value) && value >= 0 && value < options.length ? value : fallback; }
-    function color(value, options, fallback = options[0]) { return options.includes(value) ? value : fallback; }
-
-    function normalizeAppearance(value = {}) {
-      return {
-        skin: index(value.skin, PAL.skin), hair: index(value.hair, PAL.hair),
-        hairStyle: index(value.hairStyle, HAIR_STYLES), eye: index(value.eye, PAL.eyes),
-        facialHair: index(value.facialHair, FACIAL_HAIR), faceShape: index(value.faceShape, FACE_SHAPES),
-        suitColor: color(value.suitColor, PAL.suits), tieColor: color(value.tieColor, PAL.ties),
-        shirtColor: color(value.shirtColor, PAL.shirts), outfit: value.outfit === 'skirt' ? 'skirt' : 'trousers',
-        silhouette: ['tailored', 'relaxed', 'slim'].includes(value.silhouette) ? value.silhouette : 'tailored',
-        glasses: value.glasses === true,
-      };
-    }
-
-    // Used everywhere: creator, wardrobe, journal portrait and walking actor.
-    function appearanceLook(value, equipped = []) {
-      const a = normalizeAppearance(value);
-      return { ...a, suit: a.suitColor, shirt: a.shirtColor,
-        tie: equipped.includes('tie-brass') ? '#cba64b' : a.tieColor,
-        briefcase: equipped.includes('case-oxblood') ? '#713c46' : '#694c35' };
-    }
-
-    function appearanceDescription(value) {
-      const a = normalizeAppearance(value);
-      return `${HAIR_COLORS[a.hair]} ${HAIR_STYLES[a.hairStyle].toLowerCase()}, ${FACIAL_HAIR[a.facialHair].toLowerCase()}, ${EYE_COLORS[a.eye].toLowerCase()} eyes, ${a.outfit === 'skirt' ? 'skirt suit' : 'trouser suit'}${a.glasses ? ', glasses' : ''}`;
-    }
-    Object.assign(exports, { HAIR_STYLES, HAIR_COLORS, FACIAL_HAIR, EYE_COLORS, SKIN_COLORS, TIE_COLORS, SUIT_COLORS, SHIRT_COLORS, FACE_SHAPES, OUTFITS, normalizeAppearance, appearanceLook, appearanceDescription });
-  },
-  "js/engine/palette.js": (exports, require) => {
-    // Single source of truth for every color in the game world (see docs/archive/VISUAL_DESIGN.md §2).
-    const PAL = {
-      marble: '#e8e4da',
-      marbleDark: '#d6d0c2',
-      stone: '#9a958c',
-      stoneDark: '#7d786f',
-      wood: '#8b5e3c',
-      woodLight: '#a97a52',
-      woodDark: '#6b4529',
-      parchment: '#f3e9d2',
-      brass: '#b8912f',
-      brassLight: '#d9b656',
-      navy: '#1f3a5f',
-      navyLight: '#2c5085',
-      burgundy: '#6e2436',
-      burgundyLight: '#8d3449',
-      archiveGreen: '#3f5d4b',
-      archiveGreenLight: '#557a63',
-      ink: '#2b2b33',
-      grass: '#6a8f57',
-      grassDark: '#5a7c49',
-      water: '#5b87a6',
-      skin: ['#f2d6b3', '#e8c39e', '#d4a373', '#c68e5f', '#a06a42', '#8d5a3b', '#5f3d28'],
-      // Append shades so existing saved color indices retain their meaning.
-      hair: ['#2b2b33', '#6b4529', '#b8912f', '#9a958c', '#8c3b2e', '#e8e2d4',
-        '#3a261d', '#8a5434', '#c59b63', '#b96b3d', '#d0ab85', '#69645e',
-        '#4b4650', '#1d2c38', '#592d3b', '#334763', '#715278', '#ad7789'],
-      eyes: ['#4a3728', '#3b6ea5', '#4a7c59', '#8c6b3f', '#7a8288', '#b3541e'],
-      suits: ['#1f3a5f', '#3a3a42', '#6e2436', '#3f5d4b', '#8b5e3c'],
-      ties: ['#6e2436', '#253d65', '#3f6252', '#a68238', '#66537d', '#2f6670', '#b18672', '#34363c', '#bac3d2', '#ece1c5', '#944b3f', '#486886'],
-      shirts: ['#f3eee1', '#c8d8e6', '#d4c6d8', '#e2c9c1', '#d4d9d0', '#363b45'],
-    };
-
-    // Lighten (amt > 0) or darken (amt < 0) a hex color. Used to fake 3-tone flat shading.
-    function shade(hex, amt) {
-      const n = parseInt(hex.slice(1), 16);
-      const f = (v) => Math.max(0, Math.min(255, Math.round(v + amt * 255)));
-      const r = f((n >> 16) & 255), g = f((n >> 8) & 255), b = f(n & 255);
-      return `rgb(${r},${g},${b})`;
-    }
-    Object.assign(exports, { PAL, shade });
-  },
-  "js/canada.js": (exports, require) => {
-    const { CANADA_PACK, CANADA_DIGEST } = require("js/data/canada.js");
-
-    function freshCanadaProgress() {
-      return { version: CANADA_PACK.version, digest: CANADA_DIGEST, round: 1, questionAttempts: [], drafts: {}, emailAttempts: [], archives: [] };
-    }
-    function normalizeCanadaProgress(value) {
-      const fresh = freshCanadaProgress();
-      if (!value || typeof value !== 'object' || Array.isArray(value)) return fresh;
-      if (value.version !== fresh.version || value.digest !== fresh.digest) {
-        fresh.archives = [...(Array.isArray(value.archives) ? value.archives : []), { ...value, archives: [] }];
-        return fresh;
-      }
-      return { ...fresh, ...value,
-        round: Number.isSafeInteger(value.round) && value.round > 0 ? value.round : 1,
-        questionAttempts: Array.isArray(value.questionAttempts) ? value.questionAttempts.filter(a => a && typeof a === 'object') : [],
-        emailAttempts: Array.isArray(value.emailAttempts) ? value.emailAttempts.filter(a => a && typeof a === 'object') : [],
-        drafts: value.drafts && typeof value.drafts === 'object' && !Array.isArray(value.drafts) ? value.drafts : {},
-        archives: Array.isArray(value.archives) ? value.archives : [],
-      };
-    }
-    function canadaProgress(player) {
-      if (!player.canada || player.canada.digest !== CANADA_DIGEST) player.canada = normalizeCanadaProgress(player.canada);
-      return player.canada;
-    }
-    function canadaUnread(player, scenarios) {
-      const progress = canadaProgress(player);
-      const done = new Set(progress.questionAttempts.filter(a => a.round === progress.round).map(a => a.questionId));
-      return scenarios.filter(q => !done.has(q.id));
-    }
-    function nextCanadaRound(player) {
-      const progress = canadaProgress(player);
-      if (canadaUnread(player, CANADA_PACK.questions).length) throw new Error('Finish this study round first.');
-      progress.round += 1;
-    }
-    function recordCanadaAnswer(player, questionId, optionId, now) {
-      if (player.runStatus === 'ended' || player.ethics <= 0) throw new Error('This character run has ended.');
-      const question = CANADA_PACK.questions.find(q => q.id === questionId);
-      if (!question || !question.options.some(o => o.id === optionId)) throw new Error('Unknown question or option.');
-      const progress = canadaProgress(player);
-      const prior = progress.questionAttempts.find(a => a.questionId === questionId && a.round === progress.round);
-      if (prior) return prior;
-      const attempt = { questionId, optionId, expectedOptionId: question.answer, matchesProposedKey: optionId === question.answer,
-        round: progress.round, at: now, version: progress.version, digest: progress.digest };
-      progress.questionAttempts.push(attempt);
-      return attempt;
-    }
-    function saveCanadaDraft(player, id, text) {
-      if (!CANADA_PACK.emails.some(e => e.id === id)) throw new Error('Unknown Canadian email assignment.');
-      canadaProgress(player).drafts[id] = String(text).slice(0, 6000);
-    }
-    function commitCanadaEmail(player, id, now) {
-      if (player.runStatus === 'ended' || player.ethics <= 0) throw new Error('This character run has ended.');
-      if (!CANADA_PACK.emails.some(e => e.id === id)) throw new Error('Unknown Canadian email assignment.');
-      const progress = canadaProgress(player), text = String(progress.drafts[id] || '').trim();
-      if (!text) throw new Error('Write a reply before committing.');
-      const previous = progress.emailAttempts.filter(a => a.taskId === id);
-      if (previous.at(-1)?.text === text) return previous.at(-1);
-      const attempt = { id: `${id}:${previous.length + 1}`, taskId: id, text, committedAt: now,
-        version: progress.version, digest: progress.digest, proseAssessed: false, feedbackType: 'authored-self-comparison' };
-      progress.emailAttempts.push(attempt);
-      delete progress.drafts[id];
-      return attempt;
-    }
-    Object.assign(exports, { freshCanadaProgress, normalizeCanadaProgress, canadaProgress, canadaUnread, nextCanadaRound, recordCanadaAnswer, saveCanadaDraft, commitCanadaEmail });
-  },
-  "js/data/canada.js": (exports, require) => {
-    // Generated by scripts/build-canada.mjs. Edit canada-test/pack.json.
-    const CANADA_PACK = {
-      "id": "canada-pilot",
-      "version": "canada-0.1.0-review",
-      "title": "Canadian Practice Files",
-      "status": "Practitioner review required",
-      "authoredDate": "2026-09-28",
-      "legalReviewedAt": null,
-      "legalReviewer": null,
-      "purpose": "Local LawScape test deployment. Original fictional exercises, not regulator questions or accredited training.",
-      "scope": [
-        "Ontario: LTB representation",
-        "British Columbia: referral fees",
-        "British Columbia: recording communications",
-        "Saskatchewan: criminal language rights",
-        "British Columbia: undertakings and trust conditions"
-      ],
-      "limits": [
-        "English-language pilot; French-language instruction is not yet authored or reviewed.",
-        "Five focused topics in three provinces; not comprehensive Canadian ethics coverage.",
-        "Primary sources retrieved; answers and rubrics are author interpretations awaiting Canadian practitioner review.",
-        "No AI grading, actual email, audio capture, client records, or external AI transmission.",
-        "Canadian test answers do not award gold, alter Ethics, change streaks, or advance the released-question difficulty tiers."
-      ],
-      "sources": [
-        {
-          "id": "ON-LTB",
-          "title": "Tribunals Ontario — Representation before the LTB",
-          "jurisdiction": "Ontario",
-          "locator": "Practice Direction, effective March 3, 2022",
-          "file": "sources/ON-LTB.html.source",
-          "url": "https://tribunalsontario.ca/documents/ltb/Practice%20Directions/Practice%20Direction%20on%20Representation%20before%20the%20LTB.html",
-          "versionNote": "Publisher page states effective March 3, 2022. Reviewed text retrieved September 28, 2026; underlying exemptions should be rechecked by the practitioner.",
-          "status": "Official source retrieved; content interpretation pending practitioner review"
-        },
-        {
-          "id": "BC-3",
-          "title": "Law Society of British Columbia — BC Code, Chapter 3",
-          "jurisdiction": "British Columbia",
-          "locator": "Rule 3.6-6",
-          "file": "sources/BC-3.html.source",
-          "url": "https://www.lawsociety.bc.ca/for-lawyers/act-rules-and-code/code-of-professional-conduct/chapter-3-%E2%80%93-relationship-to-clients/",
-          "versionNote": "Official live chapter retrieved September 28, 2026. Relevant rule has no separate effective-date label; adjacent rule amendments are not treated as its effective date.",
-          "status": "Official source retrieved; content interpretation pending practitioner review"
-        },
-        {
-          "id": "BC-7",
-          "title": "Law Society of British Columbia — BC Code, Chapter 7",
-          "jurisdiction": "British Columbia",
-          "locator": "Rules 7.2-3, 7.2-11 and commentary; 7.1-3(a.1)",
-          "file": "sources/BC-7.html.source",
-          "url": "https://www.lawsociety.bc.ca/for-lawyers/act-rules-and-code/code-of-professional-conduct/chapter-7-%E2%80%93-relationship-to-the-society-and-other-lawyers/",
-          "versionNote": "Official live chapter retrieved September 28, 2026. Rule text and commentary were read separately; heading amendments are not substantive effective dates.",
-          "status": "Official source retrieved; content interpretation pending practitioner review"
-        },
-        {
-          "id": "SK-CODE",
-          "title": "Law Society of Saskatchewan — Code of Professional Conduct for Lawyers",
-          "jurisdiction": "Saskatchewan",
-          "locator": "Rules 3.2-2A/B and commentary, printed page 26",
-          "file": "sources/SK-CODE.pdf",
-          "url": "https://www.lawsociety.sk.ca/wp-content/uploads/CodeOfProfessionalConduct.pdf#page=26",
-          "versionNote": "Official PDF retrieved September 28, 2026. Language provisions show an addition date of February 13, 2015 at printed page 34; this is not a certification of the entire consolidation.",
-          "status": "Official source retrieved; content interpretation pending practitioner review"
-        },
-        {
-          "id": "CA-530",
-          "title": "Justice Canada — Criminal Code, section 530",
-          "jurisdiction": "Federal; criminal proceedings in Saskatchewan",
-          "locator": "Section 530(1), (3), (4)",
-          "file": "sources/CA-530.html.source",
-          "url": "https://laws-lois.justice.gc.ca/eng/acts/c-46/section-530.html",
-          "versionNote": "Retrieved September 28, 2026. Publisher: Act current to September 21, 2026; last amended July 18, 2026. These are Act-level dates, not a claim that section 530 changed then.",
-          "status": "Official source retrieved; content interpretation pending practitioner review"
-        }
-      ],
-      "rules": [
-        {
-          "id": "ON-REP",
-          "title": "Who may represent an LTB party?",
-          "summary": "Licensed Ontario lawyers and paralegals in good standing, and qualifying exempt representatives, may represent a party. A suspended licence does not permit representation.",
-          "sourceRefs": [
-            {
-              "id": "ON-LTB",
-              "locator": "Representatives; Licensed Representative; Unlicensed Representatives"
-            }
-          ],
-          "limits": "Eligibility does not establish competence, client instructions, availability, or success. Specific exemptions and any applicable statutory priority require review."
-        },
-        {
-          "id": "ON-SUPPORT",
-          "title": "Support is not representation",
-          "summary": "A support person may assist a participant without making submissions on their behalf. New representatives not identified in the application must notify the LTB and other parties in writing.",
-          "sourceRefs": [
-            {
-              "id": "ON-LTB",
-              "locator": "Support Persons; Representative’s Responsibilities"
-            }
-          ],
-          "limits": "These questions distinguish the stipulated roles; they do not decide every licensing exemption or witness issue."
-        },
-        {
-          "id": "BC-REF",
-          "title": "Referral fee conditions",
-          "summary": "An expertise-and-ability referral not caused by conflict may attract a reasonable fee if the client is informed and consents and the total client fee does not increase.",
-          "sourceRefs": [
-            {
-              "id": "BC-3",
-              "locator": "Rule 3.6-6(a)–(b)"
-            }
-          ],
-          "limits": "BC rule only. Each exercise assumes separate BC law firms and no other fee-sharing arrangement. Consent alone does not establish every condition."
-        },
-        {
-          "id": "BC-REC",
-          "title": "Inform before recording",
-          "summary": "Before using a device to record a conversation with a client or another lawyer, the BC lawyer must first inform that person. Other information-handling obligations remain separate.",
-          "sourceRefs": [
-            {
-              "id": "BC-7",
-              "locator": "Rule 7.2-3"
-            }
-          ],
-          "limits": "This is a prior-notification rule, not a blanket consent or privacy-law opinion. No actual recording takes place. Manual notes are a supplied exercise option."
-        },
-        {
-          "id": "SK-LANG",
-          "title": "Client language choice and competence",
-          "summary": "Advise appropriately about language rights. A lawyer must be competent to provide the required services in the official language selected by the client.",
-          "sourceRefs": [
-            {
-              "id": "SK-CODE",
-              "locator": "Rules 3.2-2A/B; commentary [1]–[3], printed p. 26"
-            }
-          ],
-          "limits": "The client chooses. The exercises concern criminal proceedings and lawyers; other forums, languages and practitioner categories need separate analysis."
-        },
-        {
-          "id": "CA-TRIAL",
-          "title": "Language application and order",
-          "summary": "For the stated French-language accused, a timely section 530(1) application engages the mandatory order framework. The stated deadline is the appearance when the trial date is set; a late request requires separate section 530(4) consideration.",
-          "sourceRefs": [
-            {
-              "id": "CA-530",
-              "locator": "Section 530(1), (3), (4)"
-            }
-          ],
-          "limits": "First-appearance advice and the application deadline are distinct. A competent lawyer is not itself a court order. Late relief is not guaranteed."
-        },
-        {
-          "id": "BC-PROMISE",
-          "title": "Commitments must be kept",
-          "summary": "Do not promise what cannot be fulfilled. Honour undertakings and accepted trust conditions; client pressure or an unanswered variation request does not release the obligation.",
-          "sourceRefs": [
-            {
-              "id": "BC-7",
-              "locator": "Rule 7.2-11; commentary [1], [3]–[5]"
-            }
-          ],
-          "limits": "Writing is recommended in the commentary; these facts expressly stipulate an undertaking. Any property-return route must fit the actual trust condition, not a universal cancellation rule."
-        },
-        {
-          "id": "BC-REPORT",
-          "title": "Breach and reporting",
-          "summary": "For an unconsented, unwaived breach of an undertaking or trust condition, assess the reporting duty, subject to solicitor-client confidentiality or privilege.",
-          "sourceRefs": [
-            {
-              "id": "BC-7",
-              "locator": "Rule 7.1-3 opening words and paragraph (a.1)"
-            }
-          ],
-          "limits": "Remediation does not itself erase the event. Disclosure scope and any exception require careful practitioner review."
-        }
-      ],
-      "questions": [
-        {
-          "id": "CA-ON-01",
-          "group": "ON",
-          "title": "The right person for the hearing",
-          "jurisdiction": "Ontario",
-          "forum": "Ontario Landlord and Tenant Board",
-          "practitionerRole": "Licensed Ontario paralegal / supervising lawyer",
-          "setting": "Toronto office · a second-floor practice near a busy streetcar route",
-          "difficulty": 1,
-          "body": "A Toronto tenant has instructed Priya, an Ontario paralegal in good standing, to represent them at the LTB. The file is within Priya’s authorized scope; she is competent, prepared and available. An associate says only a lawyer can speak at the hearing. Which response is best?",
-          "options": [
-            {
-              "id": "A",
-              "text": "Assign a lawyer because all tribunal advocacy is reserved to lawyers.",
-              "explanation": "The premise treats all LTB representation as reserved to lawyers."
-            },
-            {
-              "id": "B",
-              "text": "Proceed with Priya as the instructed representative, subject to the LTB’s requirements.",
-              "explanation": "Priya’s status and the stipulated scope, preparation and instructions support this assignment."
-            },
-            {
-              "id": "C",
-              "text": "Let any experienced assistant appear under Priya’s licence.",
-              "explanation": "A colleague cannot lend a licence to the assistant."
-            },
-            {
-              "id": "D",
-              "text": "Ask the client to waive the licensing requirements.",
-              "explanation": "Client preference cannot create professional authorization."
-            }
-          ],
-          "answer": "B",
-          "ruleIds": [
-            "ON-REP"
-          ],
-          "decisiveFact": "Priya is a licensed, eligible paralegal, and the other assignment checks are expressly satisfied.",
-          "reviewFocus": "Confirm scope assumptions and distinguish eligibility from competence.",
-          "status": "Needs practitioner review"
-        },
-        {
-          "id": "CA-ON-02",
-          "group": "ON",
-          "title": "Riley can help, but can Riley speak?",
-          "jurisdiction": "Ontario",
-          "forum": "Ontario Landlord and Tenant Board",
-          "practitionerRole": "Licensed Ontario paralegal / supervising lawyer",
-          "setting": "Toronto office · a second-floor practice near a busy streetcar route",
-          "difficulty": 1,
-          "body": "Riley is an unlicensed paid assistant at the Toronto office. No licensing exemption applies to Riley. The tenant wants Riley beside them to sort documents and take notes; the tenant will make all submissions. What is the best description of Riley’s role?",
-          "options": [
-            {
-              "id": "A",
-              "text": "Riley automatically becomes the representative by attending.",
-              "explanation": "Attendance and assistance do not alone establish representation."
-            },
-            {
-              "id": "B",
-              "text": "Riley may make submissions if the tenant calls them a support person.",
-              "explanation": "Changing the label would not change what Riley is doing."
-            },
-            {
-              "id": "C",
-              "text": "Riley must stay outside because all unlicensed attendance is forbidden.",
-              "explanation": "The proposed support role is narrower than representation."
-            },
-            {
-              "id": "D",
-              "text": "Riley may assist as a support person while keeping within that role.",
-              "explanation": "The tenant speaks; Riley supplies the stipulated support and does not make submissions."
-            }
-          ],
-          "answer": "D",
-          "ruleIds": [
-            "ON-REP",
-            "ON-SUPPORT"
-          ],
-          "decisiveFact": "Riley makes no submissions and has no applicable representation exemption.",
-          "reviewFocus": "Check the boundary between support, advocacy and testimony.",
-          "status": "Needs practitioner review"
-        },
-        {
-          "id": "CA-ON-03",
-          "group": "ON",
-          "title": "An exemption needs facts",
-          "jurisdiction": "Ontario",
-          "forum": "Ontario Landlord and Tenant Board",
-          "practitionerRole": "Licensed Ontario paralegal / supervising lawyer",
-          "setting": "Toronto office · a second-floor practice near a busy streetcar route",
-          "difficulty": 2,
-          "body": "Sam asks to represent their sister at an LTB hearing. Sam is unlicensed, does not run a legal-services business and will receive no compensation. Their sister will attend. What should the team do?",
-          "options": [
-            {
-              "id": "A",
-              "text": "Check and explain the family-member exemption and its conditions to the LTB, rather than assume every unlicensed representative is barred.",
-              "explanation": "The stated relationship, business status and absence of compensation matter; the adjudicator still assesses the claimed exemption."
-            },
-            {
-              "id": "B",
-              "text": "Reject Sam solely because Sam has no licence.",
-              "explanation": "That answer ignores the exemption route."
-            },
-            {
-              "id": "C",
-              "text": "Treat being a sibling as automatic approval regardless of the other facts.",
-              "explanation": "The relationship is not the whole inquiry."
-            },
-            {
-              "id": "D",
-              "text": "Pay Sam a token fee to make the representation more official.",
-              "explanation": "Compensation would change an expressly relevant fact."
-            }
-          ],
-          "answer": "A",
-          "ruleIds": [
-            "ON-REP"
-          ],
-          "decisiveFact": "A specific family relationship and no business or compensation are stipulated.",
-          "reviewFocus": "Confirm current LSO exemption requirements and LTB treatment before approving this question.",
-          "status": "Needs practitioner review"
-        },
-        {
-          "id": "CA-ON-04",
-          "group": "ON",
-          "title": "A familiar face with a suspended licence",
-          "jurisdiction": "Ontario",
-          "forum": "Ontario Landlord and Tenant Board",
-          "practitionerRole": "Licensed Ontario paralegal / supervising lawyer",
-          "setting": "Toronto office · a second-floor practice near a busy streetcar route",
-          "difficulty": 2,
-          "body": "A reliable paralegal’s licence is currently suspended. They offer to appear tomorrow, saying the client trusts them and a partner will be reachable by phone. The file stipulates no other lawful basis for their appearance. What is the proper staffing response?",
-          "options": [
-            {
-              "id": "A",
-              "text": "Use them because past competence outweighs current status.",
-              "explanation": "Experience does not resolve the stated suspension."
-            },
-            {
-              "id": "B",
-              "text": "Use them if a partner promises to take responsibility.",
-              "explanation": "Telephone supervision does not remove the suspension."
-            },
-            {
-              "id": "C",
-              "text": "Arrange an eligible representative and address the imminent hearing; do not assign the suspended paralegal to represent the client.",
-              "explanation": "Protecting the hearing requires another lawful route, not ignoring status."
-            },
-            {
-              "id": "D",
-              "text": "Let the client sign a waiver permitting the appearance.",
-              "explanation": "The waiver would not cure this eligibility problem."
-            }
-          ],
-          "answer": "C",
-          "ruleIds": [
-            "ON-REP"
-          ],
-          "decisiveFact": "The licence is suspended now; no alternative authorization is available on these facts.",
-          "reviewFocus": "Confirm that the scenario does not imply an automatic adjournment.",
-          "status": "Needs practitioner review"
-        },
-        {
-          "id": "CA-ON-05",
-          "group": "ON",
-          "title": "The application has already been filed",
-          "jurisdiction": "Ontario",
-          "forum": "Ontario Landlord and Tenant Board",
-          "practitionerRole": "Licensed Ontario paralegal / supervising lawyer",
-          "setting": "Toronto office · a second-floor practice near a busy streetcar route",
-          "difficulty": 2,
-          "body": "Priya is newly retained for an Ontario LTB matter. The application did not identify a representative. The client approved the retainer, and the next appearance is approaching. Which administrative step should Priya take?",
-          "options": [
-            {
-              "id": "A",
-              "text": "Wait for the LTB to notice her name in an email signature.",
-              "explanation": "An incidental signature is not the identified notification step."
-            },
-            {
-              "id": "B",
-              "text": "Inform the LTB and the other parties in writing that she now represents the client.",
-              "explanation": "The new representation needs to be communicated to the Board and the other parties."
-            },
-            {
-              "id": "C",
-              "text": "Notify only the client because the retainer is private.",
-              "explanation": "The client already knows; the other participants still need notice."
-            },
-            {
-              "id": "D",
-              "text": "Assume that attending the hearing replaces all notification.",
-              "explanation": "Arrival at the hearing does not replace the stated responsibility."
-            }
-          ],
-          "answer": "B",
-          "ruleIds": [
-            "ON-SUPPORT"
-          ],
-          "decisiveFact": "Priya was not identified in the application.",
-          "reviewFocus": "Check the applicable procedural notification mechanics without inventing a form or deadline.",
-          "status": "Needs practitioner review"
-        },
-        {
-          "id": "CA-REF-01",
-          "group": "REF",
-          "title": "Expertise without a higher bill",
-          "jurisdiction": "British Columbia",
-          "forum": "Non-contentious client referral",
-          "practitionerRole": "BC lawyer",
-          "setting": "Vancouver office · a small coastal practice serving local businesses",
-          "difficulty": 1,
-          "body": "A Vancouver general practitioner refers a specialized matter to another BC lawyer because of that lawyer’s expertise and ability. No conflict caused the referral. The proposed referral fee is stipulated to be reasonable, the total client fee will not increase, and the client has been fully informed and consents. Under the targeted BC rule, what follows?",
-          "options": [
-            {
-              "id": "A",
-              "text": "The fee is prohibited because all referral fees are forbidden.",
-              "explanation": "That treats a conditional permission as an absolute prohibition."
-            },
-            {
-              "id": "B",
-              "text": "The fee requires an Ontario percentage cap to be applied in BC.",
-              "explanation": "The exercise supplies a BC framework, not an Ontario one."
-            },
-            {
-              "id": "C",
-              "text": "The fee is permitted on the stated facts, subject to any other applicable obligations.",
-              "explanation": "The scenario expressly satisfies the conditions being tested."
-            },
-            {
-              "id": "D",
-              "text": "The lawyer must increase the client bill to make the payment transparent.",
-              "explanation": "Disclosure does not call for an added client charge."
-            }
-          ],
-          "answer": "C",
-          "ruleIds": [
-            "BC-REF"
-          ],
-          "decisiveFact": "Every targeted fee condition is expressly satisfied.",
-          "reviewFocus": "Confirm that reasonableness is stipulated rather than inferred from an amount.",
-          "status": "Needs practitioner review"
-        },
-        {
-          "id": "CA-REF-02",
-          "group": "REF",
-          "title": "The conflict cannot be renamed",
-          "jurisdiction": "British Columbia",
-          "forum": "Non-contentious client referral",
-          "practitionerRole": "BC lawyer",
-          "setting": "Vancouver office · a small coastal practice serving local businesses",
-          "difficulty": 2,
-          "body": "A BC lawyer must refer a matter away because of a conflict. The proposed receiving lawyer is highly skilled. Both lawyers want a referral fee and the client agrees. Can the lawyers qualify for a referral fee under Rule 3.6-6 by calling this an expertise referral?",
-          "options": [
-            {
-              "id": "A",
-              "text": "No. The actual conflict-based reason remains; a suitable referral can proceed without this fee.",
-              "explanation": "The genuine reason does not change with the label; service and fee eligibility are separate."
-            },
-            {
-              "id": "B",
-              "text": "Yes, because client consent removes every restriction.",
-              "explanation": "Consent does not rewrite why the referral occurred."
-            },
-            {
-              "id": "C",
-              "text": "Yes, because the receiving lawyer is competent.",
-              "explanation": "Expertise does not erase the conflict-based trigger."
-            },
-            {
-              "id": "D",
-              "text": "No referral of any kind is possible after a conflict.",
-              "explanation": "The fee restriction does not make every appropriate referral impossible."
-            }
-          ],
-          "answer": "A",
-          "ruleIds": [
-            "BC-REF"
-          ],
-          "decisiveFact": "The referral was actually required because of conflict.",
-          "reviewFocus": "Distinguish referral eligibility from payment eligibility.",
-          "status": "Needs practitioner review"
-        },
-        {
-          "id": "CA-REF-03",
-          "group": "REF",
-          "title": "The additional line item",
-          "jurisdiction": "British Columbia",
-          "forum": "Non-contentious client referral",
-          "practitionerRole": "BC lawyer",
-          "setting": "Vancouver office · a small coastal practice serving local businesses",
-          "difficulty": 2,
-          "body": "A BC expertise referral otherwise meets the tested conditions. The receiving lawyer proposes a $500 referral charge on top of the $4,000 they would otherwise charge for the same work. The client is willing to pay it. What should the lawyers do?",
-          "options": [
-            {
-              "id": "A",
-              "text": "Charge $4,500 because consent cures the added charge.",
-              "explanation": "The express comparison is $4,000 without the referral charge."
-            },
-            {
-              "id": "B",
-              "text": "Hide the $500 in disbursements.",
-              "explanation": "Relabelling does not fix the increased total or the inaccurate description."
-            },
-            {
-              "id": "C",
-              "text": "Describe the $500 as an administrative cost and leave the total unchanged at $4,500.",
-              "explanation": "The total would still be increased on the stated comparison."
-            },
-            {
-              "id": "D",
-              "text": "Do not proceed with this arrangement; any eligible referral fee must not increase the client’s total fee.",
-              "explanation": "Revise the arrangement or make a suitable no-fee referral."
-            }
-          ],
-          "answer": "D",
-          "ruleIds": [
-            "BC-REF"
-          ],
-          "decisiveFact": "The same work would cost $4,000 absent the referral payment.",
-          "reviewFocus": "Review the fee comparison; no tax or disbursement issue is being tested.",
-          "status": "Needs practitioner review"
-        },
-        {
-          "id": "CA-REF-04",
-          "group": "REF",
-          "title": "Consent is a real choice",
-          "jurisdiction": "British Columbia",
-          "forum": "Non-contentious client referral",
-          "practitionerRole": "BC lawyer",
-          "setting": "Vancouver office · a small coastal practice serving local businesses",
-          "difficulty": 1,
-          "body": "A BC client likes the proposed specialist but declines the disclosed referral-fee arrangement. The specialist is willing to accept the matter with no referral fee and no other impediment is stated. What is the best course?",
-          "options": [
-            {
-              "id": "A",
-              "text": "Pay the fee privately because the client selected the specialist.",
-              "explanation": "Selecting the lawyer is not consent to the rejected payment."
-            },
-            {
-              "id": "B",
-              "text": "Respect the refusal and offer the suitable no-fee handoff on the client’s instructions.",
-              "explanation": "The client can obtain the suitable service without the disputed fee."
-            },
-            {
-              "id": "C",
-              "text": "Require the client to accept the fee as the price of choosing counsel.",
-              "explanation": "That disregards the actual refusal."
-            },
-            {
-              "id": "D",
-              "text": "Treat the declined payment as a failed referral even if the handoff succeeds.",
-              "explanation": "A successful client handoff need not produce a referral payment."
-            }
-          ],
-          "answer": "B",
-          "ruleIds": [
-            "BC-REF"
-          ],
-          "decisiveFact": "The client expressly refuses the fee, and a no-fee handoff is available.",
-          "reviewFocus": "Ensure the answer does not imply a duty on a receiving lawyer to accept every referral.",
-          "status": "Needs practitioner review"
-        },
-        {
-          "id": "CA-REF-05",
-          "group": "REF",
-          "title": "A draft missing two answers",
-          "jurisdiction": "British Columbia",
-          "forum": "Non-contentious client referral",
-          "practitionerRole": "BC lawyer",
-          "setting": "Vancouver office · a small coastal practice serving local businesses",
-          "difficulty": 3,
-          "body": "A BC referral note says the receiving lawyer has the right expertise and no conflict caused the referral. It is silent about client consent and whether the payment increases the total fee. The partner asks you to mark the fee approved. What is the best response?",
-          "options": [
-            {
-              "id": "A",
-              "text": "Approve it because a standard precedent must already cover consent.",
-              "explanation": "A precedent is not evidence that the required steps occurred."
-            },
-            {
-              "id": "B",
-              "text": "Infer consent from the client’s silence.",
-              "explanation": "Silence in this file does not supply the missing informed agreement."
-            },
-            {
-              "id": "C",
-              "text": "Obtain and document the missing information before approving payment, including informed consent, the total-fee effect and reasonableness.",
-              "explanation": "The record is incomplete; verify the remaining conditions instead of guessing."
-            },
-            {
-              "id": "D",
-              "text": "Reject all future referrals from this lawyer.",
-              "explanation": "The missing facts call for inquiry, not a blanket future ban."
-            }
-          ],
-          "answer": "C",
-          "ruleIds": [
-            "BC-REF"
-          ],
-          "decisiveFact": "The note does not establish all payment conditions.",
-          "reviewFocus": "Check that inquiry, rather than an assumed violation, is the keyed response.",
-          "status": "Needs practitioner review"
-        },
-        {
-          "id": "CA-REC-01",
-          "group": "REC",
-          "title": "The recorder is ready before the client",
-          "jurisdiction": "British Columbia",
-          "forum": "Client or lawyer conference; no court hearing",
-          "practitionerRole": "BC lawyer",
-          "setting": "Victoria office · raincoats by the door and a ferry timetable on the noticeboard",
-          "difficulty": 1,
-          "body": "A BC lawyer is about to speak with a client by telephone. The lawyer wants to use a recording device, but has not mentioned it. Assume there is no separate issue about the call’s legality. What must happen before capture under the targeted professional rule?",
-          "options": [
-            {
-              "id": "A",
-              "text": "Start recording and mention it in the closing summary.",
-              "explanation": "Closing notice would come after capture."
-            },
-            {
-              "id": "B",
-              "text": "Rely on the fact that the recording may otherwise be lawful.",
-              "explanation": "The scenario separates general legality from the professional step."
-            },
-            {
-              "id": "C",
-              "text": "Ask the assistant to press record so the lawyer is not the operator.",
-              "explanation": "Delegating the button press does not change the proposed recording."
-            },
-            {
-              "id": "D",
-              "text": "Inform the client of the intention to record before recording begins.",
-              "explanation": "The missing step is prior notification to the client."
-            }
-          ],
-          "answer": "D",
-          "ruleIds": [
-            "BC-REC"
-          ],
-          "decisiveFact": "The client has not yet been informed.",
-          "reviewFocus": "Confirm prior notice is distinguished from a universal consent rule.",
-          "status": "Needs practitioner review"
-        },
-        {
-          "id": "CA-REC-02",
-          "group": "REC",
-          "title": "Another lawyer joins the call",
-          "jurisdiction": "British Columbia",
-          "forum": "Client or lawyer conference; no court hearing",
-          "practitionerRole": "BC lawyer",
-          "setting": "Victoria office · raincoats by the door and a ferry timetable on the noticeboard",
-          "difficulty": 2,
-          "body": "A BC lawyer informed the client and one other lawyer before recording a conference. A second lawyer now joins; no recording indicator or announcement has informed that lawyer. Capture can be paused before the new lawyer speaks. What is the best next step?",
-          "options": [
-            {
-              "id": "A",
-              "text": "Pause and inform the new lawyer before recording the conversation with them.",
-              "explanation": "The new participant is another lawyer who has not received the notice."
-            },
-            {
-              "id": "B",
-              "text": "Keep recording because the original participants were told.",
-              "explanation": "The original notice did not reach this person on the stated facts."
-            },
-            {
-              "id": "C",
-              "text": "Wait until the new lawyer asks about the transcript.",
-              "explanation": "That risks capturing the new conversation first."
-            },
-            {
-              "id": "D",
-              "text": "Assume all lawyers know every online call is recorded.",
-              "explanation": "The scenario expressly excludes an effective announcement."
-            }
-          ],
-          "answer": "A",
-          "ruleIds": [
-            "BC-REC"
-          ],
-          "decisiveFact": "The new lawyer has not received any recording notice.",
-          "reviewFocus": "Check the participant-specific facts and avoid claiming every platform indicator is inadequate.",
-          "status": "Needs practitioner review"
-        },
-        {
-          "id": "CA-REC-03",
-          "group": "REC",
-          "title": "The explanation came two minutes later",
-          "jurisdiction": "British Columbia",
-          "forum": "Client or lawyer conference; no court hearing",
-          "practitionerRole": "BC lawyer",
-          "setting": "Victoria office · raincoats by the door and a ferry timetable on the noticeboard",
-          "difficulty": 2,
-          "body": "A BC lawyer recorded two minutes of a client conversation without prior notice, then told the client. The client says the recording may continue. Which conclusion best describes the first two minutes?",
-          "options": [
-            {
-              "id": "A",
-              "text": "Later agreement proves the required sequence occurred.",
-              "explanation": "The timeline still begins with uninformed capture."
-            },
-            {
-              "id": "B",
-              "text": "The later explanation does not change the fact that recording began before notice; assess the lapse and appropriate response separately.",
-              "explanation": "The exercise records the earlier event rather than treating later notice as retroactive."
-            },
-            {
-              "id": "C",
-              "text": "A renamed audio file erases the sequence issue.",
-              "explanation": "A file name cannot change what happened."
-            },
-            {
-              "id": "D",
-              "text": "Every later conversation is permanently forbidden.",
-              "explanation": "The question does not support a permanent ban on future communication."
-            }
-          ],
-          "answer": "B",
-          "ruleIds": [
-            "BC-REC"
-          ],
-          "decisiveFact": "Notice followed, rather than preceded, the initial capture.",
-          "reviewFocus": "Review remediation language; the question does not prescribe destruction or disclosure.",
-          "status": "Needs practitioner review"
-        },
-        {
-          "id": "CA-REC-04",
-          "group": "REC",
-          "title": "Notice is not a privacy clearance",
-          "jurisdiction": "British Columbia",
-          "forum": "Client or lawyer conference; no court hearing",
-          "practitionerRole": "BC lawyer",
-          "setting": "Victoria office · raincoats by the door and a ferry timetable on the noticeboard",
-          "difficulty": 3,
-          "body": "A BC lawyer has informed everyone on a client call of intended recording. A proposed transcription service would receive client information, but confidentiality and information-handling questions have not been assessed. Does the notice alone settle whether the service may be used?",
-          "options": [
-            {
-              "id": "A",
-              "text": "Yes; the recording rule authorizes every downstream use.",
-              "explanation": "The specific notice step is not an all-purpose authorization."
-            },
-            {
-              "id": "B",
-              "text": "Yes; professional information is exempt from all other duties.",
-              "explanation": "Nothing in the stated rule supplies that exemption."
-            },
-            {
-              "id": "C",
-              "text": "No. Resolve the separate information-handling questions before treating the service as approved.",
-              "explanation": "This answer preserves the scope boundary without deciding an unresearched privacy-law question."
-            },
-            {
-              "id": "D",
-              "text": "No device may ever be used by a BC lawyer.",
-              "explanation": "The rule does not establish a universal device ban."
-            }
-          ],
-          "answer": "C",
-          "ruleIds": [
-            "BC-REC"
-          ],
-          "decisiveFact": "The vendor and information-handling questions remain unresolved.",
-          "reviewFocus": "Confirm this tests the limit of the rule, not a comprehensive privacy or AI opinion.",
-          "status": "Needs practitioner review"
-        },
-        {
-          "id": "CA-REC-05",
-          "group": "REC",
-          "title": "The client prefers notes",
-          "jurisdiction": "British Columbia",
-          "forum": "Client or lawyer conference; no court hearing",
-          "practitionerRole": "BC lawyer",
-          "setting": "Victoria office · raincoats by the door and a ferry timetable on the noticeboard",
-          "difficulty": 2,
-          "body": "After receiving recording notice, a client asks for manual notes instead. The fictional office policy permits manual notes, and no recording is legally or practically required for this meeting. Which response best respects the request on these facts?",
-          "options": [
-            {
-              "id": "A",
-              "text": "Record secretly and use only the notes in the final file.",
-              "explanation": "Secret capture would contradict the client’s stated preference and the proposed arrangement."
-            },
-            {
-              "id": "B",
-              "text": "Tell the client that notification legally obliges them to accept recording.",
-              "explanation": "Notification does not create that obligation on the client."
-            },
-            {
-              "id": "C",
-              "text": "Cancel the retainer because every meeting needs audio.",
-              "explanation": "The facts provide an available alternative."
-            },
-            {
-              "id": "D",
-              "text": "Use manual notes and confirm that recording will stay off.",
-              "explanation": "The supplied alternative meets the meeting’s needs; it is a practical choice, not a universal rule about consent."
-            }
-          ],
-          "answer": "D",
-          "ruleIds": [
-            "BC-REC"
-          ],
-          "decisiveFact": "Manual notes are permitted and adequate under the supplied facts.",
-          "reviewFocus": "Label the manual-note preference as application judgment and stipulated office policy.",
-          "status": "Needs practitioner review"
-        },
-        {
-          "id": "CA-SK-01",
-          "group": "SK",
-          "title": "Conversational English is not the instruction",
-          "jurisdiction": "Saskatchewan",
-          "forum": "Criminal proceeding in Saskatchewan",
-          "practitionerRole": "Saskatchewan lawyer",
-          "setting": "Saskatoon office · a winter intake day and an English/French service directory",
-          "difficulty": 1,
-          "body": "A French-speaking accused meets a Saskatchewan lawyer about a criminal charge. The exercise stipulates French is the accused’s language for section 530(1). The client converses comfortably in English but asks for representation and trial in French. What is the best response?",
-          "options": [
-            {
-              "id": "A",
-              "text": "Explain the applicable language rights, confirm the French instruction and arrange the necessary competent service and procedural steps.",
-              "explanation": "The client’s actual instruction governs the planned response, with competence and procedure addressed separately."
-            },
-            {
-              "id": "B",
-              "text": "Choose English because the intake conversation was easy.",
-              "explanation": "Conversational ability does not replace the instruction."
-            },
-            {
-              "id": "C",
-              "text": "Treat the language of the website as the client’s binding choice.",
-              "explanation": "Interface language is not the client’s legal instruction."
-            },
-            {
-              "id": "D",
-              "text": "Assume an interpreter alone necessarily implements every aspect of the request.",
-              "explanation": "That answer skips the stated representation and trial requests."
-            }
-          ],
-          "answer": "A",
-          "ruleIds": [
-            "SK-LANG",
-            "CA-TRIAL"
-          ],
-          "decisiveFact": "French is stipulated as the accused’s language and the client expressly chooses it.",
-          "reviewFocus": "Confirm the stipulated language status and avoid equating citizenship with language entitlement.",
-          "status": "Needs practitioner review"
-        },
-        {
-          "id": "CA-SK-02",
-          "group": "SK",
-          "title": "A bilingual greeting is not competence",
-          "jurisdiction": "Saskatchewan",
-          "forum": "Criminal proceeding in Saskatchewan",
-          "practitionerRole": "Saskatchewan lawyer",
-          "setting": "Saskatoon office · a winter intake day and an English/French service directory",
-          "difficulty": 2,
-          "body": "The Saskatchewan lawyer can greet clients in French but cannot competently conduct this criminal representation in French. The client wishes to retain counsel for French-language services. What should the lawyer do?",
-          "options": [
-            {
-              "id": "A",
-              "text": "Accept the full retainer and rely exclusively on translation software.",
-              "explanation": "The missing professional ability is not supplied merely by software."
-            },
-            {
-              "id": "B",
-              "text": "Arrange a competent French-language lawyer or other properly scoped, competent service arrangement with the client, while protecting urgent steps.",
-              "explanation": "The response addresses the competence gap and continuity of service without pretending it is already solved."
-            },
-            {
-              "id": "C",
-              "text": "Tell the client that French services are unavailable by law.",
-              "explanation": "The facts establish this lawyer’s limitation, not a legal prohibition."
-            },
-            {
-              "id": "D",
-              "text": "Accept first and ask the client to waive professional competence.",
-              "explanation": "A waiver does not provide the missing competence."
-            }
-          ],
-          "answer": "B",
-          "ruleIds": [
-            "SK-LANG"
-          ],
-          "decisiveFact": "The proposed lawyer cannot deliver the required services competently in French.",
-          "reviewFocus": "Confirm whether any suggested team arrangement actually satisfies competence and retainer duties.",
-          "status": "Needs practitioner review"
-        },
-        {
-          "id": "CA-SK-03",
-          "group": "SK",
-          "title": "Which appearance matters?",
-          "jurisdiction": "Saskatchewan",
-          "forum": "Criminal proceeding in Saskatchewan",
-          "practitionerRole": "Saskatchewan lawyer",
-          "setting": "Saskatoon office · a winter intake day and an English/French service directory",
-          "difficulty": 3,
-          "body": "For a French-language accused seeking an order under section 530(1), the first appearance has occurred. The appearance at which the trial date will be set is next week. No application has been made. Which advice is most accurate?",
-          "options": [
-            {
-              "id": "A",
-              "text": "The application necessarily became impossible at the first appearance.",
-              "explanation": "That confuses the advice step with the stated application deadline."
-            },
-            {
-              "id": "B",
-              "text": "The ordinary deadline is always the morning the trial starts.",
-              "explanation": "That is not the deadline supplied by subsection (1)."
-            },
-            {
-              "id": "C",
-              "text": "The first-appearance advice duty and application deadline are different; make the application no later than the appearance at which the trial date is set.",
-              "explanation": "The upcoming appearance is the procedural checkpoint the record identifies."
-            },
-            {
-              "id": "D",
-              "text": "The deadline depends only on when counsel is paid.",
-              "explanation": "Payment is not the relevant timing event."
-            }
-          ],
-          "answer": "C",
-          "ruleIds": [
-            "CA-TRIAL"
-          ],
-          "decisiveFact": "The trial-date-setting appearance has not yet occurred.",
-          "reviewFocus": "Confirm current section 530 wording and local application mechanics before approval.",
-          "status": "Needs practitioner review"
-        },
-        {
-          "id": "CA-SK-04",
-          "group": "SK",
-          "title": "A late request needs assessment",
-          "jurisdiction": "Saskatchewan",
-          "forum": "Criminal proceeding in Saskatchewan",
-          "practitionerRole": "Saskatchewan lawyer",
-          "setting": "Saskatoon office · a winter intake day and an English/French service directory",
-          "difficulty": 3,
-          "body": "A Saskatchewan criminal client raises a French trial request after the appearance at which the trial date was set. Assume the subsection (1) deadline was missed. What is the best response?",
-          "options": [
-            {
-              "id": "A",
-              "text": "Promise the request must now be granted automatically.",
-              "explanation": "The late-request framework is not the timely mandatory framework."
-            },
-            {
-              "id": "B",
-              "text": "Tell the client no legal route can ever remain.",
-              "explanation": "Missing the ordinary deadline does not support that absolute conclusion."
-            },
-            {
-              "id": "C",
-              "text": "Backdate an application to make it appear timely.",
-              "explanation": "Changing the record is not a legitimate response."
-            },
-            {
-              "id": "D",
-              "text": "Promptly assess and pursue the available subsection (4) route where appropriate, without promising the outcome.",
-              "explanation": "The late issue calls for a supported application assessment and accurate advice about uncertainty."
-            }
-          ],
-          "answer": "D",
-          "ruleIds": [
-            "CA-TRIAL"
-          ],
-          "decisiveFact": "The ordinary deadline has passed; the question concerns late relief.",
-          "reviewFocus": "Review subsection (4), current case law if needed, and the limits of the exercise’s simplified procedural facts.",
-          "status": "Needs practitioner review"
-        },
-        {
-          "id": "CA-SK-05",
-          "group": "SK",
-          "title": "Counsel retained, order still missing",
-          "jurisdiction": "Saskatchewan",
-          "forum": "Criminal proceeding in Saskatchewan",
-          "practitionerRole": "Saskatchewan lawyer",
-          "setting": "Saskatoon office · a winter intake day and an English/French service directory",
-          "difficulty": 2,
-          "body": "A competent French-speaking lawyer has accepted the Saskatchewan criminal retainer. The client chose a French trial. The file contains no application or order, and the trial-date-setting appearance is still ahead. What remains to be done?",
-          "options": [
-            {
-              "id": "A",
-              "text": "Verify and implement the section 530 application/order steps and confirm arrangements; retaining counsel alone is not completion.",
-              "explanation": "The file must connect the service arrangement to the required procedural result."
-            },
-            {
-              "id": "B",
-              "text": "Close the language-rights task because counsel is bilingual.",
-              "explanation": "The separate court process is not documented."
-            },
-            {
-              "id": "C",
-              "text": "Treat the lawyer’s appointment as a court order.",
-              "explanation": "A retainer and a judicial order serve different functions."
-            },
-            {
-              "id": "D",
-              "text": "Assume the language used at reception determines the trial arrangements.",
-              "explanation": "Reception language is not the procedural record."
-            }
-          ],
-          "answer": "A",
-          "ruleIds": [
-            "SK-LANG",
-            "CA-TRIAL"
-          ],
-          "decisiveFact": "Competent counsel exists, but the application/order record is absent.",
-          "reviewFocus": "Check the distinction between pending court action and a lawyer’s failure to act.",
-          "status": "Needs practitioner review"
-        },
-        {
-          "id": "CA-UND-01",
-          "group": "UND",
-          "title": "A promise depends on the bank",
-          "jurisdiction": "British Columbia",
-          "forum": "Professional commitment in a synthetic transaction",
-          "practitionerRole": "BC lawyer",
-          "setting": "Nanaimo office · a community workshop transaction, with a precise closing checklist",
-          "difficulty": 2,
-          "body": "A BC lawyer is asked to undertake that a bank will deliver a discharge tomorrow. The bank has not committed, and the lawyer cannot cause delivery by that time. What is the best response?",
-          "options": [
-            {
-              "id": "A",
-              "text": "Give the unconditional undertaking because banks usually cooperate.",
-              "explanation": "An expectation is not the ability stipulated to be missing."
-            },
-            {
-              "id": "B",
-              "text": "Clarify feasibility and negotiate terms the lawyer can fulfil before giving an undertaking.",
-              "explanation": "The proposed promise must fit what can actually be performed."
-            },
-            {
-              "id": "C",
-              "text": "Write “on behalf of my client” and assume personal responsibility disappears.",
-              "explanation": "That wording alone does not supply the missing protection or ability."
-            },
-            {
-              "id": "D",
-              "text": "Give the promise and decide whether it is possible tomorrow.",
-              "explanation": "The feasibility inquiry belongs before the promise."
-            }
-          ],
-          "answer": "B",
-          "ruleIds": [
-            "BC-PROMISE"
-          ],
-          "decisiveFact": "Performance depends on an uncommitted third party beyond the lawyer’s control.",
-          "reviewFocus": "Confirm appropriate qualifications without implying all third-party-dependent commitments are forbidden.",
-          "status": "Needs practitioner review"
-        },
-        {
-          "id": "CA-UND-02",
-          "group": "UND",
-          "title": "No signature button was pressed",
-          "jurisdiction": "British Columbia",
-          "forum": "Professional commitment in a synthetic transaction",
-          "practitionerRole": "BC lawyer",
-          "setting": "Nanaimo office · a community workshop transaction, with a precise closing checklist",
-          "difficulty": 2,
-          "body": "During a call, a BC lawyer clearly gives an unconditional undertaking to deliver a specified document by Friday. The parties agree the words were an undertaking, and the lawyer can perform it. Nothing is signed. What is the sound response?",
-          "options": [
-            {
-              "id": "A",
-              "text": "Ignore the promise because only a signed form can create an undertaking.",
-              "explanation": "That would turn recommended documentation into a universal formation rule."
-            },
-            {
-              "id": "B",
-              "text": "Treat it as optional until the recipient sends a reminder.",
-              "explanation": "The stated commitment does not depend on a reminder."
-            },
-            {
-              "id": "C",
-              "text": "Honour the undertaking and confirm its clear terms in writing.",
-              "explanation": "The facts expressly establish the undertaking; writing documents it."
-            },
-            {
-              "id": "D",
-              "text": "Withdraw it unilaterally because it was spoken.",
-              "explanation": "The spoken form does not establish an unrestricted withdrawal right."
-            }
-          ],
-          "answer": "C",
-          "ruleIds": [
-            "BC-PROMISE"
-          ],
-          "decisiveFact": "The existence and terms of the oral undertaking are expressly stipulated.",
-          "reviewFocus": "Confirm no factual dispute about formation is being silently resolved.",
-          "status": "Needs practitioner review"
-        },
-        {
-          "id": "CA-UND-03",
-          "group": "UND",
-          "title": "The client wants an early release",
-          "jurisdiction": "British Columbia",
-          "forum": "Professional commitment in a synthetic transaction",
-          "practitionerRole": "BC lawyer",
-          "setting": "Nanaimo office · a community workshop transaction, with a precise closing checklist",
-          "difficulty": 2,
-          "body": "A BC lawyer accepted a trust condition: hold the specified funds until counsel supplies written confirmation of a stated event. That confirmation has not arrived. The client demands release today. What is the proper response?",
-          "options": [
-            {
-              "id": "A",
-              "text": "Release because the client owns the money.",
-              "explanation": "The demand does not erase the accepted restriction."
-            },
-            {
-              "id": "B",
-              "text": "Treat pressure from the client as an effective variation.",
-              "explanation": "The client has not obtained the necessary change from the relevant lawyers."
-            },
-            {
-              "id": "C",
-              "text": "Transfer the funds through the operating account to avoid the condition.",
-              "explanation": "Moving the money would not remove the obligation."
-            },
-            {
-              "id": "D",
-              "text": "Continue to honour the accepted condition and pursue any permitted, properly agreed variation.",
-              "explanation": "The response preserves the actual condition while exploring a valid change."
-            }
-          ],
-          "answer": "D",
-          "ruleIds": [
-            "BC-PROMISE"
-          ],
-          "decisiveFact": "The agreed release event has not occurred and no variation has been agreed.",
-          "reviewFocus": "Review the exact condition; do not infer a universal right to return or release funds.",
-          "status": "Needs practitioner review"
-        },
-        {
-          "id": "CA-UND-04",
-          "group": "UND",
-          "title": "A request is not agreement",
-          "jurisdiction": "British Columbia",
-          "forum": "Professional commitment in a synthetic transaction",
-          "practitionerRole": "BC lawyer",
-          "setting": "Nanaimo office · a community workshop transaction, with a precise closing checklist",
-          "difficulty": 2,
-          "body": "A BC lawyer asks the lawyer who imposed a trust condition to permit earlier release. No reply has arrived. The existing condition remains performable. What should the receiving lawyer do?",
-          "options": [
-            {
-              "id": "A",
-              "text": "Keep complying with the existing condition until an effective variation is agreed; confirm any variation in writing.",
-              "explanation": "The outstanding request has not changed the obligation."
-            },
-            {
-              "id": "B",
-              "text": "Treat the sent request as immediate permission.",
-              "explanation": "Requesting a change is not obtaining one."
-            },
-            {
-              "id": "C",
-              "text": "Infer consent after an hour without a reply.",
-              "explanation": "The stated facts provide no agreed silence mechanism."
-            },
-            {
-              "id": "D",
-              "text": "Ask the client to sign the request and release immediately.",
-              "explanation": "Client approval does not supply the missing agreement."
-            }
-          ],
-          "answer": "A",
-          "ruleIds": [
-            "BC-PROMISE"
-          ],
-          "decisiveFact": "There is a request but no consent to vary.",
-          "reviewFocus": "Confirm who imposed and accepted the condition and whose consent is needed.",
-          "status": "Needs practitioner review"
-        },
-        {
-          "id": "CA-UND-05",
-          "group": "UND",
-          "title": "Performance after a breach",
-          "jurisdiction": "British Columbia",
-          "forum": "Professional commitment in a synthetic transaction",
-          "practitionerRole": "BC lawyer",
-          "setting": "Nanaimo office · a community workshop transaction, with a precise closing checklist",
-          "difficulty": 3,
-          "body": "A BC lawyer discovers that their undertaking was breached. The breach has not been consented to or waived. Performance was later completed. Confidentiality or privilege may affect disclosure. Which response is best?",
-          "options": [
-            {
-              "id": "A",
-              "text": "Mark the breach erased because the eventual outcome was satisfactory.",
-              "explanation": "Later performance does not rewrite the event history."
-            },
-            {
-              "id": "B",
-              "text": "Assess and address the breach, including the reporting duty and its confidentiality/privilege qualification, without assuming later performance cures everything.",
-              "explanation": "The response keeps remediation, reporting and protected information as separate questions."
-            },
-            {
-              "id": "C",
-              "text": "Send the entire client file to the regulator without considering protected information.",
-              "explanation": "The qualification must be considered before disclosure."
-            },
-            {
-              "id": "D",
-              "text": "Assume self-reporting can never be required.",
-              "explanation": "The targeted duty can concern the lawyer’s own conduct."
-            }
-          ],
-          "answer": "B",
-          "ruleIds": [
-            "BC-PROMISE",
-            "BC-REPORT"
-          ],
-          "decisiveFact": "The breach remains unconsented and unwaived; protected information may be involved.",
-          "reviewFocus": "Qualified reviewer must confirm reporting scope, exception and response; no automatic disclosure is prescribed.",
-          "status": "Needs practitioner review"
-        }
-      ],
-      "emails": [
-        {
-          "id": "CA-EMAIL-ON",
-          "group": "ON",
-          "title": "Who is handling tomorrow’s LTB hearing?",
-          "to": "Supervising lawyer",
-          "fromName": "Canadian practice supervisor",
-          "jurisdiction": "Ontario",
-          "forum": "Ontario Landlord and Tenant Board",
-          "practitionerRole": "Licensed Ontario paralegal / supervising lawyer",
-          "setting": "Toronto office · a second-floor practice near a busy streetcar route",
-          "prompt": "Write a 100–200 word internal email recommending the hearing assignment, identifying Riley’s permissible support role and the notification still needed. Distinguish the confirmed facts from anything you would check.",
-          "wordRange": [
-            100,
-            200
-          ],
-          "records": [
-            {
-              "id": "ON-E1",
-              "text": "A tenant’s Toronto LTB hearing is tomorrow. Priya is an Ontario paralegal in good standing; this file is within her authorized scope, and her competence, preparation and availability are confirmed."
-            },
-            {
-              "id": "ON-E2",
-              "text": "The client instructs Priya to represent them. Riley is a paid unlicensed office assistant; no representation exemption applies. The client wants Riley to help organize papers and take notes without making submissions."
-            },
-            {
-              "id": "ON-E3",
-              "text": "The application was filed before Priya was retained and named no representative. The file contains no written notice to the LTB or the other parties of the new representation."
-            }
-          ],
-          "ruleIds": [
-            "ON-REP",
-            "ON-SUPPORT"
-          ],
-          "rubric": [
-            {
-              "id": "R1",
-              "criterion": "Identifies Priya as the instructed, eligible representative on the supplied facts.",
-              "points": 2
-            },
-            {
-              "id": "R2",
-              "criterion": "Keeps Riley’s support role distinct from making submissions or borrowing a licence.",
-              "points": 2
-            },
-            {
-              "id": "R3",
-              "criterion": "Identifies written notification to the LTB and other parties as outstanding.",
-              "points": 2
-            },
-            {
-              "id": "R4",
-              "criterion": "Uses the record accurately without inventing a merits outcome or automatic adjournment.",
-              "points": 2
-            },
-            {
-              "id": "R5",
-              "criterion": "Provides a clear, courteous and feasible next-step email within roughly 100–200 words.",
-              "points": 2
-            }
-          ],
-          "rubricScale": "Human review only: 0 = absent or materially wrong; 1 = partly sound but incomplete; 2 = accurate, supported and practical. 10 points is a discussion aid, not a credential or automated pass.",
-          "criticalIssues": [
-            "Assigning Riley to represent despite the stipulated lack of exemption.",
-            "Saying only lawyers may appear at the LTB."
-          ],
-          "sampleResponse": "Subject: Tomorrow’s LTB hearing — assignment and notice\n\nI recommend that Priya represent the tenant. The file confirms her current licence, authorized scope, preparation and availability, and the client has instructed her to act. We should record that assignment and confirm tomorrow’s hearing arrangements with her and the client.\n\nRiley can help organize the hearing papers and take notes in the agreed support role. Riley should not make submissions for the tenant: the record expressly states that no representation exemption applies. Priya’s licence cannot be used as Riley’s authorization.\n\nThe application did not identify Priya, and I cannot find notice of her appointment. I will arrange written notification to the LTB and the other parties, then retain the notification record and check for any hearing directions. If an availability problem arises, I will raise it promptly so we can address representation lawfully rather than assume an adjournment.\n\nPlease confirm that this is the staffing plan you want implemented.",
-          "partnerReply": "The strongest reply assigns the work using the actual licence and client instructions, then identifies the unfinished notification. It does not confuse Riley’s usefulness with permission to advocate. Your prose has not been automatically graded; compare it with the rubric and discuss any defensible alternative.",
-          "acceptableAlternatives": [
-            "A concise email requesting the supervisor to arrange notice rather than offering to send it yourself is acceptable.",
-            "Further logistical checks are sensible if identified as checks, not missing established licence or competence facts."
-          ],
-          "status": "Needs practitioner review"
-        },
-        {
-          "id": "CA-EMAIL-REF",
-          "group": "REF",
-          "title": "Explain the referral without selling the fee",
-          "to": "Client, Morgan",
-          "fromName": "Canadian practice supervisor",
-          "jurisdiction": "British Columbia",
-          "forum": "Non-contentious client referral",
-          "practitionerRole": "BC lawyer",
-          "setting": "Vancouver office · a small coastal practice serving local businesses",
-          "prompt": "Write a 100–200 word client email explaining the proposed referral and payment, the effect on the client’s bill, and the decision you need. Do not treat consent as already obtained.",
-          "wordRange": [
-            100,
-            200
-          ],
-          "records": [
-            {
-              "id": "REF-E1",
-              "text": "Morgan’s Vancouver business needs a specialist for a licensing dispute. The referring lawyer lacks the specialist expertise; no conflict caused the referral. The proposed receiving lawyer is another BC lawyer in a separate firm."
-            },
-            {
-              "id": "REF-E2",
-              "text": "The receiving lawyer would charge Morgan $3,000 for the same defined work with or without a referral fee. A proposed $300 inter-lawyer payment would come from that $3,000, not be added to it. Reasonableness is stipulated for this exercise."
-            },
-            {
-              "id": "REF-E3",
-              "text": "Morgan has not yet been informed or consented. The specialist is also willing to accept a no-referral-fee arrangement. No transfer of the client file or payment has occurred."
-            }
-          ],
-          "ruleIds": [
-            "BC-REF"
-          ],
-          "rubric": [
-            {
-              "id": "R1",
-              "criterion": "Explains the expertise-based reason and avoids inventing a conflict.",
-              "points": 2
-            },
-            {
-              "id": "R2",
-              "criterion": "Clearly separates the $300 inter-lawyer payment from the unchanged $3,000 client fee.",
-              "points": 2
-            },
-            {
-              "id": "R3",
-              "criterion": "Seeks informed consent instead of presuming or pressuring it.",
-              "points": 2
-            },
-            {
-              "id": "R4",
-              "criterion": "Offers the stated no-fee alternative and seeks instructions before the handoff.",
-              "points": 2
-            },
-            {
-              "id": "R5",
-              "criterion": "Uses clear client language without claiming a regulatory endorsement or guaranteed outcome.",
-              "points": 2
-            }
-          ],
-          "rubricScale": "Human review only: 0 = absent or materially wrong; 1 = partly sound but incomplete; 2 = accurate, supported and practical. 10 points is a discussion aid, not a credential or automated pass.",
-          "criticalIssues": [
-            "Adding $300 to the client’s total.",
-            "Treating the client’s silence as consent."
-          ],
-          "sampleResponse": "Subject: Proposed specialist referral and your instructions\n\nYour licensing dispute would benefit from a lawyer with the specialist experience described in our discussion. I propose referring you to the identified BC specialist for that reason; this referral is not being made because of a conflict.\n\nThe specialist has proposed a $3,000 fee for the defined work. That total would be the same whether or not a referral fee is paid. If you agree, the specialist would pay our firm $300 from that amount for the referral. It would not be an additional $300 charge to you.\n\nWe have not treated your consent as given. Please let me know whether you understand and agree to this arrangement, or whether you would prefer the available option with no referral payment. You may also ask questions or discuss another suitable lawyer.\n\nOnce we have your instructions, we can confirm the engagement and arrange an authorized handoff. No referral payment or file transfer has occurred.",
-          "partnerReply": "A useful client email makes the money understandable and leaves the decision open. Selecting a specialist and agreeing to an inter-lawyer fee are separate choices. Compare your text with the proposed response; this is authored guidance, not an assessment of your actual prose.",
-          "acceptableAlternatives": [
-            "It is acceptable to recommend the no-fee option while accurately explaining the available arrangement.",
-            "A request to discuss the arrangement before deciding is also a valid next step."
-          ],
-          "status": "Needs practitioner review"
-        },
-        {
-          "id": "CA-EMAIL-REC",
-          "group": "REC",
-          "title": "A meeting without audio",
-          "to": "Client, Avery",
-          "fromName": "Canadian practice supervisor",
-          "jurisdiction": "British Columbia",
-          "forum": "Client or lawyer conference; no court hearing",
-          "practitionerRole": "BC lawyer",
-          "setting": "Victoria office · raincoats by the door and a ferry timetable on the noticeboard",
-          "prompt": "Write a 100–200 word pre-meeting email responding to Avery’s preference. Explain how the meeting will proceed and how a later change would be handled, without claiming that notice alone clears every legal issue.",
-          "wordRange": [
-            100,
-            200
-          ],
-          "records": [
-            {
-              "id": "REC-E1",
-              "text": "The Victoria lawyer proposed recording tomorrow’s advice call, but recording has not started. Avery replies: “I would prefer written notes. Will I still be able to have the meeting?”"
-            },
-            {
-              "id": "REC-E2",
-              "text": "The office can conduct the meeting with manual notes; no recording is required. Another lawyer may join later. Recording and transcription functions can remain off throughout."
-            },
-            {
-              "id": "REC-E3",
-              "text": "No vendor assessment or separate privacy analysis has been completed. No confidential information has been sent to an outside transcription service."
-            }
-          ],
-          "ruleIds": [
-            "BC-REC"
-          ],
-          "rubric": [
-            {
-              "id": "R1",
-              "criterion": "Confirms that the meeting can proceed with manual notes and recording off.",
-              "points": 2
-            },
-            {
-              "id": "R2",
-              "criterion": "Acknowledges the preference courteously without treating it as misconduct.",
-              "points": 2
-            },
-            {
-              "id": "R3",
-              "criterion": "Explains that any later proposal to record requires prior information to relevant participants.",
-              "points": 2
-            },
-            {
-              "id": "R4",
-              "criterion": "Preserves the separate confidentiality/information-handling review boundary.",
-              "points": 2
-            },
-            {
-              "id": "R5",
-              "criterion": "Gives practical next steps without inventing recording, a data transfer, or a universal consent rule.",
-              "points": 2
-            }
-          ],
-          "rubricScale": "Human review only: 0 = absent or materially wrong; 1 = partly sound but incomplete; 2 = accurate, supported and practical. 10 points is a discussion aid, not a credential or automated pass.",
-          "criticalIssues": [
-            "Suggesting secret capture or automatic recording on joining.",
-            "Saying the recording-notice rule approves all transcription services."
-          ],
-          "sampleResponse": "Subject: Tomorrow’s meeting — we can use written notes\n\nYes, the meeting can go ahead without recording. We will keep the recording and transcription functions off and take manual notes instead. Thank you for letting us know your preference; audio is not required for this meeting.\n\nI will confirm that arrangement with anyone assisting us. If another lawyer joins, we will explain how the meeting is being documented. If a recording is proposed later, we will raise it before any capture begins and discuss the proposal with the relevant participants rather than switch it on unexpectedly.\n\nAny proposed use of an outside transcription service would also need separate consideration of confidentiality and information handling. Telling participants about recording would not, by itself, settle those questions. No information has been sent to such a service.\n\nPlease attend at the scheduled time. Let me know if there is anything else about the meeting arrangements you would like us to address.",
-          "partnerReply": "This task rewards a workable response to the client’s preference. Keep the notice rule distinct from a broader privacy or consent analysis, and do not invent a need for audio. Your email is retained for self-comparison and practitioner discussion; the application does not grade its wording.",
-          "acceptableAlternatives": [
-            "A shorter email with an offer to discuss documentation needs is acceptable if the recording-off arrangement stays clear.",
-            "Do not require the client to resolve internal vendor compliance questions."
-          ],
-          "status": "Needs practitioner review"
-        },
-        {
-          "id": "CA-EMAIL-SK",
-          "group": "SK",
-          "title": "Confirm the French-language instructions",
-          "to": "Client, Camille",
-          "fromName": "Canadian practice supervisor",
-          "jurisdiction": "Saskatchewan",
-          "forum": "Criminal proceeding in Saskatchewan",
-          "practitionerRole": "Saskatchewan lawyer",
-          "setting": "Saskatoon office · a winter intake day and an English/French service directory",
-          "prompt": "Write a 100–200 word client email confirming the instruction, the competence issue and the procedural step still required. Make the deadline understandable and avoid promising an order already exists.",
-          "wordRange": [
-            100,
-            200
-          ],
-          "records": [
-            {
-              "id": "SK-E1",
-              "text": "Camille is accused in a Saskatchewan criminal proceeding. For this exercise French is Camille’s language under section 530(1). Camille requests French-language representation and trial, although conversational English is comfortable."
-            },
-            {
-              "id": "SK-E2",
-              "text": "The first appearance has occurred. The appearance at which the trial date will be set is five days away. No section 530 application or order is in the file."
-            },
-            {
-              "id": "SK-E3",
-              "text": "The current lawyer is not competent to conduct the required representation in French. A competent French-speaking Saskatchewan criminal lawyer is available to discuss accepting the retainer; Camille has not yet approved the proposed handoff."
-            }
-          ],
-          "ruleIds": [
-            "SK-LANG",
-            "CA-TRIAL"
-          ],
-          "rubric": [
-            {
-              "id": "R1",
-              "criterion": "Accurately confirms the client’s French-language choice without overriding it because of English fluency.",
-              "points": 2
-            },
-            {
-              "id": "R2",
-              "criterion": "Candidly identifies the current lawyer’s competence limitation and proposes competent assistance.",
-              "points": 2
-            },
-            {
-              "id": "R3",
-              "criterion": "Seeks the client’s instructions for the proposed handoff rather than announcing it as completed.",
-              "points": 2
-            },
-            {
-              "id": "R4",
-              "criterion": "Identifies the trial-date-setting appearance as the relevant subsection (1) deadline and plans prompt action.",
-              "points": 2
-            },
-            {
-              "id": "R5",
-              "criterion": "Distinguishes a retainer, application and court order; communicates clearly without a guaranteed result.",
-              "points": 2
-            }
-          ],
-          "rubricScale": "Human review only: 0 = absent or materially wrong; 1 = partly sound but incomplete; 2 = accurate, supported and practical. 10 points is a discussion aid, not a credential or automated pass.",
-          "criticalIssues": [
-            "Switching to English without the client’s instruction.",
-            "Calling the prospective lawyer’s availability an issued court order.",
-            "Treating the first appearance as an absolute bar to a timely application here."
-          ],
-          "sampleResponse": "Subject: Your French-language representation and trial request\n\nI confirm that you wish to receive the required legal services and have your criminal trial in French. Your ability to converse in English does not change that instruction. I am not able to conduct this representation competently in French, so I propose discussing the retainer with the available French-speaking Saskatchewan criminal lawyer, with your approval.\n\nThere is also a separate court step. On the supplied facts, the section 530(1) application should be made no later than the appearance at which your trial date is set. That appearance is five days away. We need to arrange responsibility for the application promptly; retaining a French-speaking lawyer will not itself produce an order.\n\nPlease confirm whether you approve the proposed handoff. We will coordinate the immediate steps, verify the application’s filing and court status, and confirm the arrangements with you. At present, the file contains neither the application nor an order.",
-          "partnerReply": "The strongest reply keeps three things visible: the client’s choice, competent services, and a procedural step with its own timing. Do not treat one as proof that the others are complete. A practitioner should assess the local procedure and the proposed transition before approving this assignment.",
-          "acceptableAlternatives": [
-            "A request for an urgent client call can be appropriate if the email still explains the upcoming checkpoint.",
-            "A competent team arrangement may be considered if the practitioner confirms it actually meets the required service and retainer obligations."
-          ],
-          "status": "Needs practitioner review"
-        },
-        {
-          "id": "CA-EMAIL-UND",
-          "group": "UND",
-          "title": "The client wants the funds today",
-          "to": "Supervising BC lawyer",
-          "fromName": "Canadian practice supervisor",
-          "jurisdiction": "British Columbia",
-          "forum": "Professional commitment in a synthetic transaction",
-          "practitionerRole": "BC lawyer",
-          "setting": "Nanaimo office · a community workshop transaction, with a precise closing checklist",
-          "prompt": "Write a 100–200 word internal email explaining whether release can occur now and the steps you recommend. Address the proposed variation without assuming it has been accepted. Identify what would change if a breach were discovered.",
-          "wordRange": [
-            100,
-            200
-          ],
-          "records": [
-            {
-              "id": "UND-E1",
-              "text": "The Nanaimo office accepted a written trust condition: “Hold the $12,000 until you receive my written confirmation that the specified release event has occurred.” This quoted sentence is a fictional exercise term, not a quotation from a conduct rule."
-            },
-            {
-              "id": "UND-E2",
-              "text": "The required confirmation has not arrived. The client asks for immediate payment. The lawyer who imposed the condition has not answered the office’s request to vary it. The existing condition can still be honoured."
-            },
-            {
-              "id": "UND-E3",
-              "text": "The funds remain held and no breach has occurred on the supplied facts. The record does not establish a present right to return the funds or cancel the commitment unilaterally."
-            }
-          ],
-          "ruleIds": [
-            "BC-PROMISE",
-            "BC-REPORT"
-          ],
-          "rubric": [
-            {
-              "id": "R1",
-              "criterion": "Identifies that the confirmation required by the exact condition is missing.",
-              "points": 2
-            },
-            {
-              "id": "R2",
-              "criterion": "Does not treat the client’s demand or unanswered request as effective variation.",
-              "points": 2
-            },
-            {
-              "id": "R3",
-              "criterion": "Proposes continued compliance and an appropriately agreed, documented variation if pursued.",
-              "points": 2
-            },
-            {
-              "id": "R4",
-              "criterion": "Keeps the no-breach fact distinct from the conditional discussion of remediation/reporting.",
-              "points": 2
-            },
-            {
-              "id": "R5",
-              "criterion": "Qualifies any reporting discussion for confidentiality/privilege and avoids a universal return-funds escape.",
-              "points": 2
-            }
-          ],
-          "rubricScale": "Human review only: 0 = absent or materially wrong; 1 = partly sound but incomplete; 2 = accurate, supported and practical. 10 points is a discussion aid, not a credential or automated pass.",
-          "criticalIssues": [
-            "Releasing the $12,000 before the stated condition is satisfied or effectively varied.",
-            "Saying a variation request equals consent.",
-            "Recommending unrestricted disclosure of the client file if an issue arises."
-          ],
-          "sampleResponse": "Subject: $12,000 trust condition — release is not yet authorized\n\nThe required written confirmation has not arrived, so the condition we accepted does not presently permit release. The client’s request does not change that condition. Our unanswered variation request is also not an agreement.\n\nI recommend that we keep the funds held under the existing terms, explain the outstanding step to the client, and follow up with the lawyer who imposed the condition. If an appropriate variation is agreed, we should confirm its precise terms in writing before acting on it. This record does not establish a separate right to return the funds or cancel the commitment ourselves.\n\nNo breach has occurred on the supplied facts. If we discover one, we should preserve an accurate record, address remediation and assess the reporting duty for an unconsented, unwaived breach, including the confidentiality and privilege qualification. We should not assume that later performance alone erases the issue or permits unrestricted disclosure.\n\nPlease confirm who will handle the follow-up.",
-          "partnerReply": "The exact condition controls this file. A sound response distinguishes a requested change from an agreed one and keeps hypothetical breach reporting separate from the actual no-breach facts. Use the rubric with your practitioner; no text-matching score has been applied.",
-          "acceptableAlternatives": [
-            "A carefully framed request for clarification or a proposed alternative condition is acceptable without unilateral release.",
-            "Any proposed property-return route must be supported by the particular terms and reviewed; it is not the default answer here."
-          ],
-          "status": "Needs practitioner review"
-        }
-      ]
-    };
-    const CANADA_DIGEST = "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645";
-    const CANADA_SCENARIOS = CANADA_PACK.questions.map(q => ({
-      id: q.id, difficulty: q.difficulty, sourceType: 'canada-test', isTestPack: true,
-      jurisdiction: q.jurisdiction, from: 'Canadian practice supervisor', role: q.practitionerRole,
-      subject: q.title, body: q.setting + '\n\n' + q.body + '\n\nForum: ' + q.forum,
-      rule: q.ruleIds.map(id => CANADA_PACK.rules.find(r => r.id === id).title).join(' · '),
-      explanation: q.options.find(o => o.id === q.answer).explanation,
-      choices: q.options.map(o => ({ id: o.id, text: o.text, grade: o.id === q.answer ? 'correct' : 'wrong', why: o.explanation })),
-      sourceUrl: CANADA_PACK.sources.find(s => s.id === CANADA_PACK.rules.find(r => r.id === q.ruleIds[0]).sourceRefs[0].id).url,
-      sourceNote: 'Canada test pack · Practitioner review required · Original fictional exercise · No Ethics or gold effects.',
-      localSourceFile: 'canada-test/review.html#' + q.id, sourceLabel: 'Question, explanations and practitioner review',
-      officialSourceLabel: 'Official primary source', gold: 0, ruleIds: q.ruleIds
-    }));
-    Object.assign(exports, { CANADA_PACK, CANADA_DIGEST, CANADA_SCENARIOS });
-  },
-  "js/clock.js": (exports, require) => {
-    // Game clock. Solo play reads the browser clock; online play keeps an offset
-    // to the account service so cooldowns and slow effects use server time.
-
-    let offset = 0;
-
-    function now() { return Date.now() + offset; }
-
-    function setServerNow(serverNow) {
-      if (Number.isFinite(serverNow)) offset = serverNow - Date.now();
-    }
-
-    function clockOffset() { return offset; }
-    Object.assign(exports, { now, setServerNow, clockOffset });
-  },
-  "js/progress.js": (exports, require) => {
-    // Client-side progress dispatch.
-    //
-    // Solo play applies every action locally through the shared reducer and saves
-    // to this browser. Online play posts the same action to the account service,
-    // which applies the reducer with its own clock and returns the new character;
-    // the browser never computes rewards itself in that mode.
-
-    const { state, save, replaceState, setPersistence } = require("js/state.js");
-    const { applyAction } = require("js/actions.js");
-    const { now, setServerNow } = require("js/clock.js");
-
-    const STUDY_FLUSH_MS = 5_000;
-    const RETRY_DELAYS_MS = [500, 1000, 2000];
-
-    let mode = 'solo';
-    let transport = null;      // { act(envelope), beacon(envelope), fetchState(), onExpired() }
-    let clientId = null;
-    let seq = 0;
-    let queue = Promise.resolve();
-    let onDelivered = null;
-    let studyUnflushedMs = 0;
-    let studyUnsavedMs = 0;
-    let studyLastFlushAt = 0;
-    const coalesced = new Map();
-
-    function configureProgress({ mode: nextMode = 'solo', transport: nextTransport = null, onDelivered: deliveredHook = null } = {}) {
-      mode = nextMode === 'online' ? 'online' : 'solo';
-      transport = nextTransport;
-      onDelivered = deliveredHook;
-      clientId = mode === 'online' ? (globalThis.crypto?.randomUUID?.() || `tab-${Date.now()}-${Math.random().toString(36).slice(2)}`) : null;
-      seq = 0;
-      studyUnflushedMs = 0;
-      studyUnsavedMs = 0;
-      studyLastFlushAt = 0;
-      setPersistence(mode === 'online' ? 'server' : 'local');
-    }
-
-    function isOnline() { return mode === 'online'; }
-    function progressClientId() { return clientId; }
-
-    function coalesceKey(action) {
-      return `${action.type}:${action.taskId ?? action.packId ?? action.id ?? action.topicId ?? ''}`;
-    }
-
-    function applyLocally(action, persist) {
-      const envelope = applyAction(state, action, { now: now(), rng: Math.random });
-      if (persist) save();
-      if (envelope.delivered.length && onDelivered) onDelivered(envelope.delivered);
-      return envelope;
-    }
-
-    async function postWithRetry(envelope) {
-      let lastError = null;
-      for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
-        try {
-          return await transport.act(envelope);
-        } catch (error) {
-          lastError = error;
-          if (attempt < RETRY_DELAYS_MS.length) await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
-        }
-      }
-      throw lastError || new Error('Connection lost.');
-    }
-
-    function adoptServerState(response) {
-      if (Number.isFinite(response.serverNow)) setServerNow(response.serverNow);
-      if (response.state && typeof response.state === 'object') replaceState(response.state, { preserve: ['pos'] });
-    }
-
-    async function sendOnline(action) {
-      const envelope = { clientId, seq: ++seq, action };
-      let response;
-      try {
-        response = await postWithRetry(envelope);
-      } catch {
-        // The server may have applied the action even though the reply was lost.
-        try { adoptServerState(await transport.fetchState()); } catch { /* still offline */ }
-        throw new Error('Connection lost. Check your connection and try again.');
-      }
-      if (response.expired) {
-        transport.onExpired?.();
-        throw new Error('Your online session expired. Sign in again to continue.');
-      }
-      adoptServerState(response);
-      if (!response.ok) throw new Error(response.message || 'The firm could not process that action.');
-      const envelopeOut = { type: action.type, result: response.result ?? {}, delivered: response.delivered ?? [], ended: !!response.ended };
-      if (envelopeOut.delivered.length && onDelivered) onDelivered(envelopeOut.delivered);
-      return envelopeOut;
-    }
-
-    // Apply one action. Resolves with { type, result, delivered, ended } or rejects
-    // with the player-facing message. Online actions are serialised per tab.
-    function dispatch(action, { persist = true, coalesce = 0 } = {}) {
-      if (mode !== 'online') {
-        try { return Promise.resolve(applyLocally(action, persist)); }
-        catch (error) { return Promise.reject(error); }
-      }
-      if (!transport) return Promise.reject(new Error('Online transport is not configured.'));
-      if (coalesce > 0) {
-        const key = coalesceKey(action);
-        const pending = coalesced.get(key);
-        if (pending) { clearTimeout(pending.timer); pending.action = action; }
-        const entry = pending || { action, timer: null, promise: null, resolve: null, reject: null };
-        if (!pending) entry.promise = new Promise((resolve, reject) => { entry.resolve = resolve; entry.reject = reject; });
-        entry.timer = setTimeout(() => {
-          coalesced.delete(key);
-          queue = queue.then(() => sendOnline(entry.action)).then(entry.resolve, entry.reject);
-        }, coalesce);
-        coalesced.set(key, entry);
-        return entry.promise;
-      }
-      const run = queue.then(() => sendOnline(action));
-      queue = run.catch(() => {});
-      return run;
-    }
-
-    // Billable study ticks: per frame in solo play (identical totals to the
-    // original loop); batched every few seconds online.
-    function recordStudy(ms) {
-      if (!(ms > 0)) return;
-      if (mode !== 'online') {
-        applyAction(state, { type: 'study_tick', ms }, { now: now() });
-        studyUnsavedMs += ms;
-        if (studyUnsavedMs >= STUDY_FLUSH_MS) { studyUnsavedMs = 0; save(); }
-        return;
-      }
-      studyUnflushedMs += ms;
-      if (now() - studyLastFlushAt >= STUDY_FLUSH_MS) flushStudy();
-    }
-
-    function displayedBillableMs() {
-      return (state.billableStudyMs || 0) + (mode === 'online' ? studyUnflushedMs : 0);
-    }
-
-    function flushStudy({ beacon = false } = {}) {
-      if (mode !== 'online' || studyUnflushedMs <= 0 || !transport) return false;
-      const ms = Math.round(studyUnflushedMs);
-      studyUnflushedMs = 0;
-      studyLastFlushAt = now();
-      const envelope = { clientId, seq: ++seq, action: { type: 'study_tick', ms } };
-      if (beacon && transport.beacon) return transport.beacon(envelope);
-      queue = queue.then(() => transport.act(envelope).then(adoptServerState)).catch(() => { studyUnflushedMs += ms; });
-      return true;
-    }
-
-    // Online only: adopt the account document after a reload or resync.
-    function adoptAccountState(response) {
-      adoptServerState(response);
-    }
-    Object.assign(exports, { configureProgress, isOnline, progressClientId, dispatch, recordStudy, displayedBillableMs, flushStudy, adoptAccountState });
-  },
-  "js/actions.js": (exports, require) => {
-    // Action dispatcher shared by solo play and the online account service.
-    //
-    // `applyAction(player, action, ctx)` applies one semantic action to a character
-    // with server-supplied time. Partner replies that have come due are settled
-    // first, and a failed action leaves the character exactly as it was.
-
-    const { settleReplies, saveDraft, commitWriting, submitReview, buyCosmetic, requestJurisdiction } = require("js/apprenticeship.js");
-    const { COSMETICS } = require("js/data/apprenticeship.js");
-    const { saveCanadaDraft, commitCanadaEmail, nextCanadaRound } = require("js/canada.js");
-    const { orderBarDrink } = require("js/lounge.js");
-    const { saveSidebarDraft } = require("js/data/sidebar.js");
-    const { answerScenario, buyHint, buyTip, buyUpgrade, docReviewStart, docReviewCycle, docReviewStop, rest, drinkCoffee, eat, takeMoneybags, drinkWhiskey, sendHrEmail, studyTick, resetSeen, setPracticePack, setZone, setAppearance, createCharacter, } = require("js/economy.js");
-
-    const HANDLERS = {
-      answer_scenario: (p, a, ctx) => answerScenario(p, a.scenarioId, a.choiceIndex, ctx),
-      buy_hint: (p, a) => buyHint(p, a.scenarioId),
-      buy_tip: (p, _a, ctx) => buyTip(p, ctx),
-      buy_upgrade: (p, a) => buyUpgrade(p, a.id),
-      doc_review_start: (p, _a, ctx) => docReviewStart(p, ctx),
-      doc_review_cycle: (p, _a, ctx) => docReviewCycle(p, ctx),
-      doc_review_stop: (p) => docReviewStop(p),
-      rest: (p, _a, ctx) => rest(p, ctx),
-      coffee: (p) => drinkCoffee(p),
-      eat: (p, a) => eat(p, a.item),
-      take_moneybags: (p) => takeMoneybags(p),
-      drink_whiskey: (p, _a, ctx) => drinkWhiskey(p, ctx),
-      bar_drink: (p, a, ctx) => {
-        const { drink, slowUntil } = orderBarDrink(p, a.id, ctx.now);
-        return { id: drink.id, name: drink.name, cost: drink.cost, slows: drink.slows, slowUntil };
-      },
-      hr_email: (p, a) => sendHrEmail(p, a.category),
-      study_tick: (p, a, ctx) => studyTick(p, a.ms, ctx),
-      reset_seen: (p) => resetSeen(p),
-      set_practice_pack: (p, a) => setPracticePack(p, a.id),
-      set_zone: (p, a) => setZone(p, a.zone),
-      set_appearance: (p, a) => setAppearance(p, a.key, a.value),
-      set_sidebar_draft: (p, a) => saveSidebarDraft(p, a.topicId, a.text),
-      apprenticeship_introduced: (p) => { p.apprenticeship.introduced = true; return { introduced: true }; },
-      apprenticeship_save_draft: (p, a) => ({ saved: saveDraft(p, a.taskId, a.draft || {}) }),
-      apprenticeship_review_draft: (p, a) => {
-        p.apprenticeship.reviewDrafts[String(a.packId)] = {
-          selected: Array.isArray(a.selected) ? a.selected.map(String).slice(0, 200) : [],
-          notes: String(a.notes ?? '').slice(0, 6000),
-        };
-        return { saved: true };
-      },
-      apprenticeship_commit: (p, a, ctx) => commitWriting(p, a.taskId, ctx.now),
-      apprenticeship_submit_review: (p, a, ctx) => submitReview(p, a.packId, Array.isArray(a.selected) ? a.selected : [], a.notes, ctx.now),
-      apprenticeship_buy_cosmetic: (p, a) => buyCosmetic(p, a.id),
-      apprenticeship_equip: (p, a) => {
-        if (!COSMETICS.some((item) => item.id === a.id) || !p.apprenticeship.cosmetics.includes(a.id)) throw new Error('You do not own that item.');
-        const worn = p.apprenticeship.equipped.filter((id) => id !== a.id);
-        p.apprenticeship.equipped = a.worn ? [...worn, a.id] : worn;
-        return { id: a.id, worn: !!a.worn };
-      },
-      apprenticeship_request_jurisdiction: (p, a) => requestJurisdiction(p, a.label, a.topic, a.help),
-      canada_next_round: (p) => { nextCanadaRound(p); return { round: p.canada.round }; },
-      canada_draft: (p, a) => { saveCanadaDraft(p, a.id, a.text); return { saved: true }; },
-      canada_commit_email: (p, a, ctx) => commitCanadaEmail(p, a.id, ctx.now),
-      settle: () => ({}),
-      create_character: (p, a, ctx) => createCharacter(p, a, ctx),
-    };
-
-    const ACTION_TYPES = Object.keys(HANDLERS);
-
-    // Frequent or draft-only actions skip the settle pass and the rollback snapshot.
-    const LIGHT = new Set(['study_tick', 'settle', 'set_zone', 'set_sidebar_draft', 'apprenticeship_save_draft', 'apprenticeship_review_draft', 'canada_draft']);
-
-    function isAction(type) { return Object.hasOwn(HANDLERS, type); }
-
-    function applyAction(player, action, ctx) {
-      const type = action?.type;
-      const handler = HANDLERS[type];
-      if (!handler) throw new Error(`Unknown action: ${type}`);
-      if (!ctx || !Number.isFinite(ctx.now)) throw new Error('Action context requires a clock.');
-      const context = { rng: Math.random, ...ctx };
-      const light = LIGHT.has(type);
-      const delivered = type === 'create_character' || (light && type !== 'settle') ? [] : settleReplies(player, context.now);
-      const snapshot = light ? null : JSON.stringify(player);
-      const wasActive = player.runStatus !== 'ended';
-      try {
-        const result = handler(player, action, context) ?? {};
-        const ended = wasActive && player.runStatus === 'ended';
-        if (ended) player.endedAt = context.now;
-        return { type, result, delivered, ended };
-      } catch (error) {
-        if (snapshot) {
-          const restored = JSON.parse(snapshot);
-          for (const key of Object.keys(player)) if (!(key in restored)) delete player[key];
-          Object.assign(player, restored);
-        }
-        throw error;
-      }
-    }
-    Object.assign(exports, { ACTION_TYPES, isAction, applyAction });
-  },
-  "js/lounge.js": (exports, require) => {
-    const { WHISKEY_SLOW_MS } = require("js/data/work.js");
-
-    const BAR_DRINKS = [
-      { id: 'old-fashioned', name: 'The Reasonable Old Fashioned', cost: 5, note: 'Orange peel, a polished glass, and no pending deadlines.', slows: true },
-      { id: 'wine', name: 'House Red · Reserved Judgment', cost: 5, note: 'Served in stemware by a very precise robot.', slows: true },
-      { id: 'ale', name: 'After-Hours Ale', cost: 3, note: 'The office is closed. Your walking pace takes a short break.', slows: true },
-      { id: 'water', name: 'Sparkling water', cost: 0, note: 'Complimentary. No movement or Ethics effect.', slows: false },
+    const OFFICE_UPGRADES = [
+      { id: 'monitor', name: 'Second Monitor', cost: 60,
+        desc: '+15% gold from correct answers. A second screen appears on your desk.' },
+      { id: 'subscription', name: 'Ethics Treatise Shelf', cost: 250,
+        desc: 'Unlocks the searchable Nevada, Arizona, and California reference library. Required for Riley’s paid ethics hints.' },
+      { id: 'liz_chair', name: 'New Chair for Liz Loza', cost: 250,
+        desc: '+10 max Ethics. Replaces the broken chair Liz has been balancing on since 1987.' },
+      { id: 'houseplants', name: 'Houseplants', cost: 500,
+        desc: 'Maybe this will cheer Liz up. Adds greenery and slightly improves her mood.' },
+      { id: 'espresso', name: 'Espresso Machine', cost: 1000,
+        desc: 'Pull a shot in the main office to restore 5 Ethics (90-second cooldown) and sober up instantly.' },
+      { id: 'paralegal', name: 'Paralegal Upgrade — Riley Readsalot', cost: 2000,
+        desc: 'Riley halves Ethics damage from wrong answers. With the treatise shelf, Riley can research a relevant-rule hint for 100 gold.' },
+      { id: 'work_phone', name: 'Work Phone', cost: 2000,
+        desc: 'Open the full BarMail inbox anywhere: ethics practice, writing assignments, and partner replies. Jim can now find you at the bar.' },
+      { id: 'artwork', name: 'Artwork', cost: 2000,
+        desc: 'A single black dot on a white canvas adds unmistakable warmth to the office.' },
     ];
 
-    function orderBarDrink(player, id, now) {
-      const drink = BAR_DRINKS.find((item) => item.id === id);
-      if (!drink || player.zone !== 'sidebar' || player.runStatus === 'ended' || player.ethics <= 0) throw new Error('Drinks are served in The Sidebar during an active run.');
-      if (player.apprenticeship.attempts.some((a) => a.status === 'pending')) throw new Error('Wait for your partner reply before making purchases.');
-      if (player.gold < drink.cost) throw new Error(`You need ${drink.cost} gold for that drink.`);
-      player.gold -= drink.cost;
-      player.sidebarDrinks = (player.sidebarDrinks || 0) + 1;
-      // Each alcoholic drink refreshes the short effect; it never damages Ethics.
-      if (drink.slows) player.slowUntil = Math.max(player.slowUntil || 0, now + WHISKEY_SLOW_MS);
-      return { drink, ethicsDamage: 0, slowUntil: player.slowUntil || 0 };
-    }
-
-    function movementMultiplier(player, now) { return player.slowUntil > now ? 0.5 : 1; }
-
-    const BOARD_KEY = 'lawscape_billable_board_v1';
-    let sessionBoard = [];
-    let unsavedEntries = [];
-    function validEntry(entry) {
-      return entry && typeof entry.runId === 'string' && typeof entry.name === 'string'
-        && Number.isFinite(entry.billableMs) && entry.billableMs >= 0 && Number.isFinite(entry.endedAt);
-    }
-    function readBillableBoard() {
-      try {
-        const saved = localStorage.getItem(BOARD_KEY);
-        const raw = saved === null ? sessionBoard : JSON.parse(saved);
-        if (Array.isArray(raw)) sessionBoard = raw.filter(validEntry);
-      } catch { /* retain the session copy if storage is unavailable */ }
-      const unique = new Map([...sessionBoard,...unsavedEntries].map((entry) => [entry.runId,entry]));
-      return [...unique.values()].sort((a,b) => b.billableMs-a.billableMs || a.endedAt-b.endedAt).slice(0,10);
-    }
-    function archiveDisbarredRun(player, now) {
-      if (player.ethics > 0 && player.runStatus !== 'ended') return { recorded: false, persisted: false };
-      const entries = readBillableBoard();
-      if (entries.some((entry) => entry.runId === player.runId)) return { recorded: false, duplicate: true };
-      if (!player.runId || !Number.isFinite(player.billableStudyMs) || player.billableStudyMs < 0) return { recorded: false, persisted: false };
-      sessionBoard = [...entries, { runId: player.runId, name: String(player.name).slice(0,80), billableMs: Math.floor(player.billableStudyMs), endedAt: now }]
-        .sort((a,b) => b.billableMs-a.billableMs || a.endedAt-b.endedAt).slice(0,10);
-      try { localStorage.setItem(BOARD_KEY,JSON.stringify(sessionBoard)); unsavedEntries=[]; return { recorded: true, persisted: true }; }
-      catch { unsavedEntries=[...sessionBoard]; return { recorded: true, persisted: false }; }
-    }
-    Object.assign(exports, { BAR_DRINKS, orderBarDrink, movementMultiplier, readBillableBoard, archiveDisbarredRun });
-  },
-  "js/data/work.js": (exports, require) => {
-    // Shared economy values for the office's repeatable work and NPC interactions.
-    // Keeping them in a small data module makes the launch promises testable.
-
-    const DOC_REVIEW_CYCLE_MS = 60_000;
-    const DOC_REVIEW_REWARD = 5;
-    const COFFEE_ETHICS_RESTORE = 2;
-    const APARTMENT_FOOD_COST = 5;
-    const RAMEN_ETHICS_RESTORE = 5;
-    const COOKED_MEAL_ETHICS_RESTORE = 30;
-    const LINDA_TIP_COST = 5;
-    const RILEY_HINT_COST = 100;
-    const WHISKEY_ETHICS_DAMAGE = 2;
-    const WHISKEY_SLOW_MS = 40_000;
-    const MONEYBAGS_SAFE_GOLD = 6_000;
-    const MONEYBAGS_ETHICS_DAMAGE = 99;
-    const MONEYBAGS_GRACE_PURCHASES = 2;
-    const LAWYER_ASSISTANCE_PHONE = '866-828-0022';
-    const LAWYER_ASSISTANCE_URL = 'https://nvbar.org/for-lawyers/resources/wellbeing/lcl/';
-
-    // Linda's paid tips. Canada test play swaps in the pack's rule briefings.
-    const ETHICS_TIPS = [
-      'Client consent to a conflict usually must be informed and confirmed in writing. A signature without an explanation of material risks is not enough.',
-      'Advance fees belong in trust until earned. Calling money “nonrefundable” does not transform unearned money into the firm’s property.',
-      'Confidentiality is broader than attorney-client privilege. Do not use the two concepts as synonyms.',
-      'With an unrepresented person whose interests may conflict with your client’s, the safest legal advice is: get your own lawyer.',
-      'Candor to the tribunal can require correcting a false statement even when correction hurts the client’s position.',
-      'A subordinate lawyer remains responsible for a clear ethics violation even when a supervisor ordered it.',
-      'Reporting misconduct requires a substantial question about honesty, trustworthiness, or fitness—not every technical rule violation.',
-      'When client and third-party claims to funds conflict, keep the disputed portion separate while promptly releasing any undisputed portion.',
+    const APARTMENT_UPGRADES = [
+      { id: 'mattress', name: 'Better Mattress', cost: 80,
+        desc: '+20 max Ethics. A principled attorney is a well-rested attorney.' },
+      { id: 'coffee', name: 'Coffee Machine', cost: 500,
+        desc: 'Drink a cup to restore 2 Ethics. Clarity in a cup.' },
+      { id: 'wardrobe_rack', name: 'Wardrobe Rack', cost: 160,
+        desc: 'Adds a brass rail with displayed suits to your apartment wardrobe and unlocks formal wear (tuxedo, evening gown) for purchase. All appearance colors are available without this upgrade.' },
+      { id: 'homedesk', name: 'Clock', cost: 260,
+        desc: 'Adds a wall clock. Keeping a healthy sleep schedule makes bed rest restore +10 more Ethics.' },
+      { id: 'kitchen', name: 'Kitchen Upgrade', cost: 400,
+        desc: '+10 max Ethics and faster rest. Cook a meal for 5 gold to restore 30 Ethics.' },
+      { id: 'cityview', name: 'City View Apartment', cost: 1200,
+        desc: '+25% gold from correct answers. Adds a skyline window and a couch where you can sit and enjoy the view.' },
     ];
 
-    function rileyHintEligible(upgrades) {
-      return upgrades.includes('paralegal') && upgrades.includes('subscription');
+    function findUpgrade(id) {
+      return OFFICE_UPGRADES.find((u) => u.id === id) || APARTMENT_UPGRADES.find((u) => u.id === id);
     }
 
-    // Beta rebalance: ethics violations hurt. A fresh 100-Ethics attorney is
-    // disbarred by THREE consecutive wrong answers (30 + 45 + 45), not four.
-    function wrongAnswerDamage(wrongStreak, rileyHired = false) {
-      const damage = wrongStreak >= 4 ? 60 : wrongStreak >= 2 ? 45 : 30;
-      return rileyHired ? Math.ceil(damage / 2) : damage;
-    }
-
-    function moneybagsAuditTriggered(purchasesAfterTheft) {
-      return purchasesAfterTheft > MONEYBAGS_GRACE_PURCHASES;
-    }
-
-    function formatBillableTime(milliseconds = 0) {
-      const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
-      const hours = Math.floor(totalSeconds / 3600);
-      const minutes = Math.floor((totalSeconds % 3600) / 60);
-      const seconds = totalSeconds % 60;
-      return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-    }
-    Object.assign(exports, { DOC_REVIEW_CYCLE_MS, DOC_REVIEW_REWARD, COFFEE_ETHICS_RESTORE, APARTMENT_FOOD_COST, RAMEN_ETHICS_RESTORE, COOKED_MEAL_ETHICS_RESTORE, LINDA_TIP_COST, RILEY_HINT_COST, WHISKEY_ETHICS_DAMAGE, WHISKEY_SLOW_MS, MONEYBAGS_SAFE_GOLD, MONEYBAGS_ETHICS_DAMAGE, MONEYBAGS_GRACE_PURCHASES, LAWYER_ASSISTANCE_PHONE, LAWYER_ASSISTANCE_URL, ETHICS_TIPS, rileyHintEligible, wrongAnswerDamage, moneybagsAuditTriggered, formatBillableTime });
-  },
-  "js/data/sidebar.js": (exports, require) => {
-    // Room/topic IDs are stable attachment points for the room service. Live
-    // presence comes from js/online/*; table chat is not part of the pilot, so no
-    // chat transport or agent execution exists here.
-    const SIDEBAR_ROOM = { id: 'sidebar', title: 'The Sidebar', mode: 'local-preview', participantLimit: 10 };
-    const SIDEBAR_TOPICS = [
-      { id: 'commons', label: 'The commons', prompt: 'Meet the other attorneys and introduce the work you enjoy practicing.' },
-      { id: 'evidence', label: 'Evidence table', prompt: 'Compare how you checked a synthetic file. Mark spoilers and cite the exercise passage.' },
-      { id: 'writing', label: 'Writing table', prompt: 'Trade ideas for a clearer partner update and more useful next steps.' },
-      { id: 'agents', label: 'AI & agents table', prompt: 'Discuss checking AI work. In the future pilot, approved AI agents will be clearly labeled and controlled by their owners.' },
-    ];
-
-    function sidebarTopic(id) { return SIDEBAR_TOPICS.find((topic) => topic.id === id) || SIDEBAR_TOPICS[0]; }
-    function saveSidebarDraft(player, topicId, text) {
-      const topic = sidebarTopic(topicId);
-      player.sidebar.topic = topic.id;
-      player.sidebar.drafts[topic.id] = String(text).slice(0, 500);
-      return { status: 'local-draft', topic: topic.id, text: player.sidebar.drafts[topic.id] };
-    }
-    Object.assign(exports, { SIDEBAR_ROOM, SIDEBAR_TOPICS, sidebarTopic, saveSidebarDraft });
-  },
-  "js/economy.js": (exports, require) => {
-    // Progress rules shared by solo play and the online account service.
-    //
-    // Every function takes the player (character) object, mutates it, throws an
-    // Error with the player-facing message when the action is not allowed, and
-    // returns a JSON-safe result the interface renders from. Nothing here reads a
-    // clock, the DOM, storage or the state singleton: time arrives in `ctx.now`
-    // and randomness in `ctx.rng`, so the same code can run inside a server.
-
-    const { freshState, playerHasUpgrade, playerMaxEthics, healPlayer, damagePlayer } = require("js/state.js");
-    const { normalizeAppearance } = require("js/data/appearance.js");
-    const { ALL_MAIL_SCENARIOS, practiceInbox } = require("js/data/mail.js");
-    const { STREAK_HEAL } = require("js/data/ethics.js");
-    const { bonuses, findUpgrade } = require("js/data/upgrades.js");
-    const { PRACTICE_PACKS } = require("js/data/practice-packs.js");
-    const { CANADA_PACK } = require("js/data/canada.js");
-    const { recordCanadaAnswer, nextCanadaRound } = require("js/canada.js");
-    const { pendingAttempt } = require("js/apprenticeship.js");
-    const { findHrCategory } = require("js/data/feedback.js");
-    const { ZONES } = require("js/world/zones.js");
-    const { COFFEE_ETHICS_RESTORE, APARTMENT_FOOD_COST, RAMEN_ETHICS_RESTORE, COOKED_MEAL_ETHICS_RESTORE, DOC_REVIEW_CYCLE_MS, DOC_REVIEW_REWARD, LINDA_TIP_COST, RILEY_HINT_COST, WHISKEY_ETHICS_DAMAGE, WHISKEY_SLOW_MS, MONEYBAGS_SAFE_GOLD, MONEYBAGS_ETHICS_DAMAGE, MONEYBAGS_GRACE_PURCHASES, ETHICS_TIPS, moneybagsAuditTriggered, rileyHintEligible, wrongAnswerDamage, } = require("js/data/work.js");
-
-    const GENDERS = ['male', 'female', 'nonbinary'];
-    const STUDY_TICK_MAX_MS = 10_000;
-    const APARTMENT_FOOD = {
-      ramen: { name: 'Ramen Noodles', restore: RAMEN_ETHICS_RESTORE, requires: null, replacedBy: 'kitchen' },
-      meal: { name: 'Home-Cooked Meal', restore: COOKED_MEAL_ETHICS_RESTORE, requires: 'kitchen', replacedBy: null },
-    };
-    const PURCHASE_WAIT = 'Wait for the partner reply before making purchases.';
-
-    function activeRun(player) {
-      if (player.runStatus === 'ended' || player.ethics <= 0) throw new Error('This character run has ended.');
-    }
-
-    function eligibleScenario(player, scenarioId) {
-      const scenario = practiceInbox(player, ALL_MAIL_SCENARIOS).unread.find((item) => item.id === scenarioId);
-      if (!scenario) throw new Error('That message is not open in your practice inbox.');
-      return scenario;
-    }
-
-    // BarMail ethics scenario. Canada test-pack answers are recorded without any
-    // gold, Ethics or streak effect; every other pack applies the full economy.
-    function answerScenario(player, scenarioId, choiceIndex, ctx) {
-      activeRun(player);
-      const scenario = eligibleScenario(player, scenarioId);
-      const choice = scenario.choices[choiceIndex];
-      if (!Number.isInteger(choiceIndex) || !choice) throw new Error('Choose one of the listed replies.');
-      if (scenario.isTestPack) {
-        const attempt = recordCanadaAnswer(player, scenario.id, choice.id, ctx.now);
-        return { testPack: true, scenarioId, choiceIndex, matchesProposedKey: attempt.matchesProposedKey };
-      }
-      if (pendingAttempt(player)) throw new Error('Wait for the pending partner reply before submitting another answer.');
-      const b = bonuses(player.upgrades);
-      player.casesDone++;
-      player.hintScenarioId = null;
-      let earned = 0, healed = 0, dmg = 0, disbarred = false;
-      if (choice.grade === 'correct') {
-        earned = Math.round(scenario.gold * b.goldMult + b.goldFlat);
-        player.gold += earned;
-        player.streak++;
-        player.wrongStreak = 0;
-        player.correctDone++;
-        if (player.streak >= 2) {
-          const before = player.ethics;
-          healPlayer(player, STREAK_HEAL + b.streakHealBonus);
-          healed = player.ethics - before;
-        }
-      } else {
-        player.wrongStreak++;
-        dmg = wrongAnswerDamage(player.wrongStreak, playerHasUpgrade(player, 'paralegal'));
-        player.streak = 0;
-        disbarred = damagePlayer(player, dmg);
-      }
-      if (!player.seen.includes(scenario.id)) player.seen.push(scenario.id);
+    // Aggregate bonuses from owned upgrades.
+    function bonuses(upgrades) {
+      const has = (id) => upgrades.includes(id);
       return {
-        testPack: false, scenarioId, choiceIndex, grade: choice.grade, correct: choice.grade === 'correct',
-        earned, healed, dmg, disbarred, streak: player.streak, wrongStreak: player.wrongStreak,
-        rileyHalved: dmg > 0 && playerHasUpgrade(player, 'paralegal'),
+        goldMult: 1 + (has('monitor') ? 0.15 : 0) + (has('cityview') ? 0.25 : 0),
+        goldFlat: 0,
+        streakHealBonus: 0,
+        restHeal: 15 + (has('homedesk') ? 10 : 0),
+        restCooldownMs: has('kitchen') ? 120_000 : 240_000,
       };
     }
-
-    function buyHint(player, scenarioId) {
-      activeRun(player);
-      if (pendingAttempt(player)) throw new Error(PURCHASE_WAIT);
-      const scenario = eligibleScenario(player, scenarioId);
-      if (scenario.isTestPack) throw new Error('The Canada test pack includes a free rule briefing instead.');
-      if (player.hintScenarioId === scenarioId) throw new Error('Riley has already researched this rule.');
-      if (!rileyHintEligible(player.upgrades)) throw new Error('Riley needs both the Paralegal Upgrade and Ethics Treatise Shelf.');
-      if (player.gold < RILEY_HINT_COST) throw new Error(`You need ${RILEY_HINT_COST} gold for an ethics hint.`);
-      player.gold -= RILEY_HINT_COST;
-      player.hintsPurchased++;
-      player.hintScenarioId = scenarioId;
-      return { scenarioId, rule: scenario.rule, cost: RILEY_HINT_COST };
-    }
-
-    function tipPool(player) {
-      return player.practicePack === 'canada-test'
-        ? CANADA_PACK.rules.map((rule) => `${rule.title}: ${rule.summary} ${rule.limits}`)
-        : ETHICS_TIPS;
-    }
-
-    function buyTip(player, ctx) {
-      activeRun(player);
-      if (player.moneybagsStolen) throw new Error('Linda is not taking questions while the client gold is missing.');
-      if (!playerHasUpgrade(player, 'paralegal')) throw new Error('Hire Riley Readsalot before asking Linda for tips.');
-      if (pendingAttempt(player)) throw new Error(PURCHASE_WAIT);
-      if (player.gold < LINDA_TIP_COST) throw new Error(`Come back with ${LINDA_TIP_COST} gold if you want an ethics tip.`);
-      player.gold -= LINDA_TIP_COST;
-      player.tipsPurchased++;
-      const tips = tipPool(player);
-      const tipIndex = Math.min(tips.length - 1, Math.floor(ctx.rng() * tips.length));
-      return { tipIndex, source: player.practicePack === 'canada-test' ? 'canada' : 'us', cost: LINDA_TIP_COST };
-    }
-
-    function buyUpgrade(player, id) {
-      activeRun(player);
-      const u = findUpgrade(id);
-      if (!u) throw new Error('Unknown upgrade.');
-      if (playerHasUpgrade(player, u.id)) throw new Error(`You already own ${u.name}.`);
-      if (pendingAttempt(player)) throw new Error(PURCHASE_WAIT);
-      if (player.gold < u.cost) throw new Error(`You need ${u.cost} gold for ${u.name}.`);
-      const previousMax = playerMaxEthics(player);
-      player.gold -= u.cost;
-      player.upgrades.push(u.id);
-      const addedEthicsCapacity = playerMaxEthics(player) - previousMax;
-      if (addedEthicsCapacity > 0) healPlayer(player, addedEthicsCapacity);
-      let audit = false;
-      if (player.moneybagsStolen) {
-        player.moneybagsPurchases = (player.moneybagsPurchases || 0) + 1;
-        if (moneybagsAuditTriggered(player.moneybagsPurchases)) {
-          player.ethics = 0;
-          player.runStatus = 'ended';
-          audit = true;
-        }
-      }
-      return {
-        id: u.id, name: u.name, cost: u.cost, audit,
-        moneybagsPurchases: player.moneybagsStolen ? player.moneybagsPurchases : 0,
-        escaped: player.moneybagsStolen ? Math.min(player.moneybagsPurchases, MONEYBAGS_GRACE_PURCHASES) : 0,
-      };
-    }
-
-    function docReviewActive(player) { return player.docReviewStartedAt > 0; }
-
-    function docReviewStart(player, ctx) {
-      activeRun(player);
-      if (!['office', 'associates'].includes(player.zone)) throw new Error('The active files are in the main office.');
-      if (docReviewActive(player)) return { startedAt: player.docReviewStartedAt, resumed: true };
-      player.docReviewStartedAt = ctx.now;
-      player.lastDocReviewAt = 0;
-      return { startedAt: ctx.now, resumed: false };
-    }
-
-    // Pays every completed one-minute cycle since the last payment, keeping the
-    // original cadence so a late call never shortens the next cycle.
-    function docReviewCycle(player, ctx) {
-      activeRun(player);
-      if (!docReviewActive(player)) throw new Error('Document review is not active.');
-      const anchor = player.lastDocReviewAt || player.docReviewStartedAt;
-      const cycles = Math.max(0, Math.floor((ctx.now - anchor) / DOC_REVIEW_CYCLE_MS));
-      const earned = cycles * DOC_REVIEW_REWARD;
-      if (cycles > 0) {
-        player.gold += earned;
-        player.documentsReviewed += cycles;
-        player.lastDocReviewAt = anchor + cycles * DOC_REVIEW_CYCLE_MS;
-      }
-      const nextAt = (player.lastDocReviewAt || player.docReviewStartedAt) + DOC_REVIEW_CYCLE_MS;
-      return { cycles, earned, nextAt, documentsReviewed: player.documentsReviewed };
-    }
-
-    function docReviewStop(player) {
-      const wasActive = docReviewActive(player);
-      player.docReviewStartedAt = 0;
-      player.lastDocReviewAt = 0;
-      return { wasActive };
-    }
-
-    function rest(player, ctx) {
-      activeRun(player);
-      if (player.zone !== 'apartment') throw new Error('Rest in your apartment bed.');
-      const b = bonuses(player.upgrades);
-      const since = ctx.now - player.lastRestAt;
-      if (since < b.restCooldownMs) {
-        const wait = Math.ceil((b.restCooldownMs - since) / 1000);
-        throw new Error(`You're not tired yet. Rest again in ${wait}s.`);
-      }
-      if (player.ethics >= playerMaxEthics(player)) throw new Error('Your conscience is already spotless. (Ethics is full.)');
-      player.lastRestAt = ctx.now;
-      const before = player.ethics;
-      healPlayer(player, b.restHeal);
-      return { healed: player.ethics - before };
-    }
-
-    function drinkCoffee(player) {
-      activeRun(player);
-      if (player.zone !== 'apartment') throw new Error('The coffee machine is in your apartment.');
-      if (!playerHasUpgrade(player, 'coffee')) throw new Error('The counter is empty. Buy the Coffee Machine from the furniture catalog first.');
-      if (player.ethics >= playerMaxEthics(player)) throw new Error('Your Ethics is already full. Save the coffee for a harder day.');
-      const before = player.ethics;
-      healPlayer(player, COFFEE_ETHICS_RESTORE);
-      return { healed: player.ethics - before };
-    }
-
-    function eat(player, item) {
-      activeRun(player);
-      const food = APARTMENT_FOOD[item];
-      if (!food) throw new Error('Unknown meal.');
-      if (player.zone !== 'apartment') throw new Error('Meals are served in your apartment.');
-      if (food.requires && !playerHasUpgrade(player, food.requires)) throw new Error('Buy the Kitchen Upgrade to cook a meal.');
-      if (food.replacedBy && playerHasUpgrade(player, food.replacedBy)) throw new Error('The kitchen replaced the instant noodles. Cook a meal instead.');
-      if (pendingAttempt(player)) throw new Error(PURCHASE_WAIT);
-      if (player.ethics >= playerMaxEthics(player)) throw new Error('Your Ethics is already full. Save the food for a harder day.');
-      if (player.gold < APARTMENT_FOOD_COST) throw new Error(`You need ${APARTMENT_FOOD_COST} gold for ${food.name.toLowerCase()}.`);
-      player.gold -= APARTMENT_FOOD_COST;
-      const before = player.ethics;
-      healPlayer(player, food.restore);
-      return { item, name: food.name, cost: APARTMENT_FOOD_COST, healed: player.ethics - before };
-    }
-
-    function takeMoneybags(player) {
-      activeRun(player);
-      if (player.zone !== 'corner_office') throw new Error('The safe is in Jim Hardsell’s corner office.');
-      if (pendingAttempt(player)) throw new Error('Your partner has a pending reply. Even Jim can wait five seconds.');
-      if (player.moneybagsStolen) throw new Error('The safe is empty.');
-      player.moneybagsStolen = true;
-      player.moneybagsPurchases = 0;
-      player.gold += MONEYBAGS_SAFE_GOLD;
-      const disbarred = damagePlayer(player, MONEYBAGS_ETHICS_DAMAGE);
-      return { disbarred, gold: MONEYBAGS_SAFE_GOLD, damage: MONEYBAGS_ETHICS_DAMAGE };
-    }
-
-    function drinkWhiskey(player, ctx) {
-      activeRun(player);
-      if (player.zone !== 'corner_office') throw new Error('The bar cart is in Jim Hardsell’s corner office.');
-      if (player.whiskeyDrinks > 0) throw new Error('A second drink at work is a warning sign.');
-      player.whiskeyDrinks++;
-      const disbarred = damagePlayer(player, WHISKEY_ETHICS_DAMAGE);
-      if (!disbarred) player.slowUntil = Math.max(player.slowUntil || 0, ctx.now + WHISKEY_SLOW_MS);
-      return { disbarred, damage: WHISKEY_ETHICS_DAMAGE, slowUntil: player.slowUntil };
-    }
-
-    function sendHrEmail(player, categoryId) {
-      const category = findHrCategory(categoryId);
-      player.hrEmailsSent = (player.hrEmailsSent || 0) + 1;
-      return { categoryId: category.id, ticket: String(player.hrEmailsSent).padStart(4, '0') };
-    }
-
-    // Billable study time. The credit is bounded by the real time since the last
-    // tick so a client cannot report more study than has elapsed.
-    function studyTick(player, ms, ctx) {
-      if (player.runStatus === 'ended' || player.ethics <= 0) return { credited: 0 };
-      if (!Number.isFinite(ms) || ms < 0) throw new Error('Invalid study tick.');
-      const sinceLast = player.lastStudyTickAt ? Math.max(0, ctx.now - player.lastStudyTickAt) * 1.1 + 250 : ms;
-      const credited = Math.min(ms, STUDY_TICK_MAX_MS, sinceLast);
-      player.billableStudyMs = (player.billableStudyMs || 0) + credited;
-      player.lastStudyTickAt = ctx.now;
-      return { credited };
-    }
-
-    // "Start another study round": forget this tier's answered mail, or advance
-    // the Canada test pack to its next round.
-    function resetSeen(player) {
-      activeRun(player);
-      if (player.practicePack === 'canada-test') {
-        nextCanadaRound(player);
-        return { pack: 'canada-test', round: player.canada.round };
-      }
-      const ids = new Set(practiceInbox(player, ALL_MAIL_SCENARIOS).eligible.map((item) => item.id));
-      player.seen = player.seen.filter((id) => !ids.has(id));
-      return { pack: player.practicePack, cleared: ids.size };
-    }
-
-    function setPracticePack(player, id) {
-      player.practicePack = PRACTICE_PACKS.some((pack) => pack.id === id) ? id : 'mixed';
-      return { id: player.practicePack };
-    }
-
-    function setZone(player, zone) {
-      if (!ZONES[zone]) throw new Error('Unknown location.');
-      player.zone = zone;
-      return { zone };
-    }
-
-    function setAppearance(player, key, value) {
-      const keys = Object.keys(normalizeAppearance());
-      if (!keys.includes(key)) throw new Error('Unknown appearance option.');
-      Object.assign(player, normalizeAppearance({ ...player, [key]: value }));
-      if (key === 'tieColor') player.apprenticeship.equipped = player.apprenticeship.equipped.filter((id) => id !== 'tie-brass');
-      return { key, value: player[key] };
-    }
-
-    // A brand-new character on this save or account. Nothing from a previous run
-    // is retained except what the caller passes in.
-    function createCharacter(player, { name, gender, appearance } = {}, ctx) {
-      const fresh = freshState();
-      if (ctx?.uuid) fresh.runId = ctx.uuid();
-      for (const key of Object.keys(player)) delete player[key];
-      Object.assign(player, fresh);
-      player.name = String(name ?? '').trim().slice(0, 80) || 'Alex Barrister';
-      player.gender = GENDERS.includes(gender) ? gender : 'nonbinary';
-      Object.assign(player, normalizeAppearance(appearance || {}));
-      return { runId: player.runId, name: player.name };
-    }
-    Object.assign(exports, { GENDERS, STUDY_TICK_MAX_MS, APARTMENT_FOOD, answerScenario, buyHint, tipPool, buyTip, buyUpgrade, docReviewActive, docReviewStart, docReviewCycle, docReviewStop, rest, drinkCoffee, eat, takeMoneybags, drinkWhiskey, sendHrEmail, studyTick, resetSeen, setPracticePack, setZone, setAppearance, createCharacter });
+    Object.assign(exports, { OFFICE_UPGRADES, APARTMENT_UPGRADES, findUpgrade, bonuses });
   },
-  "js/data/mail.js": (exports, require) => {
-    const { canadaUnread } = require("js/canada.js");
+  "js/data/practice-packs.js": (exports, require) => {
     const { SCENARIOS } = require("js/data/ethics.js");
     const { CANADA_SCENARIOS } = require("js/data/canada.js");
 
-    // Every scenario BarMail can serve, across practice packs and the Canada test pack.
-    const ALL_MAIL_SCENARIOS = [...SCENARIOS, ...CANADA_SCENARIOS];
+    // Keep the desk, BarMail and question totals aligned with the actual pool.
+    // New attorneys start on the LawScape originals; the list order is the menu order.
+    const ALL = [...SCENARIOS, ...CANADA_SCENARIOS];
+    const PRACTICE_PACKS = [
+      { id: 'juris', label: 'LawScape original dilemmas', sourceType: 'lawscape', note: 'Fictional office dilemmas with their original mixed Arizona/Nevada rule labels. Where every new attorney starts.' },
+      { id: 'mixed', label: 'Mixed practice', sourceType: null, note: 'All six question packs; read the jurisdiction on each email.' },
+      { id: 'ca', label: 'California', sourceType: 'california-style', note: 'Original California professional-responsibility questions.' },
+      { id: 'ny', label: 'New York', sourceType: 'new-york-style', note: '28 workplace emails and five short New York dilemmas.' },
+      { id: 'mpre', label: 'US MPRE-style', sourceType: 'mpre-style', note: 'Model-rule and exam-style study, not a state-specific pack.' },
+      { id: 'sqe', label: 'England & Wales SQE-style', sourceType: 'sqe-style', note: 'Original ethics questions for England and Wales. Five correct answers earn the powdered wig.' },
+      { id: 'canada', label: 'Canada', sourceType: 'canada-style', review: 'pending', note: '25 questions + 5 emails · Ontario, BC and Saskatchewan · Practitioner review: pending.' },
+    ].map(pack => ({ ...pack, count: ALL.filter(s => !pack.sourceType || s.sourceType === pack.sourceType).length }));
 
-    // BarMail runs on the office computer, the Work Phone anywhere, or an open desk
-    // on the Associates' Floor once the player has claimed one.
-    function canAccessBarMail(player, seatedAtDesk = false) {
-      return player.zone === 'office' || player.upgrades.includes('work_phone')
-        || (player.zone === 'associates' && seatedAtDesk);
-    }
-    function scenarioMatchesPack(scenario, pack) {
-      if (pack === 'canada-test') return scenario.sourceType === 'canada-test';
-      if (scenario.sourceType === 'canada-test') return false;
-      if (pack === 'ca') return scenario.sourceType === 'california-style';
-      if (pack === 'ny') return scenario.sourceType === 'new-york-style';
-      if (pack === 'sqe') return scenario.sourceType === 'sqe-style';
-      if (pack === 'mpre') return scenario.sourceType === 'mpre-style';
-      if (pack === 'juris') return scenario.sourceType === 'lawscape';
-      return true;
-    }
-    function practiceInbox(player, scenarios) {
-      const difficulty = player.casesDone < 5 ? 1 : player.casesDone < 12 ? 2 : 3;
-      const pool = scenarios.filter((scenario) => scenarioMatchesPack(scenario, player.practicePack));
-      if (player.practicePack === 'canada-test') return { eligible: pool, unread: canadaUnread(player, pool), difficulty: null, levelLabel: 'Canada test · all 25 available' };
-      const tier = pool.filter((scenario) => scenario.difficulty === difficulty);
-      const eligible = tier.length ? tier : pool;
-      return { eligible, unread: eligible.filter((scenario) => !player.seen.includes(scenario.id)), difficulty, levelLabel: tier.length ? `Level ${difficulty}` : 'All levels' };
-    }
-    function billableMessageOpen({ inGame, visible, mailOpen, messageOpen }) {
-      return inGame && visible && mailOpen && messageOpen;
-    }
-    Object.assign(exports, { ALL_MAIL_SCENARIOS, canAccessBarMail, scenarioMatchesPack, practiceInbox, billableMessageOpen });
+    const practicePack = id => PRACTICE_PACKS.find(pack => pack.id === id) || PRACTICE_PACKS[0];
+    const packIdForSourceType = sourceType => PRACTICE_PACKS.find(pack => pack.sourceType && pack.sourceType === sourceType)?.id || null;
+    Object.assign(exports, { PRACTICE_PACKS, practicePack, packIdForSourceType });
   },
   "js/data/ethics.js": (exports, require) => {
     // BarMail ethics scenarios — progressive professional-responsibility practice.
@@ -10925,77 +8707,2558 @@
     ];
     Object.assign(exports, { CALIFORNIA_SCENARIOS, NEW_YORK_SCENARIOS });
   },
-  "js/data/upgrades.js": (exports, require) => {
-    // Upgrade catalogs, priced in gold earned from BarMail ethics scenarios.
-    // Effects are applied in main.js (gold/damage math) and js/world/zones.js
-    // (visual prop changes).
+  "js/data/canada.js": (exports, require) => {
+    // Generated by scripts/build-canada.mjs. Edit canada-test/pack.json.
+    const CANADA_PACK = {
+      "id": "canada-pilot",
+      "version": "canada-0.1.0-review",
+      "title": "Canadian Practice Files",
+      "status": "Practitioner review required",
+      "authoredDate": "2026-09-28",
+      "legalReviewedAt": null,
+      "legalReviewer": null,
+      "purpose": "Local LawScape test deployment. Original fictional exercises, not regulator questions or accredited training.",
+      "scope": [
+        "Ontario: LTB representation",
+        "British Columbia: referral fees",
+        "British Columbia: recording communications",
+        "Saskatchewan: criminal language rights",
+        "British Columbia: undertakings and trust conditions"
+      ],
+      "limits": [
+        "English-language pilot; French-language instruction is not yet authored or reviewed.",
+        "Five focused topics in three provinces; not comprehensive Canadian ethics coverage.",
+        "Primary sources retrieved; answers and rubrics are author interpretations awaiting Canadian practitioner review.",
+        "No AI grading, actual email, audio capture, client records, or external AI transmission.",
+        "Canadian questions use the standard LawScape economy (gold by difficulty, Ethics damage, streaks and difficulty tiers) and are included in mixed practice; practitioner review of the answers remains pending."
+      ],
+      "sources": [
+        {
+          "id": "ON-LTB",
+          "title": "Tribunals Ontario — Representation before the LTB",
+          "jurisdiction": "Ontario",
+          "locator": "Practice Direction, effective March 3, 2022",
+          "file": "sources/ON-LTB.html.source",
+          "url": "https://tribunalsontario.ca/documents/ltb/Practice%20Directions/Practice%20Direction%20on%20Representation%20before%20the%20LTB.html",
+          "versionNote": "Publisher page states effective March 3, 2022. Reviewed text retrieved September 28, 2026; underlying exemptions should be rechecked by the practitioner.",
+          "status": "Official source retrieved; content interpretation pending practitioner review"
+        },
+        {
+          "id": "BC-3",
+          "title": "Law Society of British Columbia — BC Code, Chapter 3",
+          "jurisdiction": "British Columbia",
+          "locator": "Rule 3.6-6",
+          "file": "sources/BC-3.html.source",
+          "url": "https://www.lawsociety.bc.ca/for-lawyers/act-rules-and-code/code-of-professional-conduct/chapter-3-%E2%80%93-relationship-to-clients/",
+          "versionNote": "Official live chapter retrieved September 28, 2026. Relevant rule has no separate effective-date label; adjacent rule amendments are not treated as its effective date.",
+          "status": "Official source retrieved; content interpretation pending practitioner review"
+        },
+        {
+          "id": "BC-7",
+          "title": "Law Society of British Columbia — BC Code, Chapter 7",
+          "jurisdiction": "British Columbia",
+          "locator": "Rules 7.2-3, 7.2-11 and commentary; 7.1-3(a.1)",
+          "file": "sources/BC-7.html.source",
+          "url": "https://www.lawsociety.bc.ca/for-lawyers/act-rules-and-code/code-of-professional-conduct/chapter-7-%E2%80%93-relationship-to-the-society-and-other-lawyers/",
+          "versionNote": "Official live chapter retrieved September 28, 2026. Rule text and commentary were read separately; heading amendments are not substantive effective dates.",
+          "status": "Official source retrieved; content interpretation pending practitioner review"
+        },
+        {
+          "id": "SK-CODE",
+          "title": "Law Society of Saskatchewan — Code of Professional Conduct for Lawyers",
+          "jurisdiction": "Saskatchewan",
+          "locator": "Rules 3.2-2A/B and commentary, printed page 26",
+          "file": "sources/SK-CODE.pdf",
+          "url": "https://www.lawsociety.sk.ca/wp-content/uploads/CodeOfProfessionalConduct.pdf#page=26",
+          "versionNote": "Official PDF retrieved September 28, 2026. Language provisions show an addition date of February 13, 2015 at printed page 34; this is not a certification of the entire consolidation.",
+          "status": "Official source retrieved; content interpretation pending practitioner review"
+        },
+        {
+          "id": "CA-530",
+          "title": "Justice Canada — Criminal Code, section 530",
+          "jurisdiction": "Federal; criminal proceedings in Saskatchewan",
+          "locator": "Section 530(1), (3), (4)",
+          "file": "sources/CA-530.html.source",
+          "url": "https://laws-lois.justice.gc.ca/eng/acts/c-46/section-530.html",
+          "versionNote": "Retrieved September 28, 2026. Publisher: Act current to September 21, 2026; last amended July 18, 2026. These are Act-level dates, not a claim that section 530 changed then.",
+          "status": "Official source retrieved; content interpretation pending practitioner review"
+        }
+      ],
+      "rules": [
+        {
+          "id": "ON-REP",
+          "title": "Who may represent an LTB party?",
+          "summary": "Licensed Ontario lawyers and paralegals in good standing, and qualifying exempt representatives, may represent a party. A suspended licence does not permit representation.",
+          "sourceRefs": [
+            {
+              "id": "ON-LTB",
+              "locator": "Representatives; Licensed Representative; Unlicensed Representatives"
+            }
+          ],
+          "limits": "Eligibility does not establish competence, client instructions, availability, or success. Specific exemptions and any applicable statutory priority require review."
+        },
+        {
+          "id": "ON-SUPPORT",
+          "title": "Support is not representation",
+          "summary": "A support person may assist a participant without making submissions on their behalf. New representatives not identified in the application must notify the LTB and other parties in writing.",
+          "sourceRefs": [
+            {
+              "id": "ON-LTB",
+              "locator": "Support Persons; Representative’s Responsibilities"
+            }
+          ],
+          "limits": "These questions distinguish the stipulated roles; they do not decide every licensing exemption or witness issue."
+        },
+        {
+          "id": "BC-REF",
+          "title": "Referral fee conditions",
+          "summary": "An expertise-and-ability referral not caused by conflict may attract a reasonable fee if the client is informed and consents and the total client fee does not increase.",
+          "sourceRefs": [
+            {
+              "id": "BC-3",
+              "locator": "Rule 3.6-6(a)–(b)"
+            }
+          ],
+          "limits": "BC rule only. Each exercise assumes separate BC law firms and no other fee-sharing arrangement. Consent alone does not establish every condition."
+        },
+        {
+          "id": "BC-REC",
+          "title": "Inform before recording",
+          "summary": "Before using a device to record a conversation with a client or another lawyer, the BC lawyer must first inform that person. Other information-handling obligations remain separate.",
+          "sourceRefs": [
+            {
+              "id": "BC-7",
+              "locator": "Rule 7.2-3"
+            }
+          ],
+          "limits": "This is a prior-notification rule, not a blanket consent or privacy-law opinion. No actual recording takes place. Manual notes are a supplied exercise option."
+        },
+        {
+          "id": "SK-LANG",
+          "title": "Client language choice and competence",
+          "summary": "Advise appropriately about language rights. A lawyer must be competent to provide the required services in the official language selected by the client.",
+          "sourceRefs": [
+            {
+              "id": "SK-CODE",
+              "locator": "Rules 3.2-2A/B; commentary [1]–[3], printed p. 26"
+            }
+          ],
+          "limits": "The client chooses. The exercises concern criminal proceedings and lawyers; other forums, languages and practitioner categories need separate analysis."
+        },
+        {
+          "id": "CA-TRIAL",
+          "title": "Language application and order",
+          "summary": "For the stated French-language accused, a timely section 530(1) application engages the mandatory order framework. The stated deadline is the appearance when the trial date is set; a late request requires separate section 530(4) consideration.",
+          "sourceRefs": [
+            {
+              "id": "CA-530",
+              "locator": "Section 530(1), (3), (4)"
+            }
+          ],
+          "limits": "First-appearance advice and the application deadline are distinct. A competent lawyer is not itself a court order. Late relief is not guaranteed."
+        },
+        {
+          "id": "BC-PROMISE",
+          "title": "Commitments must be kept",
+          "summary": "Do not promise what cannot be fulfilled. Honour undertakings and accepted trust conditions; client pressure or an unanswered variation request does not release the obligation.",
+          "sourceRefs": [
+            {
+              "id": "BC-7",
+              "locator": "Rule 7.2-11; commentary [1], [3]–[5]"
+            }
+          ],
+          "limits": "Writing is recommended in the commentary; these facts expressly stipulate an undertaking. Any property-return route must fit the actual trust condition, not a universal cancellation rule."
+        },
+        {
+          "id": "BC-REPORT",
+          "title": "Breach and reporting",
+          "summary": "For an unconsented, unwaived breach of an undertaking or trust condition, assess the reporting duty, subject to solicitor-client confidentiality or privilege.",
+          "sourceRefs": [
+            {
+              "id": "BC-7",
+              "locator": "Rule 7.1-3 opening words and paragraph (a.1)"
+            }
+          ],
+          "limits": "Remediation does not itself erase the event. Disclosure scope and any exception require careful practitioner review."
+        }
+      ],
+      "questions": [
+        {
+          "id": "CA-ON-01",
+          "group": "ON",
+          "title": "The right person for the hearing",
+          "jurisdiction": "Ontario",
+          "forum": "Ontario Landlord and Tenant Board",
+          "practitionerRole": "Licensed Ontario paralegal / supervising lawyer",
+          "setting": "Toronto office · a second-floor practice near a busy streetcar route",
+          "difficulty": 1,
+          "body": "A Toronto tenant has instructed Priya, an Ontario paralegal in good standing, to represent them at the LTB. The file is within Priya’s authorized scope; she is competent, prepared and available. An associate says only a lawyer can speak at the hearing. Which response is best?",
+          "options": [
+            {
+              "id": "A",
+              "text": "Assign a lawyer because all tribunal advocacy is reserved to lawyers.",
+              "explanation": "The premise treats all LTB representation as reserved to lawyers."
+            },
+            {
+              "id": "B",
+              "text": "Proceed with Priya as the instructed representative, subject to the LTB’s requirements.",
+              "explanation": "Priya’s status and the stipulated scope, preparation and instructions support this assignment."
+            },
+            {
+              "id": "C",
+              "text": "Let any experienced assistant appear under Priya’s licence.",
+              "explanation": "A colleague cannot lend a licence to the assistant."
+            },
+            {
+              "id": "D",
+              "text": "Ask the client to waive the licensing requirements.",
+              "explanation": "Client preference cannot create professional authorization."
+            }
+          ],
+          "answer": "B",
+          "ruleIds": [
+            "ON-REP"
+          ],
+          "decisiveFact": "Priya is a licensed, eligible paralegal, and the other assignment checks are expressly satisfied.",
+          "reviewFocus": "Confirm scope assumptions and distinguish eligibility from competence.",
+          "status": "Needs practitioner review"
+        },
+        {
+          "id": "CA-ON-02",
+          "group": "ON",
+          "title": "Riley can help, but can Riley speak?",
+          "jurisdiction": "Ontario",
+          "forum": "Ontario Landlord and Tenant Board",
+          "practitionerRole": "Licensed Ontario paralegal / supervising lawyer",
+          "setting": "Toronto office · a second-floor practice near a busy streetcar route",
+          "difficulty": 1,
+          "body": "Riley is an unlicensed paid assistant at the Toronto office. No licensing exemption applies to Riley. The tenant wants Riley beside them to sort documents and take notes; the tenant will make all submissions. What is the best description of Riley’s role?",
+          "options": [
+            {
+              "id": "A",
+              "text": "Riley automatically becomes the representative by attending.",
+              "explanation": "Attendance and assistance do not alone establish representation."
+            },
+            {
+              "id": "B",
+              "text": "Riley may make submissions if the tenant calls them a support person.",
+              "explanation": "Changing the label would not change what Riley is doing."
+            },
+            {
+              "id": "C",
+              "text": "Riley must stay outside because all unlicensed attendance is forbidden.",
+              "explanation": "The proposed support role is narrower than representation."
+            },
+            {
+              "id": "D",
+              "text": "Riley may assist as a support person while keeping within that role.",
+              "explanation": "The tenant speaks; Riley supplies the stipulated support and does not make submissions."
+            }
+          ],
+          "answer": "D",
+          "ruleIds": [
+            "ON-REP",
+            "ON-SUPPORT"
+          ],
+          "decisiveFact": "Riley makes no submissions and has no applicable representation exemption.",
+          "reviewFocus": "Check the boundary between support, advocacy and testimony.",
+          "status": "Needs practitioner review"
+        },
+        {
+          "id": "CA-ON-03",
+          "group": "ON",
+          "title": "An exemption needs facts",
+          "jurisdiction": "Ontario",
+          "forum": "Ontario Landlord and Tenant Board",
+          "practitionerRole": "Licensed Ontario paralegal / supervising lawyer",
+          "setting": "Toronto office · a second-floor practice near a busy streetcar route",
+          "difficulty": 2,
+          "body": "Sam asks to represent their sister at an LTB hearing. Sam is unlicensed, does not run a legal-services business and will receive no compensation. Their sister will attend. What should the team do?",
+          "options": [
+            {
+              "id": "A",
+              "text": "Check and explain the family-member exemption and its conditions to the LTB, rather than assume every unlicensed representative is barred.",
+              "explanation": "The stated relationship, business status and absence of compensation matter; the adjudicator still assesses the claimed exemption."
+            },
+            {
+              "id": "B",
+              "text": "Reject Sam solely because Sam has no licence.",
+              "explanation": "That answer ignores the exemption route."
+            },
+            {
+              "id": "C",
+              "text": "Treat being a sibling as automatic approval regardless of the other facts.",
+              "explanation": "The relationship is not the whole inquiry."
+            },
+            {
+              "id": "D",
+              "text": "Pay Sam a token fee to make the representation more official.",
+              "explanation": "Compensation would change an expressly relevant fact."
+            }
+          ],
+          "answer": "A",
+          "ruleIds": [
+            "ON-REP"
+          ],
+          "decisiveFact": "A specific family relationship and no business or compensation are stipulated.",
+          "reviewFocus": "Confirm current LSO exemption requirements and LTB treatment before approving this question.",
+          "status": "Needs practitioner review"
+        },
+        {
+          "id": "CA-ON-04",
+          "group": "ON",
+          "title": "A familiar face with a suspended licence",
+          "jurisdiction": "Ontario",
+          "forum": "Ontario Landlord and Tenant Board",
+          "practitionerRole": "Licensed Ontario paralegal / supervising lawyer",
+          "setting": "Toronto office · a second-floor practice near a busy streetcar route",
+          "difficulty": 2,
+          "body": "A reliable paralegal’s licence is currently suspended. They offer to appear tomorrow, saying the client trusts them and a partner will be reachable by phone. The file stipulates no other lawful basis for their appearance. What is the proper staffing response?",
+          "options": [
+            {
+              "id": "A",
+              "text": "Use them because past competence outweighs current status.",
+              "explanation": "Experience does not resolve the stated suspension."
+            },
+            {
+              "id": "B",
+              "text": "Use them if a partner promises to take responsibility.",
+              "explanation": "Telephone supervision does not remove the suspension."
+            },
+            {
+              "id": "C",
+              "text": "Arrange an eligible representative and address the imminent hearing; do not assign the suspended paralegal to represent the client.",
+              "explanation": "Protecting the hearing requires another lawful route, not ignoring status."
+            },
+            {
+              "id": "D",
+              "text": "Let the client sign a waiver permitting the appearance.",
+              "explanation": "The waiver would not cure this eligibility problem."
+            }
+          ],
+          "answer": "C",
+          "ruleIds": [
+            "ON-REP"
+          ],
+          "decisiveFact": "The licence is suspended now; no alternative authorization is available on these facts.",
+          "reviewFocus": "Confirm that the scenario does not imply an automatic adjournment.",
+          "status": "Needs practitioner review"
+        },
+        {
+          "id": "CA-ON-05",
+          "group": "ON",
+          "title": "The application has already been filed",
+          "jurisdiction": "Ontario",
+          "forum": "Ontario Landlord and Tenant Board",
+          "practitionerRole": "Licensed Ontario paralegal / supervising lawyer",
+          "setting": "Toronto office · a second-floor practice near a busy streetcar route",
+          "difficulty": 2,
+          "body": "Priya is newly retained for an Ontario LTB matter. The application did not identify a representative. The client approved the retainer, and the next appearance is approaching. Which administrative step should Priya take?",
+          "options": [
+            {
+              "id": "A",
+              "text": "Wait for the LTB to notice her name in an email signature.",
+              "explanation": "An incidental signature is not the identified notification step."
+            },
+            {
+              "id": "B",
+              "text": "Inform the LTB and the other parties in writing that she now represents the client.",
+              "explanation": "The new representation needs to be communicated to the Board and the other parties."
+            },
+            {
+              "id": "C",
+              "text": "Notify only the client because the retainer is private.",
+              "explanation": "The client already knows; the other participants still need notice."
+            },
+            {
+              "id": "D",
+              "text": "Assume that attending the hearing replaces all notification.",
+              "explanation": "Arrival at the hearing does not replace the stated responsibility."
+            }
+          ],
+          "answer": "B",
+          "ruleIds": [
+            "ON-SUPPORT"
+          ],
+          "decisiveFact": "Priya was not identified in the application.",
+          "reviewFocus": "Check the applicable procedural notification mechanics without inventing a form or deadline.",
+          "status": "Needs practitioner review"
+        },
+        {
+          "id": "CA-REF-01",
+          "group": "REF",
+          "title": "Expertise without a higher bill",
+          "jurisdiction": "British Columbia",
+          "forum": "Non-contentious client referral",
+          "practitionerRole": "BC lawyer",
+          "setting": "Vancouver office · a small coastal practice serving local businesses",
+          "difficulty": 1,
+          "body": "A Vancouver general practitioner refers a specialized matter to another BC lawyer because of that lawyer’s expertise and ability. No conflict caused the referral. The proposed referral fee is stipulated to be reasonable, the total client fee will not increase, and the client has been fully informed and consents. Under the targeted BC rule, what follows?",
+          "options": [
+            {
+              "id": "A",
+              "text": "The fee is prohibited because all referral fees are forbidden.",
+              "explanation": "That treats a conditional permission as an absolute prohibition."
+            },
+            {
+              "id": "B",
+              "text": "The fee requires an Ontario percentage cap to be applied in BC.",
+              "explanation": "The exercise supplies a BC framework, not an Ontario one."
+            },
+            {
+              "id": "C",
+              "text": "The fee is permitted on the stated facts, subject to any other applicable obligations.",
+              "explanation": "The scenario expressly satisfies the conditions being tested."
+            },
+            {
+              "id": "D",
+              "text": "The lawyer must increase the client bill to make the payment transparent.",
+              "explanation": "Disclosure does not call for an added client charge."
+            }
+          ],
+          "answer": "C",
+          "ruleIds": [
+            "BC-REF"
+          ],
+          "decisiveFact": "Every targeted fee condition is expressly satisfied.",
+          "reviewFocus": "Confirm that reasonableness is stipulated rather than inferred from an amount.",
+          "status": "Needs practitioner review"
+        },
+        {
+          "id": "CA-REF-02",
+          "group": "REF",
+          "title": "The conflict cannot be renamed",
+          "jurisdiction": "British Columbia",
+          "forum": "Non-contentious client referral",
+          "practitionerRole": "BC lawyer",
+          "setting": "Vancouver office · a small coastal practice serving local businesses",
+          "difficulty": 2,
+          "body": "A BC lawyer must refer a matter away because of a conflict. The proposed receiving lawyer is highly skilled. Both lawyers want a referral fee and the client agrees. Can the lawyers qualify for a referral fee under Rule 3.6-6 by calling this an expertise referral?",
+          "options": [
+            {
+              "id": "A",
+              "text": "No. The actual conflict-based reason remains; a suitable referral can proceed without this fee.",
+              "explanation": "The genuine reason does not change with the label; service and fee eligibility are separate."
+            },
+            {
+              "id": "B",
+              "text": "Yes, because client consent removes every restriction.",
+              "explanation": "Consent does not rewrite why the referral occurred."
+            },
+            {
+              "id": "C",
+              "text": "Yes, because the receiving lawyer is competent.",
+              "explanation": "Expertise does not erase the conflict-based trigger."
+            },
+            {
+              "id": "D",
+              "text": "No referral of any kind is possible after a conflict.",
+              "explanation": "The fee restriction does not make every appropriate referral impossible."
+            }
+          ],
+          "answer": "A",
+          "ruleIds": [
+            "BC-REF"
+          ],
+          "decisiveFact": "The referral was actually required because of conflict.",
+          "reviewFocus": "Distinguish referral eligibility from payment eligibility.",
+          "status": "Needs practitioner review"
+        },
+        {
+          "id": "CA-REF-03",
+          "group": "REF",
+          "title": "The additional line item",
+          "jurisdiction": "British Columbia",
+          "forum": "Non-contentious client referral",
+          "practitionerRole": "BC lawyer",
+          "setting": "Vancouver office · a small coastal practice serving local businesses",
+          "difficulty": 2,
+          "body": "A BC expertise referral otherwise meets the tested conditions. The receiving lawyer proposes a $500 referral charge on top of the $4,000 they would otherwise charge for the same work. The client is willing to pay it. What should the lawyers do?",
+          "options": [
+            {
+              "id": "A",
+              "text": "Charge $4,500 because consent cures the added charge.",
+              "explanation": "The express comparison is $4,000 without the referral charge."
+            },
+            {
+              "id": "B",
+              "text": "Hide the $500 in disbursements.",
+              "explanation": "Relabelling does not fix the increased total or the inaccurate description."
+            },
+            {
+              "id": "C",
+              "text": "Describe the $500 as an administrative cost and leave the total unchanged at $4,500.",
+              "explanation": "The total would still be increased on the stated comparison."
+            },
+            {
+              "id": "D",
+              "text": "Do not proceed with this arrangement; any eligible referral fee must not increase the client’s total fee.",
+              "explanation": "Revise the arrangement or make a suitable no-fee referral."
+            }
+          ],
+          "answer": "D",
+          "ruleIds": [
+            "BC-REF"
+          ],
+          "decisiveFact": "The same work would cost $4,000 absent the referral payment.",
+          "reviewFocus": "Review the fee comparison; no tax or disbursement issue is being tested.",
+          "status": "Needs practitioner review"
+        },
+        {
+          "id": "CA-REF-04",
+          "group": "REF",
+          "title": "Consent is a real choice",
+          "jurisdiction": "British Columbia",
+          "forum": "Non-contentious client referral",
+          "practitionerRole": "BC lawyer",
+          "setting": "Vancouver office · a small coastal practice serving local businesses",
+          "difficulty": 1,
+          "body": "A BC client likes the proposed specialist but declines the disclosed referral-fee arrangement. The specialist is willing to accept the matter with no referral fee and no other impediment is stated. What is the best course?",
+          "options": [
+            {
+              "id": "A",
+              "text": "Pay the fee privately because the client selected the specialist.",
+              "explanation": "Selecting the lawyer is not consent to the rejected payment."
+            },
+            {
+              "id": "B",
+              "text": "Respect the refusal and offer the suitable no-fee handoff on the client’s instructions.",
+              "explanation": "The client can obtain the suitable service without the disputed fee."
+            },
+            {
+              "id": "C",
+              "text": "Require the client to accept the fee as the price of choosing counsel.",
+              "explanation": "That disregards the actual refusal."
+            },
+            {
+              "id": "D",
+              "text": "Treat the declined payment as a failed referral even if the handoff succeeds.",
+              "explanation": "A successful client handoff need not produce a referral payment."
+            }
+          ],
+          "answer": "B",
+          "ruleIds": [
+            "BC-REF"
+          ],
+          "decisiveFact": "The client expressly refuses the fee, and a no-fee handoff is available.",
+          "reviewFocus": "Ensure the answer does not imply a duty on a receiving lawyer to accept every referral.",
+          "status": "Needs practitioner review"
+        },
+        {
+          "id": "CA-REF-05",
+          "group": "REF",
+          "title": "A draft missing two answers",
+          "jurisdiction": "British Columbia",
+          "forum": "Non-contentious client referral",
+          "practitionerRole": "BC lawyer",
+          "setting": "Vancouver office · a small coastal practice serving local businesses",
+          "difficulty": 3,
+          "body": "A BC referral note says the receiving lawyer has the right expertise and no conflict caused the referral. It is silent about client consent and whether the payment increases the total fee. The partner asks you to mark the fee approved. What is the best response?",
+          "options": [
+            {
+              "id": "A",
+              "text": "Approve it because a standard precedent must already cover consent.",
+              "explanation": "A precedent is not evidence that the required steps occurred."
+            },
+            {
+              "id": "B",
+              "text": "Infer consent from the client’s silence.",
+              "explanation": "Silence in this file does not supply the missing informed agreement."
+            },
+            {
+              "id": "C",
+              "text": "Obtain and document the missing information before approving payment, including informed consent, the total-fee effect and reasonableness.",
+              "explanation": "The record is incomplete; verify the remaining conditions instead of guessing."
+            },
+            {
+              "id": "D",
+              "text": "Reject all future referrals from this lawyer.",
+              "explanation": "The missing facts call for inquiry, not a blanket future ban."
+            }
+          ],
+          "answer": "C",
+          "ruleIds": [
+            "BC-REF"
+          ],
+          "decisiveFact": "The note does not establish all payment conditions.",
+          "reviewFocus": "Check that inquiry, rather than an assumed violation, is the keyed response.",
+          "status": "Needs practitioner review"
+        },
+        {
+          "id": "CA-REC-01",
+          "group": "REC",
+          "title": "The recorder is ready before the client",
+          "jurisdiction": "British Columbia",
+          "forum": "Client or lawyer conference; no court hearing",
+          "practitionerRole": "BC lawyer",
+          "setting": "Victoria office · raincoats by the door and a ferry timetable on the noticeboard",
+          "difficulty": 1,
+          "body": "A BC lawyer is about to speak with a client by telephone. The lawyer wants to use a recording device, but has not mentioned it. Assume there is no separate issue about the call’s legality. What must happen before capture under the targeted professional rule?",
+          "options": [
+            {
+              "id": "A",
+              "text": "Start recording and mention it in the closing summary.",
+              "explanation": "Closing notice would come after capture."
+            },
+            {
+              "id": "B",
+              "text": "Rely on the fact that the recording may otherwise be lawful.",
+              "explanation": "The scenario separates general legality from the professional step."
+            },
+            {
+              "id": "C",
+              "text": "Ask the assistant to press record so the lawyer is not the operator.",
+              "explanation": "Delegating the button press does not change the proposed recording."
+            },
+            {
+              "id": "D",
+              "text": "Inform the client of the intention to record before recording begins.",
+              "explanation": "The missing step is prior notification to the client."
+            }
+          ],
+          "answer": "D",
+          "ruleIds": [
+            "BC-REC"
+          ],
+          "decisiveFact": "The client has not yet been informed.",
+          "reviewFocus": "Confirm prior notice is distinguished from a universal consent rule.",
+          "status": "Needs practitioner review"
+        },
+        {
+          "id": "CA-REC-02",
+          "group": "REC",
+          "title": "Another lawyer joins the call",
+          "jurisdiction": "British Columbia",
+          "forum": "Client or lawyer conference; no court hearing",
+          "practitionerRole": "BC lawyer",
+          "setting": "Victoria office · raincoats by the door and a ferry timetable on the noticeboard",
+          "difficulty": 2,
+          "body": "A BC lawyer informed the client and one other lawyer before recording a conference. A second lawyer now joins; no recording indicator or announcement has informed that lawyer. Capture can be paused before the new lawyer speaks. What is the best next step?",
+          "options": [
+            {
+              "id": "A",
+              "text": "Pause and inform the new lawyer before recording the conversation with them.",
+              "explanation": "The new participant is another lawyer who has not received the notice."
+            },
+            {
+              "id": "B",
+              "text": "Keep recording because the original participants were told.",
+              "explanation": "The original notice did not reach this person on the stated facts."
+            },
+            {
+              "id": "C",
+              "text": "Wait until the new lawyer asks about the transcript.",
+              "explanation": "That risks capturing the new conversation first."
+            },
+            {
+              "id": "D",
+              "text": "Assume all lawyers know every online call is recorded.",
+              "explanation": "The scenario expressly excludes an effective announcement."
+            }
+          ],
+          "answer": "A",
+          "ruleIds": [
+            "BC-REC"
+          ],
+          "decisiveFact": "The new lawyer has not received any recording notice.",
+          "reviewFocus": "Check the participant-specific facts and avoid claiming every platform indicator is inadequate.",
+          "status": "Needs practitioner review"
+        },
+        {
+          "id": "CA-REC-03",
+          "group": "REC",
+          "title": "The explanation came two minutes later",
+          "jurisdiction": "British Columbia",
+          "forum": "Client or lawyer conference; no court hearing",
+          "practitionerRole": "BC lawyer",
+          "setting": "Victoria office · raincoats by the door and a ferry timetable on the noticeboard",
+          "difficulty": 2,
+          "body": "A BC lawyer recorded two minutes of a client conversation without prior notice, then told the client. The client says the recording may continue. Which conclusion best describes the first two minutes?",
+          "options": [
+            {
+              "id": "A",
+              "text": "Later agreement proves the required sequence occurred.",
+              "explanation": "The timeline still begins with uninformed capture."
+            },
+            {
+              "id": "B",
+              "text": "The later explanation does not change the fact that recording began before notice; assess the lapse and appropriate response separately.",
+              "explanation": "The exercise records the earlier event rather than treating later notice as retroactive."
+            },
+            {
+              "id": "C",
+              "text": "A renamed audio file erases the sequence issue.",
+              "explanation": "A file name cannot change what happened."
+            },
+            {
+              "id": "D",
+              "text": "Every later conversation is permanently forbidden.",
+              "explanation": "The question does not support a permanent ban on future communication."
+            }
+          ],
+          "answer": "B",
+          "ruleIds": [
+            "BC-REC"
+          ],
+          "decisiveFact": "Notice followed, rather than preceded, the initial capture.",
+          "reviewFocus": "Review remediation language; the question does not prescribe destruction or disclosure.",
+          "status": "Needs practitioner review"
+        },
+        {
+          "id": "CA-REC-04",
+          "group": "REC",
+          "title": "Notice is not a privacy clearance",
+          "jurisdiction": "British Columbia",
+          "forum": "Client or lawyer conference; no court hearing",
+          "practitionerRole": "BC lawyer",
+          "setting": "Victoria office · raincoats by the door and a ferry timetable on the noticeboard",
+          "difficulty": 3,
+          "body": "A BC lawyer has informed everyone on a client call of intended recording. A proposed transcription service would receive client information, but confidentiality and information-handling questions have not been assessed. Does the notice alone settle whether the service may be used?",
+          "options": [
+            {
+              "id": "A",
+              "text": "Yes; the recording rule authorizes every downstream use.",
+              "explanation": "The specific notice step is not an all-purpose authorization."
+            },
+            {
+              "id": "B",
+              "text": "Yes; professional information is exempt from all other duties.",
+              "explanation": "Nothing in the stated rule supplies that exemption."
+            },
+            {
+              "id": "C",
+              "text": "No. Resolve the separate information-handling questions before treating the service as approved.",
+              "explanation": "This answer preserves the scope boundary without deciding an unresearched privacy-law question."
+            },
+            {
+              "id": "D",
+              "text": "No device may ever be used by a BC lawyer.",
+              "explanation": "The rule does not establish a universal device ban."
+            }
+          ],
+          "answer": "C",
+          "ruleIds": [
+            "BC-REC"
+          ],
+          "decisiveFact": "The vendor and information-handling questions remain unresolved.",
+          "reviewFocus": "Confirm this tests the limit of the rule, not a comprehensive privacy or AI opinion.",
+          "status": "Needs practitioner review"
+        },
+        {
+          "id": "CA-REC-05",
+          "group": "REC",
+          "title": "The client prefers notes",
+          "jurisdiction": "British Columbia",
+          "forum": "Client or lawyer conference; no court hearing",
+          "practitionerRole": "BC lawyer",
+          "setting": "Victoria office · raincoats by the door and a ferry timetable on the noticeboard",
+          "difficulty": 2,
+          "body": "After receiving recording notice, a client asks for manual notes instead. The fictional office policy permits manual notes, and no recording is legally or practically required for this meeting. Which response best respects the request on these facts?",
+          "options": [
+            {
+              "id": "A",
+              "text": "Record secretly and use only the notes in the final file.",
+              "explanation": "Secret capture would contradict the client’s stated preference and the proposed arrangement."
+            },
+            {
+              "id": "B",
+              "text": "Tell the client that notification legally obliges them to accept recording.",
+              "explanation": "Notification does not create that obligation on the client."
+            },
+            {
+              "id": "C",
+              "text": "Cancel the retainer because every meeting needs audio.",
+              "explanation": "The facts provide an available alternative."
+            },
+            {
+              "id": "D",
+              "text": "Use manual notes and confirm that recording will stay off.",
+              "explanation": "The supplied alternative meets the meeting’s needs; it is a practical choice, not a universal rule about consent."
+            }
+          ],
+          "answer": "D",
+          "ruleIds": [
+            "BC-REC"
+          ],
+          "decisiveFact": "Manual notes are permitted and adequate under the supplied facts.",
+          "reviewFocus": "Label the manual-note preference as application judgment and stipulated office policy.",
+          "status": "Needs practitioner review"
+        },
+        {
+          "id": "CA-SK-01",
+          "group": "SK",
+          "title": "Conversational English is not the instruction",
+          "jurisdiction": "Saskatchewan",
+          "forum": "Criminal proceeding in Saskatchewan",
+          "practitionerRole": "Saskatchewan lawyer",
+          "setting": "Saskatoon office · a winter intake day and an English/French service directory",
+          "difficulty": 1,
+          "body": "A French-speaking accused meets a Saskatchewan lawyer about a criminal charge. The exercise stipulates French is the accused’s language for section 530(1). The client converses comfortably in English but asks for representation and trial in French. What is the best response?",
+          "options": [
+            {
+              "id": "A",
+              "text": "Explain the applicable language rights, confirm the French instruction and arrange the necessary competent service and procedural steps.",
+              "explanation": "The client’s actual instruction governs the planned response, with competence and procedure addressed separately."
+            },
+            {
+              "id": "B",
+              "text": "Choose English because the intake conversation was easy.",
+              "explanation": "Conversational ability does not replace the instruction."
+            },
+            {
+              "id": "C",
+              "text": "Treat the language of the website as the client’s binding choice.",
+              "explanation": "Interface language is not the client’s legal instruction."
+            },
+            {
+              "id": "D",
+              "text": "Assume an interpreter alone necessarily implements every aspect of the request.",
+              "explanation": "That answer skips the stated representation and trial requests."
+            }
+          ],
+          "answer": "A",
+          "ruleIds": [
+            "SK-LANG",
+            "CA-TRIAL"
+          ],
+          "decisiveFact": "French is stipulated as the accused’s language and the client expressly chooses it.",
+          "reviewFocus": "Confirm the stipulated language status and avoid equating citizenship with language entitlement.",
+          "status": "Needs practitioner review"
+        },
+        {
+          "id": "CA-SK-02",
+          "group": "SK",
+          "title": "A bilingual greeting is not competence",
+          "jurisdiction": "Saskatchewan",
+          "forum": "Criminal proceeding in Saskatchewan",
+          "practitionerRole": "Saskatchewan lawyer",
+          "setting": "Saskatoon office · a winter intake day and an English/French service directory",
+          "difficulty": 2,
+          "body": "The Saskatchewan lawyer can greet clients in French but cannot competently conduct this criminal representation in French. The client wishes to retain counsel for French-language services. What should the lawyer do?",
+          "options": [
+            {
+              "id": "A",
+              "text": "Accept the full retainer and rely exclusively on translation software.",
+              "explanation": "The missing professional ability is not supplied merely by software."
+            },
+            {
+              "id": "B",
+              "text": "Arrange a competent French-language lawyer or other properly scoped, competent service arrangement with the client, while protecting urgent steps.",
+              "explanation": "The response addresses the competence gap and continuity of service without pretending it is already solved."
+            },
+            {
+              "id": "C",
+              "text": "Tell the client that French services are unavailable by law.",
+              "explanation": "The facts establish this lawyer’s limitation, not a legal prohibition."
+            },
+            {
+              "id": "D",
+              "text": "Accept first and ask the client to waive professional competence.",
+              "explanation": "A waiver does not provide the missing competence."
+            }
+          ],
+          "answer": "B",
+          "ruleIds": [
+            "SK-LANG"
+          ],
+          "decisiveFact": "The proposed lawyer cannot deliver the required services competently in French.",
+          "reviewFocus": "Confirm whether any suggested team arrangement actually satisfies competence and retainer duties.",
+          "status": "Needs practitioner review"
+        },
+        {
+          "id": "CA-SK-03",
+          "group": "SK",
+          "title": "Which appearance matters?",
+          "jurisdiction": "Saskatchewan",
+          "forum": "Criminal proceeding in Saskatchewan",
+          "practitionerRole": "Saskatchewan lawyer",
+          "setting": "Saskatoon office · a winter intake day and an English/French service directory",
+          "difficulty": 3,
+          "body": "For a French-language accused seeking an order under section 530(1), the first appearance has occurred. The appearance at which the trial date will be set is next week. No application has been made. Which advice is most accurate?",
+          "options": [
+            {
+              "id": "A",
+              "text": "The application necessarily became impossible at the first appearance.",
+              "explanation": "That confuses the advice step with the stated application deadline."
+            },
+            {
+              "id": "B",
+              "text": "The ordinary deadline is always the morning the trial starts.",
+              "explanation": "That is not the deadline supplied by subsection (1)."
+            },
+            {
+              "id": "C",
+              "text": "The first-appearance advice duty and application deadline are different; make the application no later than the appearance at which the trial date is set.",
+              "explanation": "The upcoming appearance is the procedural checkpoint the record identifies."
+            },
+            {
+              "id": "D",
+              "text": "The deadline depends only on when counsel is paid.",
+              "explanation": "Payment is not the relevant timing event."
+            }
+          ],
+          "answer": "C",
+          "ruleIds": [
+            "CA-TRIAL"
+          ],
+          "decisiveFact": "The trial-date-setting appearance has not yet occurred.",
+          "reviewFocus": "Confirm current section 530 wording and local application mechanics before approval.",
+          "status": "Needs practitioner review"
+        },
+        {
+          "id": "CA-SK-04",
+          "group": "SK",
+          "title": "A late request needs assessment",
+          "jurisdiction": "Saskatchewan",
+          "forum": "Criminal proceeding in Saskatchewan",
+          "practitionerRole": "Saskatchewan lawyer",
+          "setting": "Saskatoon office · a winter intake day and an English/French service directory",
+          "difficulty": 3,
+          "body": "A Saskatchewan criminal client raises a French trial request after the appearance at which the trial date was set. Assume the subsection (1) deadline was missed. What is the best response?",
+          "options": [
+            {
+              "id": "A",
+              "text": "Promise the request must now be granted automatically.",
+              "explanation": "The late-request framework is not the timely mandatory framework."
+            },
+            {
+              "id": "B",
+              "text": "Tell the client no legal route can ever remain.",
+              "explanation": "Missing the ordinary deadline does not support that absolute conclusion."
+            },
+            {
+              "id": "C",
+              "text": "Backdate an application to make it appear timely.",
+              "explanation": "Changing the record is not a legitimate response."
+            },
+            {
+              "id": "D",
+              "text": "Promptly assess and pursue the available subsection (4) route where appropriate, without promising the outcome.",
+              "explanation": "The late issue calls for a supported application assessment and accurate advice about uncertainty."
+            }
+          ],
+          "answer": "D",
+          "ruleIds": [
+            "CA-TRIAL"
+          ],
+          "decisiveFact": "The ordinary deadline has passed; the question concerns late relief.",
+          "reviewFocus": "Review subsection (4), current case law if needed, and the limits of the exercise’s simplified procedural facts.",
+          "status": "Needs practitioner review"
+        },
+        {
+          "id": "CA-SK-05",
+          "group": "SK",
+          "title": "Counsel retained, order still missing",
+          "jurisdiction": "Saskatchewan",
+          "forum": "Criminal proceeding in Saskatchewan",
+          "practitionerRole": "Saskatchewan lawyer",
+          "setting": "Saskatoon office · a winter intake day and an English/French service directory",
+          "difficulty": 2,
+          "body": "A competent French-speaking lawyer has accepted the Saskatchewan criminal retainer. The client chose a French trial. The file contains no application or order, and the trial-date-setting appearance is still ahead. What remains to be done?",
+          "options": [
+            {
+              "id": "A",
+              "text": "Verify and implement the section 530 application/order steps and confirm arrangements; retaining counsel alone is not completion.",
+              "explanation": "The file must connect the service arrangement to the required procedural result."
+            },
+            {
+              "id": "B",
+              "text": "Close the language-rights task because counsel is bilingual.",
+              "explanation": "The separate court process is not documented."
+            },
+            {
+              "id": "C",
+              "text": "Treat the lawyer’s appointment as a court order.",
+              "explanation": "A retainer and a judicial order serve different functions."
+            },
+            {
+              "id": "D",
+              "text": "Assume the language used at reception determines the trial arrangements.",
+              "explanation": "Reception language is not the procedural record."
+            }
+          ],
+          "answer": "A",
+          "ruleIds": [
+            "SK-LANG",
+            "CA-TRIAL"
+          ],
+          "decisiveFact": "Competent counsel exists, but the application/order record is absent.",
+          "reviewFocus": "Check the distinction between pending court action and a lawyer’s failure to act.",
+          "status": "Needs practitioner review"
+        },
+        {
+          "id": "CA-UND-01",
+          "group": "UND",
+          "title": "A promise depends on the bank",
+          "jurisdiction": "British Columbia",
+          "forum": "Professional commitment in a synthetic transaction",
+          "practitionerRole": "BC lawyer",
+          "setting": "Nanaimo office · a community workshop transaction, with a precise closing checklist",
+          "difficulty": 2,
+          "body": "A BC lawyer is asked to undertake that a bank will deliver a discharge tomorrow. The bank has not committed, and the lawyer cannot cause delivery by that time. What is the best response?",
+          "options": [
+            {
+              "id": "A",
+              "text": "Give the unconditional undertaking because banks usually cooperate.",
+              "explanation": "An expectation is not the ability stipulated to be missing."
+            },
+            {
+              "id": "B",
+              "text": "Clarify feasibility and negotiate terms the lawyer can fulfil before giving an undertaking.",
+              "explanation": "The proposed promise must fit what can actually be performed."
+            },
+            {
+              "id": "C",
+              "text": "Write “on behalf of my client” and assume personal responsibility disappears.",
+              "explanation": "That wording alone does not supply the missing protection or ability."
+            },
+            {
+              "id": "D",
+              "text": "Give the promise and decide whether it is possible tomorrow.",
+              "explanation": "The feasibility inquiry belongs before the promise."
+            }
+          ],
+          "answer": "B",
+          "ruleIds": [
+            "BC-PROMISE"
+          ],
+          "decisiveFact": "Performance depends on an uncommitted third party beyond the lawyer’s control.",
+          "reviewFocus": "Confirm appropriate qualifications without implying all third-party-dependent commitments are forbidden.",
+          "status": "Needs practitioner review"
+        },
+        {
+          "id": "CA-UND-02",
+          "group": "UND",
+          "title": "No signature button was pressed",
+          "jurisdiction": "British Columbia",
+          "forum": "Professional commitment in a synthetic transaction",
+          "practitionerRole": "BC lawyer",
+          "setting": "Nanaimo office · a community workshop transaction, with a precise closing checklist",
+          "difficulty": 2,
+          "body": "During a call, a BC lawyer clearly gives an unconditional undertaking to deliver a specified document by Friday. The parties agree the words were an undertaking, and the lawyer can perform it. Nothing is signed. What is the sound response?",
+          "options": [
+            {
+              "id": "A",
+              "text": "Ignore the promise because only a signed form can create an undertaking.",
+              "explanation": "That would turn recommended documentation into a universal formation rule."
+            },
+            {
+              "id": "B",
+              "text": "Treat it as optional until the recipient sends a reminder.",
+              "explanation": "The stated commitment does not depend on a reminder."
+            },
+            {
+              "id": "C",
+              "text": "Honour the undertaking and confirm its clear terms in writing.",
+              "explanation": "The facts expressly establish the undertaking; writing documents it."
+            },
+            {
+              "id": "D",
+              "text": "Withdraw it unilaterally because it was spoken.",
+              "explanation": "The spoken form does not establish an unrestricted withdrawal right."
+            }
+          ],
+          "answer": "C",
+          "ruleIds": [
+            "BC-PROMISE"
+          ],
+          "decisiveFact": "The existence and terms of the oral undertaking are expressly stipulated.",
+          "reviewFocus": "Confirm no factual dispute about formation is being silently resolved.",
+          "status": "Needs practitioner review"
+        },
+        {
+          "id": "CA-UND-03",
+          "group": "UND",
+          "title": "The client wants an early release",
+          "jurisdiction": "British Columbia",
+          "forum": "Professional commitment in a synthetic transaction",
+          "practitionerRole": "BC lawyer",
+          "setting": "Nanaimo office · a community workshop transaction, with a precise closing checklist",
+          "difficulty": 2,
+          "body": "A BC lawyer accepted a trust condition: hold the specified funds until counsel supplies written confirmation of a stated event. That confirmation has not arrived. The client demands release today. What is the proper response?",
+          "options": [
+            {
+              "id": "A",
+              "text": "Release because the client owns the money.",
+              "explanation": "The demand does not erase the accepted restriction."
+            },
+            {
+              "id": "B",
+              "text": "Treat pressure from the client as an effective variation.",
+              "explanation": "The client has not obtained the necessary change from the relevant lawyers."
+            },
+            {
+              "id": "C",
+              "text": "Transfer the funds through the operating account to avoid the condition.",
+              "explanation": "Moving the money would not remove the obligation."
+            },
+            {
+              "id": "D",
+              "text": "Continue to honour the accepted condition and pursue any permitted, properly agreed variation.",
+              "explanation": "The response preserves the actual condition while exploring a valid change."
+            }
+          ],
+          "answer": "D",
+          "ruleIds": [
+            "BC-PROMISE"
+          ],
+          "decisiveFact": "The agreed release event has not occurred and no variation has been agreed.",
+          "reviewFocus": "Review the exact condition; do not infer a universal right to return or release funds.",
+          "status": "Needs practitioner review"
+        },
+        {
+          "id": "CA-UND-04",
+          "group": "UND",
+          "title": "A request is not agreement",
+          "jurisdiction": "British Columbia",
+          "forum": "Professional commitment in a synthetic transaction",
+          "practitionerRole": "BC lawyer",
+          "setting": "Nanaimo office · a community workshop transaction, with a precise closing checklist",
+          "difficulty": 2,
+          "body": "A BC lawyer asks the lawyer who imposed a trust condition to permit earlier release. No reply has arrived. The existing condition remains performable. What should the receiving lawyer do?",
+          "options": [
+            {
+              "id": "A",
+              "text": "Keep complying with the existing condition until an effective variation is agreed; confirm any variation in writing.",
+              "explanation": "The outstanding request has not changed the obligation."
+            },
+            {
+              "id": "B",
+              "text": "Treat the sent request as immediate permission.",
+              "explanation": "Requesting a change is not obtaining one."
+            },
+            {
+              "id": "C",
+              "text": "Infer consent after an hour without a reply.",
+              "explanation": "The stated facts provide no agreed silence mechanism."
+            },
+            {
+              "id": "D",
+              "text": "Ask the client to sign the request and release immediately.",
+              "explanation": "Client approval does not supply the missing agreement."
+            }
+          ],
+          "answer": "A",
+          "ruleIds": [
+            "BC-PROMISE"
+          ],
+          "decisiveFact": "There is a request but no consent to vary.",
+          "reviewFocus": "Confirm who imposed and accepted the condition and whose consent is needed.",
+          "status": "Needs practitioner review"
+        },
+        {
+          "id": "CA-UND-05",
+          "group": "UND",
+          "title": "Performance after a breach",
+          "jurisdiction": "British Columbia",
+          "forum": "Professional commitment in a synthetic transaction",
+          "practitionerRole": "BC lawyer",
+          "setting": "Nanaimo office · a community workshop transaction, with a precise closing checklist",
+          "difficulty": 3,
+          "body": "A BC lawyer discovers that their undertaking was breached. The breach has not been consented to or waived. Performance was later completed. Confidentiality or privilege may affect disclosure. Which response is best?",
+          "options": [
+            {
+              "id": "A",
+              "text": "Mark the breach erased because the eventual outcome was satisfactory.",
+              "explanation": "Later performance does not rewrite the event history."
+            },
+            {
+              "id": "B",
+              "text": "Assess and address the breach, including the reporting duty and its confidentiality/privilege qualification, without assuming later performance cures everything.",
+              "explanation": "The response keeps remediation, reporting and protected information as separate questions."
+            },
+            {
+              "id": "C",
+              "text": "Send the entire client file to the regulator without considering protected information.",
+              "explanation": "The qualification must be considered before disclosure."
+            },
+            {
+              "id": "D",
+              "text": "Assume self-reporting can never be required.",
+              "explanation": "The targeted duty can concern the lawyer’s own conduct."
+            }
+          ],
+          "answer": "B",
+          "ruleIds": [
+            "BC-PROMISE",
+            "BC-REPORT"
+          ],
+          "decisiveFact": "The breach remains unconsented and unwaived; protected information may be involved.",
+          "reviewFocus": "Qualified reviewer must confirm reporting scope, exception and response; no automatic disclosure is prescribed.",
+          "status": "Needs practitioner review"
+        }
+      ],
+      "emails": [
+        {
+          "id": "CA-EMAIL-ON",
+          "group": "ON",
+          "title": "Who is handling tomorrow’s LTB hearing?",
+          "to": "Supervising lawyer",
+          "fromName": "Canadian practice supervisor",
+          "jurisdiction": "Ontario",
+          "forum": "Ontario Landlord and Tenant Board",
+          "practitionerRole": "Licensed Ontario paralegal / supervising lawyer",
+          "setting": "Toronto office · a second-floor practice near a busy streetcar route",
+          "prompt": "Write a 100–200 word internal email recommending the hearing assignment, identifying Riley’s permissible support role and the notification still needed. Distinguish the confirmed facts from anything you would check.",
+          "wordRange": [
+            100,
+            200
+          ],
+          "records": [
+            {
+              "id": "ON-E1",
+              "text": "A tenant’s Toronto LTB hearing is tomorrow. Priya is an Ontario paralegal in good standing; this file is within her authorized scope, and her competence, preparation and availability are confirmed."
+            },
+            {
+              "id": "ON-E2",
+              "text": "The client instructs Priya to represent them. Riley is a paid unlicensed office assistant; no representation exemption applies. The client wants Riley to help organize papers and take notes without making submissions."
+            },
+            {
+              "id": "ON-E3",
+              "text": "The application was filed before Priya was retained and named no representative. The file contains no written notice to the LTB or the other parties of the new representation."
+            }
+          ],
+          "ruleIds": [
+            "ON-REP",
+            "ON-SUPPORT"
+          ],
+          "rubric": [
+            {
+              "id": "R1",
+              "criterion": "Identifies Priya as the instructed, eligible representative on the supplied facts.",
+              "points": 2
+            },
+            {
+              "id": "R2",
+              "criterion": "Keeps Riley’s support role distinct from making submissions or borrowing a licence.",
+              "points": 2
+            },
+            {
+              "id": "R3",
+              "criterion": "Identifies written notification to the LTB and other parties as outstanding.",
+              "points": 2
+            },
+            {
+              "id": "R4",
+              "criterion": "Uses the record accurately without inventing a merits outcome or automatic adjournment.",
+              "points": 2
+            },
+            {
+              "id": "R5",
+              "criterion": "Provides a clear, courteous and feasible next-step email within roughly 100–200 words.",
+              "points": 2
+            }
+          ],
+          "rubricScale": "Human review only: 0 = absent or materially wrong; 1 = partly sound but incomplete; 2 = accurate, supported and practical. 10 points is a discussion aid, not a credential or automated pass.",
+          "criticalIssues": [
+            "Assigning Riley to represent despite the stipulated lack of exemption.",
+            "Saying only lawyers may appear at the LTB."
+          ],
+          "sampleResponse": "Subject: Tomorrow’s LTB hearing — assignment and notice\n\nI recommend that Priya represent the tenant. The file confirms her current licence, authorized scope, preparation and availability, and the client has instructed her to act. We should record that assignment and confirm tomorrow’s hearing arrangements with her and the client.\n\nRiley can help organize the hearing papers and take notes in the agreed support role. Riley should not make submissions for the tenant: the record expressly states that no representation exemption applies. Priya’s licence cannot be used as Riley’s authorization.\n\nThe application did not identify Priya, and I cannot find notice of her appointment. I will arrange written notification to the LTB and the other parties, then retain the notification record and check for any hearing directions. If an availability problem arises, I will raise it promptly so we can address representation lawfully rather than assume an adjournment.\n\nPlease confirm that this is the staffing plan you want implemented.",
+          "partnerReply": "The strongest reply assigns the work using the actual licence and client instructions, then identifies the unfinished notification. It does not confuse Riley’s usefulness with permission to advocate. Your prose has not been automatically graded; compare it with the rubric and discuss any defensible alternative.",
+          "acceptableAlternatives": [
+            "A concise email requesting the supervisor to arrange notice rather than offering to send it yourself is acceptable.",
+            "Further logistical checks are sensible if identified as checks, not missing established licence or competence facts."
+          ],
+          "status": "Needs practitioner review"
+        },
+        {
+          "id": "CA-EMAIL-REF",
+          "group": "REF",
+          "title": "Explain the referral without selling the fee",
+          "to": "Client, Morgan",
+          "fromName": "Canadian practice supervisor",
+          "jurisdiction": "British Columbia",
+          "forum": "Non-contentious client referral",
+          "practitionerRole": "BC lawyer",
+          "setting": "Vancouver office · a small coastal practice serving local businesses",
+          "prompt": "Write a 100–200 word client email explaining the proposed referral and payment, the effect on the client’s bill, and the decision you need. Do not treat consent as already obtained.",
+          "wordRange": [
+            100,
+            200
+          ],
+          "records": [
+            {
+              "id": "REF-E1",
+              "text": "Morgan’s Vancouver business needs a specialist for a licensing dispute. The referring lawyer lacks the specialist expertise; no conflict caused the referral. The proposed receiving lawyer is another BC lawyer in a separate firm."
+            },
+            {
+              "id": "REF-E2",
+              "text": "The receiving lawyer would charge Morgan $3,000 for the same defined work with or without a referral fee. A proposed $300 inter-lawyer payment would come from that $3,000, not be added to it. Reasonableness is stipulated for this exercise."
+            },
+            {
+              "id": "REF-E3",
+              "text": "Morgan has not yet been informed or consented. The specialist is also willing to accept a no-referral-fee arrangement. No transfer of the client file or payment has occurred."
+            }
+          ],
+          "ruleIds": [
+            "BC-REF"
+          ],
+          "rubric": [
+            {
+              "id": "R1",
+              "criterion": "Explains the expertise-based reason and avoids inventing a conflict.",
+              "points": 2
+            },
+            {
+              "id": "R2",
+              "criterion": "Clearly separates the $300 inter-lawyer payment from the unchanged $3,000 client fee.",
+              "points": 2
+            },
+            {
+              "id": "R3",
+              "criterion": "Seeks informed consent instead of presuming or pressuring it.",
+              "points": 2
+            },
+            {
+              "id": "R4",
+              "criterion": "Offers the stated no-fee alternative and seeks instructions before the handoff.",
+              "points": 2
+            },
+            {
+              "id": "R5",
+              "criterion": "Uses clear client language without claiming a regulatory endorsement or guaranteed outcome.",
+              "points": 2
+            }
+          ],
+          "rubricScale": "Human review only: 0 = absent or materially wrong; 1 = partly sound but incomplete; 2 = accurate, supported and practical. 10 points is a discussion aid, not a credential or automated pass.",
+          "criticalIssues": [
+            "Adding $300 to the client’s total.",
+            "Treating the client’s silence as consent."
+          ],
+          "sampleResponse": "Subject: Proposed specialist referral and your instructions\n\nYour licensing dispute would benefit from a lawyer with the specialist experience described in our discussion. I propose referring you to the identified BC specialist for that reason; this referral is not being made because of a conflict.\n\nThe specialist has proposed a $3,000 fee for the defined work. That total would be the same whether or not a referral fee is paid. If you agree, the specialist would pay our firm $300 from that amount for the referral. It would not be an additional $300 charge to you.\n\nWe have not treated your consent as given. Please let me know whether you understand and agree to this arrangement, or whether you would prefer the available option with no referral payment. You may also ask questions or discuss another suitable lawyer.\n\nOnce we have your instructions, we can confirm the engagement and arrange an authorized handoff. No referral payment or file transfer has occurred.",
+          "partnerReply": "A useful client email makes the money understandable and leaves the decision open. Selecting a specialist and agreeing to an inter-lawyer fee are separate choices. Compare your text with the proposed response; this is authored guidance, not an assessment of your actual prose.",
+          "acceptableAlternatives": [
+            "It is acceptable to recommend the no-fee option while accurately explaining the available arrangement.",
+            "A request to discuss the arrangement before deciding is also a valid next step."
+          ],
+          "status": "Needs practitioner review"
+        },
+        {
+          "id": "CA-EMAIL-REC",
+          "group": "REC",
+          "title": "A meeting without audio",
+          "to": "Client, Avery",
+          "fromName": "Canadian practice supervisor",
+          "jurisdiction": "British Columbia",
+          "forum": "Client or lawyer conference; no court hearing",
+          "practitionerRole": "BC lawyer",
+          "setting": "Victoria office · raincoats by the door and a ferry timetable on the noticeboard",
+          "prompt": "Write a 100–200 word pre-meeting email responding to Avery’s preference. Explain how the meeting will proceed and how a later change would be handled, without claiming that notice alone clears every legal issue.",
+          "wordRange": [
+            100,
+            200
+          ],
+          "records": [
+            {
+              "id": "REC-E1",
+              "text": "The Victoria lawyer proposed recording tomorrow’s advice call, but recording has not started. Avery replies: “I would prefer written notes. Will I still be able to have the meeting?”"
+            },
+            {
+              "id": "REC-E2",
+              "text": "The office can conduct the meeting with manual notes; no recording is required. Another lawyer may join later. Recording and transcription functions can remain off throughout."
+            },
+            {
+              "id": "REC-E3",
+              "text": "No vendor assessment or separate privacy analysis has been completed. No confidential information has been sent to an outside transcription service."
+            }
+          ],
+          "ruleIds": [
+            "BC-REC"
+          ],
+          "rubric": [
+            {
+              "id": "R1",
+              "criterion": "Confirms that the meeting can proceed with manual notes and recording off.",
+              "points": 2
+            },
+            {
+              "id": "R2",
+              "criterion": "Acknowledges the preference courteously without treating it as misconduct.",
+              "points": 2
+            },
+            {
+              "id": "R3",
+              "criterion": "Explains that any later proposal to record requires prior information to relevant participants.",
+              "points": 2
+            },
+            {
+              "id": "R4",
+              "criterion": "Preserves the separate confidentiality/information-handling review boundary.",
+              "points": 2
+            },
+            {
+              "id": "R5",
+              "criterion": "Gives practical next steps without inventing recording, a data transfer, or a universal consent rule.",
+              "points": 2
+            }
+          ],
+          "rubricScale": "Human review only: 0 = absent or materially wrong; 1 = partly sound but incomplete; 2 = accurate, supported and practical. 10 points is a discussion aid, not a credential or automated pass.",
+          "criticalIssues": [
+            "Suggesting secret capture or automatic recording on joining.",
+            "Saying the recording-notice rule approves all transcription services."
+          ],
+          "sampleResponse": "Subject: Tomorrow’s meeting — we can use written notes\n\nYes, the meeting can go ahead without recording. We will keep the recording and transcription functions off and take manual notes instead. Thank you for letting us know your preference; audio is not required for this meeting.\n\nI will confirm that arrangement with anyone assisting us. If another lawyer joins, we will explain how the meeting is being documented. If a recording is proposed later, we will raise it before any capture begins and discuss the proposal with the relevant participants rather than switch it on unexpectedly.\n\nAny proposed use of an outside transcription service would also need separate consideration of confidentiality and information handling. Telling participants about recording would not, by itself, settle those questions. No information has been sent to such a service.\n\nPlease attend at the scheduled time. Let me know if there is anything else about the meeting arrangements you would like us to address.",
+          "partnerReply": "This task rewards a workable response to the client’s preference. Keep the notice rule distinct from a broader privacy or consent analysis, and do not invent a need for audio. Your email is retained for self-comparison and practitioner discussion; the application does not grade its wording.",
+          "acceptableAlternatives": [
+            "A shorter email with an offer to discuss documentation needs is acceptable if the recording-off arrangement stays clear.",
+            "Do not require the client to resolve internal vendor compliance questions."
+          ],
+          "status": "Needs practitioner review"
+        },
+        {
+          "id": "CA-EMAIL-SK",
+          "group": "SK",
+          "title": "Confirm the French-language instructions",
+          "to": "Client, Camille",
+          "fromName": "Canadian practice supervisor",
+          "jurisdiction": "Saskatchewan",
+          "forum": "Criminal proceeding in Saskatchewan",
+          "practitionerRole": "Saskatchewan lawyer",
+          "setting": "Saskatoon office · a winter intake day and an English/French service directory",
+          "prompt": "Write a 100–200 word client email confirming the instruction, the competence issue and the procedural step still required. Make the deadline understandable and avoid promising an order already exists.",
+          "wordRange": [
+            100,
+            200
+          ],
+          "records": [
+            {
+              "id": "SK-E1",
+              "text": "Camille is accused in a Saskatchewan criminal proceeding. For this exercise French is Camille’s language under section 530(1). Camille requests French-language representation and trial, although conversational English is comfortable."
+            },
+            {
+              "id": "SK-E2",
+              "text": "The first appearance has occurred. The appearance at which the trial date will be set is five days away. No section 530 application or order is in the file."
+            },
+            {
+              "id": "SK-E3",
+              "text": "The current lawyer is not competent to conduct the required representation in French. A competent French-speaking Saskatchewan criminal lawyer is available to discuss accepting the retainer; Camille has not yet approved the proposed handoff."
+            }
+          ],
+          "ruleIds": [
+            "SK-LANG",
+            "CA-TRIAL"
+          ],
+          "rubric": [
+            {
+              "id": "R1",
+              "criterion": "Accurately confirms the client’s French-language choice without overriding it because of English fluency.",
+              "points": 2
+            },
+            {
+              "id": "R2",
+              "criterion": "Candidly identifies the current lawyer’s competence limitation and proposes competent assistance.",
+              "points": 2
+            },
+            {
+              "id": "R3",
+              "criterion": "Seeks the client’s instructions for the proposed handoff rather than announcing it as completed.",
+              "points": 2
+            },
+            {
+              "id": "R4",
+              "criterion": "Identifies the trial-date-setting appearance as the relevant subsection (1) deadline and plans prompt action.",
+              "points": 2
+            },
+            {
+              "id": "R5",
+              "criterion": "Distinguishes a retainer, application and court order; communicates clearly without a guaranteed result.",
+              "points": 2
+            }
+          ],
+          "rubricScale": "Human review only: 0 = absent or materially wrong; 1 = partly sound but incomplete; 2 = accurate, supported and practical. 10 points is a discussion aid, not a credential or automated pass.",
+          "criticalIssues": [
+            "Switching to English without the client’s instruction.",
+            "Calling the prospective lawyer’s availability an issued court order.",
+            "Treating the first appearance as an absolute bar to a timely application here."
+          ],
+          "sampleResponse": "Subject: Your French-language representation and trial request\n\nI confirm that you wish to receive the required legal services and have your criminal trial in French. Your ability to converse in English does not change that instruction. I am not able to conduct this representation competently in French, so I propose discussing the retainer with the available French-speaking Saskatchewan criminal lawyer, with your approval.\n\nThere is also a separate court step. On the supplied facts, the section 530(1) application should be made no later than the appearance at which your trial date is set. That appearance is five days away. We need to arrange responsibility for the application promptly; retaining a French-speaking lawyer will not itself produce an order.\n\nPlease confirm whether you approve the proposed handoff. We will coordinate the immediate steps, verify the application’s filing and court status, and confirm the arrangements with you. At present, the file contains neither the application nor an order.",
+          "partnerReply": "The strongest reply keeps three things visible: the client’s choice, competent services, and a procedural step with its own timing. Do not treat one as proof that the others are complete. A practitioner should assess the local procedure and the proposed transition before approving this assignment.",
+          "acceptableAlternatives": [
+            "A request for an urgent client call can be appropriate if the email still explains the upcoming checkpoint.",
+            "A competent team arrangement may be considered if the practitioner confirms it actually meets the required service and retainer obligations."
+          ],
+          "status": "Needs practitioner review"
+        },
+        {
+          "id": "CA-EMAIL-UND",
+          "group": "UND",
+          "title": "The client wants the funds today",
+          "to": "Supervising BC lawyer",
+          "fromName": "Canadian practice supervisor",
+          "jurisdiction": "British Columbia",
+          "forum": "Professional commitment in a synthetic transaction",
+          "practitionerRole": "BC lawyer",
+          "setting": "Nanaimo office · a community workshop transaction, with a precise closing checklist",
+          "prompt": "Write a 100–200 word internal email explaining whether release can occur now and the steps you recommend. Address the proposed variation without assuming it has been accepted. Identify what would change if a breach were discovered.",
+          "wordRange": [
+            100,
+            200
+          ],
+          "records": [
+            {
+              "id": "UND-E1",
+              "text": "The Nanaimo office accepted a written trust condition: “Hold the $12,000 until you receive my written confirmation that the specified release event has occurred.” This quoted sentence is a fictional exercise term, not a quotation from a conduct rule."
+            },
+            {
+              "id": "UND-E2",
+              "text": "The required confirmation has not arrived. The client asks for immediate payment. The lawyer who imposed the condition has not answered the office’s request to vary it. The existing condition can still be honoured."
+            },
+            {
+              "id": "UND-E3",
+              "text": "The funds remain held and no breach has occurred on the supplied facts. The record does not establish a present right to return the funds or cancel the commitment unilaterally."
+            }
+          ],
+          "ruleIds": [
+            "BC-PROMISE",
+            "BC-REPORT"
+          ],
+          "rubric": [
+            {
+              "id": "R1",
+              "criterion": "Identifies that the confirmation required by the exact condition is missing.",
+              "points": 2
+            },
+            {
+              "id": "R2",
+              "criterion": "Does not treat the client’s demand or unanswered request as effective variation.",
+              "points": 2
+            },
+            {
+              "id": "R3",
+              "criterion": "Proposes continued compliance and an appropriately agreed, documented variation if pursued.",
+              "points": 2
+            },
+            {
+              "id": "R4",
+              "criterion": "Keeps the no-breach fact distinct from the conditional discussion of remediation/reporting.",
+              "points": 2
+            },
+            {
+              "id": "R5",
+              "criterion": "Qualifies any reporting discussion for confidentiality/privilege and avoids a universal return-funds escape.",
+              "points": 2
+            }
+          ],
+          "rubricScale": "Human review only: 0 = absent or materially wrong; 1 = partly sound but incomplete; 2 = accurate, supported and practical. 10 points is a discussion aid, not a credential or automated pass.",
+          "criticalIssues": [
+            "Releasing the $12,000 before the stated condition is satisfied or effectively varied.",
+            "Saying a variation request equals consent.",
+            "Recommending unrestricted disclosure of the client file if an issue arises."
+          ],
+          "sampleResponse": "Subject: $12,000 trust condition — release is not yet authorized\n\nThe required written confirmation has not arrived, so the condition we accepted does not presently permit release. The client’s request does not change that condition. Our unanswered variation request is also not an agreement.\n\nI recommend that we keep the funds held under the existing terms, explain the outstanding step to the client, and follow up with the lawyer who imposed the condition. If an appropriate variation is agreed, we should confirm its precise terms in writing before acting on it. This record does not establish a separate right to return the funds or cancel the commitment ourselves.\n\nNo breach has occurred on the supplied facts. If we discover one, we should preserve an accurate record, address remediation and assess the reporting duty for an unconsented, unwaived breach, including the confidentiality and privilege qualification. We should not assume that later performance alone erases the issue or permits unrestricted disclosure.\n\nPlease confirm who will handle the follow-up.",
+          "partnerReply": "The exact condition controls this file. A sound response distinguishes a requested change from an agreed one and keeps hypothetical breach reporting separate from the actual no-breach facts. Use the rubric with your practitioner; no text-matching score has been applied.",
+          "acceptableAlternatives": [
+            "A carefully framed request for clarification or a proposed alternative condition is acceptable without unilateral release.",
+            "Any proposed property-return route must be supported by the particular terms and reviewed; it is not the default answer here."
+          ],
+          "status": "Needs practitioner review"
+        }
+      ]
+    };
+    const CANADA_DIGEST = "2431b107d9097a77ab52ac32162bb021d01d3c7a7072820f40725a3530fea2f9";
+    const CANADA_SCENARIOS = CANADA_PACK.questions.map(q => ({
+      id: q.id, difficulty: q.difficulty, sourceType: 'canada-style',
+      jurisdiction: q.jurisdiction, from: 'Canadian practice supervisor', role: q.practitionerRole,
+      subject: q.title, body: q.setting + '\n\n' + q.body + '\n\nForum: ' + q.forum,
+      rule: q.ruleIds.map(id => CANADA_PACK.rules.find(r => r.id === id).title).join(' · '),
+      explanation: q.options.find(o => o.id === q.answer).explanation,
+      choices: q.options.map(o => ({ id: o.id, text: o.text, grade: o.id === q.answer ? 'correct' : 'wrong', why: o.explanation })),
+      sourceUrl: CANADA_PACK.sources.find(s => s.id === CANADA_PACK.rules.find(r => r.id === q.ruleIds[0]).sourceRefs[0].id).url,
+      sourceNote: 'Canada pack · Original fictional exercise · Practitioner review pending.',
+      localSourceFile: 'canada-test/review.html#' + q.id, sourceLabel: 'Question, explanations and practitioner review',
+      officialSourceLabel: 'Official primary source', gold: q.difficulty === 1 ? 35 : q.difficulty === 2 ? 45 : 60, ruleIds: q.ruleIds
+    }));
+    Object.assign(exports, { CANADA_PACK, CANADA_DIGEST, CANADA_SCENARIOS });
+  },
+  "js/data/appearance.js": (exports, require) => {
+    const { PAL } = require("js/engine/palette.js");
+    const { COSMETICS } = require("js/data/apprenticeship.js");
 
-    const OFFICE_UPGRADES = [
-      { id: 'monitor', name: 'Second Monitor', cost: 60,
-        desc: '+15% gold from correct answers. A second screen appears on your desk.' },
-      { id: 'subscription', name: 'Ethics Treatise Shelf', cost: 250,
-        desc: 'Unlocks the searchable Nevada, Arizona, and California reference library. Required for Riley’s paid ethics hints.' },
-      { id: 'liz_chair', name: 'Chair for Liz Loza', cost: 250,
-        desc: '+10 max Ethics. At last, Liz has somewhere to sit.' },
-      { id: 'houseplants', name: 'Houseplants', cost: 500,
-        desc: 'Maybe this will cheer Liz up. Adds greenery and slightly improves her mood.' },
-      { id: 'paralegal', name: 'Paralegal Upgrade — Riley Readsalot', cost: 2000,
-        desc: 'Riley halves Ethics damage from wrong answers. With the treatise shelf, Riley can research a relevant-rule hint for 100 gold.' },
-      { id: 'work_phone', name: 'Work Phone', cost: 2000,
-        desc: 'Open the full BarMail inbox anywhere: ethics practice, writing assignments, and partner replies. Jim can now find you at the bar.' },
-      { id: 'artwork', name: 'Artwork', cost: 2000,
-        desc: 'A single black dot on a white canvas adds unmistakable warmth to the office.' },
-    ];
+    // The first six hair IDs and the first six color indices match legacy saves.
+    const HAIR_STYLES = ['Side part', 'Long waves', 'Low ponytail', 'Neat bun', 'Natural curls', 'Bald',
+      'Close crop', 'Swept back', 'Chin-length bob', 'High ponytail', 'Braids', 'Locs', 'Tapered curls', 'Side-swept fringe', 'Textured crop', 'Half-up waves'];
+    const HAIR_COLORS = ['Soft black', 'Walnut brown', 'Golden blond', 'Silver', 'Auburn', 'Platinum',
+      'Espresso', 'Chestnut', 'Honey blond', 'Copper', 'Strawberry blond', 'Salt and pepper',
+      'Charcoal', 'Blue black', 'Burgundy', 'Midnight blue', 'Plum', 'Dusty rose'];
+    const FACIAL_HAIR = ['Clean shaven', 'Stubble', 'Moustache', 'Goatee', 'Short beard', 'Full beard', 'Moustache & goatee'];
+    const EYE_COLORS = ['Brown', 'Blue', 'Green', 'Hazel', 'Gray', 'Amber'];
+    const SKIN_COLORS = ['Porcelain', 'Light warm', 'Golden', 'Medium warm', 'Deep golden', 'Rich brown', 'Deep brown'];
+    const TIE_COLORS = ['Burgundy', 'Navy', 'Forest', 'Ochre', 'Plum', 'Teal', 'Rose', 'Charcoal', 'Steel', 'Ivory', 'Rust', 'Slate blue'];
+    const SUIT_COLORS = ['Navy', 'Charcoal', 'Burgundy', 'Forest', 'Oak'];
+    const SHIRT_COLORS = ['Ivory', 'Pale blue', 'Lilac', 'Blush', 'Sage', 'Charcoal'];
+    const FACE_SHAPES = ['Oval', 'Angular', 'Rounded'];
+    const OUTFITS = [{ id: 'trousers', label: 'Suit with trousers' }, { id: 'skirt', label: 'Suit with skirt' }];
 
-    const APARTMENT_UPGRADES = [
-      { id: 'mattress', name: 'Better Mattress', cost: 80,
-        desc: '+20 max Ethics. A principled attorney is a well-rested attorney.' },
-      { id: 'coffee', name: 'Coffee Machine', cost: 500,
-        desc: 'Drink a cup to restore 2 Ethics. Clarity in a cup.' },
-      { id: 'wardrobe_rack', name: 'Wardrobe Rack', cost: 160,
-        desc: 'Adds a brass rail with displayed suits to your apartment wardrobe. All appearance colors are available without this upgrade.' },
-      { id: 'homedesk', name: 'Clock', cost: 260,
-        desc: 'Adds a wall clock. Keeping a healthy sleep schedule makes bed rest restore +10 more Ethics.' },
-      { id: 'kitchen', name: 'Kitchen Upgrade', cost: 400,
-        desc: '+10 max Ethics and faster rest. Cook a meal for 5 gold to restore 30 Ethics.' },
-      { id: 'cityview', name: 'City View Apartment', cost: 1200,
-        desc: '+25% gold from correct answers. Adds a skyline window and a couch where you can sit and enjoy the view.' },
-    ];
+    function index(value, options, fallback = 0) { return Number.isInteger(value) && value >= 0 && value < options.length ? value : fallback; }
+    function color(value, options, fallback = options[0]) { return options.includes(value) ? value : fallback; }
 
-    function findUpgrade(id) {
-      return OFFICE_UPGRADES.find((u) => u.id === id) || APARTMENT_UPGRADES.find((u) => u.id === id);
-    }
-
-    // Aggregate bonuses from owned upgrades.
-    function bonuses(upgrades) {
-      const has = (id) => upgrades.includes(id);
+    function normalizeAppearance(value = {}) {
       return {
-        goldMult: 1 + (has('monitor') ? 0.15 : 0) + (has('cityview') ? 0.25 : 0),
-        goldFlat: 0,
-        streakHealBonus: 0,
-        restHeal: 15 + (has('homedesk') ? 10 : 0),
-        restCooldownMs: has('kitchen') ? 120_000 : 240_000,
+        skin: index(value.skin, PAL.skin), hair: index(value.hair, PAL.hair),
+        hairStyle: index(value.hairStyle, HAIR_STYLES), eye: index(value.eye, PAL.eyes),
+        facialHair: index(value.facialHair, FACIAL_HAIR), faceShape: index(value.faceShape, FACE_SHAPES),
+        suitColor: color(value.suitColor, PAL.suits), tieColor: color(value.tieColor, PAL.ties),
+        shirtColor: color(value.shirtColor, PAL.shirts), outfit: value.outfit === 'skirt' ? 'skirt' : 'trousers',
+        silhouette: ['tailored', 'relaxed', 'slim'].includes(value.silhouette) ? value.silhouette : 'tailored',
+        glasses: value.glasses === true,
       };
     }
-    Object.assign(exports, { OFFICE_UPGRADES, APARTMENT_UPGRADES, findUpgrade, bonuses });
+
+    // Used everywhere: creator, wardrobe, journal portrait and walking actor.
+    // Equipped wardrobe items layer their `look` fields (tie, briefcase, formal,
+    // wig, necklace, sunglasses, earrings, watch, pocketSquare) over the base.
+    function appearanceLook(value, equipped = []) {
+      const a = normalizeAppearance(value);
+      const look = { ...a, suit: a.suitColor, shirt: a.shirtColor, tie: a.tieColor, briefcase: '#694c35' };
+      for (const id of equipped) {
+        const item = COSMETICS.find((cosmetic) => cosmetic.id === id);
+        if (item?.look) Object.assign(look, item.look);
+      }
+      return look;
+    }
+
+    // "Surprise me" in the creator. Deterministic for a given rng so tests can
+    // replay it; every result passes normalizeAppearance unchanged.
+    const pickIndex = (rng, n) => Math.min(n - 1, Math.max(0, Math.floor(rng() * n)));
+    const pickItem = (rng, list) => list[pickIndex(rng, list.length)];
+    const GENDER_IDS = ['male', 'female', 'nonbinary'];
+    function randomAppearance(rng = Math.random) {
+      return normalizeAppearance({
+        skin: pickIndex(rng, PAL.skin.length), hair: pickIndex(rng, PAL.hair.length), hairStyle: pickIndex(rng, HAIR_STYLES.length),
+        eye: pickIndex(rng, PAL.eyes.length), facialHair: rng() < 0.55 ? 0 : pickIndex(rng, FACIAL_HAIR.length), faceShape: pickIndex(rng, FACE_SHAPES.length),
+        suitColor: pickItem(rng, PAL.suits), tieColor: pickItem(rng, PAL.ties), shirtColor: pickItem(rng, PAL.shirts),
+        outfit: pickItem(rng, OUTFITS).id, silhouette: pickItem(rng, ['tailored', 'relaxed', 'slim']), glasses: rng() < 0.3,
+      });
+    }
+    function randomGender(rng = Math.random) { return pickItem(rng, GENDER_IDS); }
+
+    function appearanceDescription(value) {
+      const a = normalizeAppearance(value);
+      return `${HAIR_COLORS[a.hair]} ${HAIR_STYLES[a.hairStyle].toLowerCase()}, ${FACIAL_HAIR[a.facialHair].toLowerCase()}, ${EYE_COLORS[a.eye].toLowerCase()} eyes, ${a.outfit === 'skirt' ? 'skirt suit' : 'trouser suit'}${a.glasses ? ', glasses' : ''}`;
+    }
+    Object.assign(exports, { HAIR_STYLES, HAIR_COLORS, FACIAL_HAIR, EYE_COLORS, SKIN_COLORS, TIE_COLORS, SUIT_COLORS, SHIRT_COLORS, FACE_SHAPES, OUTFITS, normalizeAppearance, appearanceLook, GENDER_IDS, randomAppearance, randomGender, appearanceDescription });
   },
-  "js/data/practice-packs.js": (exports, require) => {
+  "js/engine/palette.js": (exports, require) => {
+    // Single source of truth for every color in the game world (see docs/archive/VISUAL_DESIGN.md §2).
+    const PAL = {
+      marble: '#e8e4da',
+      marbleDark: '#d6d0c2',
+      stone: '#9a958c',
+      stoneDark: '#7d786f',
+      wood: '#8b5e3c',
+      woodLight: '#a97a52',
+      woodDark: '#6b4529',
+      parchment: '#f3e9d2',
+      brass: '#b8912f',
+      brassLight: '#d9b656',
+      navy: '#1f3a5f',
+      navyLight: '#2c5085',
+      burgundy: '#6e2436',
+      burgundyLight: '#8d3449',
+      archiveGreen: '#3f5d4b',
+      archiveGreenLight: '#557a63',
+      ink: '#2b2b33',
+      grass: '#6a8f57',
+      grassDark: '#5a7c49',
+      water: '#5b87a6',
+      skin: ['#f2d6b3', '#e8c39e', '#d4a373', '#c68e5f', '#a06a42', '#8d5a3b', '#5f3d28'],
+      // Append shades so existing saved color indices retain their meaning.
+      hair: ['#2b2b33', '#6b4529', '#b8912f', '#9a958c', '#8c3b2e', '#e8e2d4',
+        '#3a261d', '#8a5434', '#c59b63', '#b96b3d', '#d0ab85', '#69645e',
+        '#4b4650', '#1d2c38', '#592d3b', '#334763', '#715278', '#ad7789'],
+      eyes: ['#4a3728', '#3b6ea5', '#4a7c59', '#8c6b3f', '#7a8288', '#b3541e'],
+      suits: ['#1f3a5f', '#3a3a42', '#6e2436', '#3f5d4b', '#8b5e3c'],
+      ties: ['#6e2436', '#253d65', '#3f6252', '#a68238', '#66537d', '#2f6670', '#b18672', '#34363c', '#bac3d2', '#ece1c5', '#944b3f', '#486886'],
+      shirts: ['#f3eee1', '#c8d8e6', '#d4c6d8', '#e2c9c1', '#d4d9d0', '#363b45'],
+    };
+
+    // Lighten (amt > 0) or darken (amt < 0) a hex color. Used to fake 3-tone flat shading.
+    function shade(hex, amt) {
+      const n = parseInt(hex.slice(1), 16);
+      const f = (v) => Math.max(0, Math.min(255, Math.round(v + amt * 255)));
+      const r = f((n >> 16) & 255), g = f((n >> 8) & 255), b = f(n & 255);
+      return `rgb(${r},${g},${b})`;
+    }
+    Object.assign(exports, { PAL, shade });
+  },
+  "js/canada.js": (exports, require) => {
+    const { CANADA_PACK, CANADA_DIGEST } = require("js/data/canada.js");
+
+    // Canada progress covers the five writing emails only; the 25 questions run
+    // through BarMail like every other pack (seen list, gold, Ethics, streaks).
+    function freshCanadaProgress() {
+      return { version: CANADA_PACK.version, digest: CANADA_DIGEST, drafts: {}, emailAttempts: [], archives: [] };
+    }
+    function normalizeCanadaProgress(value) {
+      const fresh = freshCanadaProgress();
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return fresh;
+      if (value.version !== fresh.version || value.digest !== fresh.digest) {
+        fresh.archives = [...(Array.isArray(value.archives) ? value.archives : []), { ...value, archives: [] }];
+        return fresh;
+      }
+      return { ...fresh,
+        emailAttempts: Array.isArray(value.emailAttempts) ? value.emailAttempts.filter(a => a && typeof a === 'object') : [],
+        drafts: value.drafts && typeof value.drafts === 'object' && !Array.isArray(value.drafts) ? value.drafts : {},
+        archives: Array.isArray(value.archives) ? value.archives : [],
+      };
+    }
+    function canadaProgress(player) {
+      if (!player.canada || player.canada.digest !== CANADA_DIGEST) player.canada = normalizeCanadaProgress(player.canada);
+      return player.canada;
+    }
+    function saveCanadaDraft(player, id, text) {
+      if (!CANADA_PACK.emails.some(e => e.id === id)) throw new Error('Unknown Canadian email assignment.');
+      canadaProgress(player).drafts[id] = String(text).slice(0, 6000);
+    }
+    function commitCanadaEmail(player, id, now) {
+      if (player.runStatus === 'ended' || player.ethics <= 0) throw new Error('This character run has ended.');
+      if (!CANADA_PACK.emails.some(e => e.id === id)) throw new Error('Unknown Canadian email assignment.');
+      const progress = canadaProgress(player), text = String(progress.drafts[id] || '').trim();
+      if (!text) throw new Error('Write a reply before committing.');
+      const previous = progress.emailAttempts.filter(a => a.taskId === id);
+      if (previous.at(-1)?.text === text) return previous.at(-1);
+      const attempt = { id: `${id}:${previous.length + 1}`, taskId: id, text, committedAt: now,
+        version: progress.version, digest: progress.digest, proseAssessed: false, feedbackType: 'authored-self-comparison' };
+      progress.emailAttempts.push(attempt);
+      delete progress.drafts[id];
+      return attempt;
+    }
+    Object.assign(exports, { freshCanadaProgress, normalizeCanadaProgress, canadaProgress, saveCanadaDraft, commitCanadaEmail });
+  },
+  "js/data/pets.js": (exports, require) => {
+    // Apartment pets: a one-time adoption that adds a wandering companion to the
+    // player's apartment. Purely cosmetic; no grading or economy effect after the fee.
+
+    const PET_COST = 2000;
+    const DEFAULT_PET_NAME = 'Counsel';
+    const PET_KINDS = [
+      { id: 'cat', label: 'Cat', note: 'Sleeps on the treatises. Judges silently.' },
+      { id: 'dog', label: 'Dog', note: 'Greets every visitor as opposing counsel, then as a friend.' },
+    ];
+
+    function petKind(id) { return PET_KINDS.find((kind) => kind.id === id) || null; }
+
+    // Names are trimmed, collapsed to single spaces and capped at 24 characters,
+    // matching the creator's name field; blank names fall back to the default.
+    function sanitizePetName(value) {
+      const clean = String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, '').trim().replace(/\s+/g, ' ').slice(0, 24);
+      return clean || DEFAULT_PET_NAME;
+    }
+    Object.assign(exports, { PET_COST, DEFAULT_PET_NAME, PET_KINDS, petKind, sanitizePetName });
+  },
+  "js/clock.js": (exports, require) => {
+    // Game clock. Solo play reads the browser clock; online play keeps an offset
+    // to the account service so cooldowns and slow effects use server time.
+
+    let offset = 0;
+
+    function now() { return Date.now() + offset; }
+
+    function setServerNow(serverNow) {
+      if (Number.isFinite(serverNow)) offset = serverNow - Date.now();
+    }
+
+    function clockOffset() { return offset; }
+    Object.assign(exports, { now, setServerNow, clockOffset });
+  },
+  "js/progress.js": (exports, require) => {
+    // Client-side progress dispatch.
+    //
+    // Solo play applies every action locally through the shared reducer and saves
+    // to this browser. Online play posts the same action to the account service,
+    // which applies the reducer with its own clock and returns the new character;
+    // the browser never computes rewards itself in that mode.
+
+    const { state, save, replaceState, setPersistence } = require("js/state.js");
+    const { applyAction } = require("js/actions.js");
+    const { now, setServerNow } = require("js/clock.js");
+
+    const STUDY_FLUSH_MS = 5_000;
+    const RETRY_DELAYS_MS = [500, 1000, 2000];
+
+    let mode = 'solo';
+    let transport = null;      // { act(envelope), beacon(envelope), fetchState(), onExpired() }
+    let clientId = null;
+    let seq = 0;
+    let queue = Promise.resolve();
+    let onDelivered = null;
+    let studyUnflushedMs = 0;
+    let studyUnsavedMs = 0;
+    let studyLastFlushAt = 0;
+    const coalesced = new Map();
+
+    function configureProgress({ mode: nextMode = 'solo', transport: nextTransport = null, onDelivered: deliveredHook = null } = {}) {
+      mode = nextMode === 'online' ? 'online' : 'solo';
+      transport = nextTransport;
+      onDelivered = deliveredHook;
+      clientId = mode === 'online' ? (globalThis.crypto?.randomUUID?.() || `tab-${Date.now()}-${Math.random().toString(36).slice(2)}`) : null;
+      seq = 0;
+      studyUnflushedMs = 0;
+      studyUnsavedMs = 0;
+      studyLastFlushAt = 0;
+      setPersistence(mode === 'online' ? 'server' : 'local');
+    }
+
+    function isOnline() { return mode === 'online'; }
+    function progressClientId() { return clientId; }
+
+    function coalesceKey(action) {
+      return `${action.type}:${action.taskId ?? action.packId ?? action.id ?? action.topicId ?? ''}`;
+    }
+
+    function applyLocally(action, persist) {
+      const envelope = applyAction(state, action, { now: now(), rng: Math.random });
+      if (persist) save();
+      if (envelope.delivered.length && onDelivered) onDelivered(envelope.delivered);
+      return envelope;
+    }
+
+    async function postWithRetry(envelope) {
+      let lastError = null;
+      for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+        try {
+          return await transport.act(envelope);
+        } catch (error) {
+          lastError = error;
+          if (attempt < RETRY_DELAYS_MS.length) await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
+        }
+      }
+      throw lastError || new Error('Connection lost.');
+    }
+
+    function adoptServerState(response) {
+      if (Number.isFinite(response.serverNow)) setServerNow(response.serverNow);
+      if (response.state && typeof response.state === 'object') replaceState(response.state, { preserve: ['pos'] });
+    }
+
+    async function sendOnline(action) {
+      const envelope = { clientId, seq: ++seq, action };
+      let response;
+      try {
+        response = await postWithRetry(envelope);
+      } catch {
+        // The server may have applied the action even though the reply was lost.
+        try { adoptServerState(await transport.fetchState()); } catch { /* still offline */ }
+        throw new Error('Connection lost. Check your connection and try again.');
+      }
+      if (response.expired) {
+        transport.onExpired?.();
+        throw new Error('Your online session expired. Sign in again to continue.');
+      }
+      adoptServerState(response);
+      if (!response.ok) throw new Error(response.message || 'The firm could not process that action.');
+      const envelopeOut = { type: action.type, result: response.result ?? {}, delivered: response.delivered ?? [], ended: !!response.ended };
+      if (envelopeOut.delivered.length && onDelivered) onDelivered(envelopeOut.delivered);
+      return envelopeOut;
+    }
+
+    // Apply one action. Resolves with { type, result, delivered, ended } or rejects
+    // with the player-facing message. Online actions are serialised per tab.
+    function dispatch(action, { persist = true, coalesce = 0 } = {}) {
+      if (mode !== 'online') {
+        try { return Promise.resolve(applyLocally(action, persist)); }
+        catch (error) { return Promise.reject(error); }
+      }
+      if (!transport) return Promise.reject(new Error('Online transport is not configured.'));
+      if (coalesce > 0) {
+        const key = coalesceKey(action);
+        const pending = coalesced.get(key);
+        if (pending) { clearTimeout(pending.timer); pending.action = action; }
+        const entry = pending || { action, timer: null, promise: null, resolve: null, reject: null };
+        if (!pending) entry.promise = new Promise((resolve, reject) => { entry.resolve = resolve; entry.reject = reject; });
+        entry.timer = setTimeout(() => {
+          coalesced.delete(key);
+          queue = queue.then(() => sendOnline(entry.action)).then(entry.resolve, entry.reject);
+        }, coalesce);
+        coalesced.set(key, entry);
+        return entry.promise;
+      }
+      const run = queue.then(() => sendOnline(action));
+      queue = run.catch(() => {});
+      return run;
+    }
+
+    // Billable study ticks: per frame in solo play (identical totals to the
+    // original loop); batched every few seconds online.
+    function recordStudy(ms) {
+      if (!(ms > 0)) return;
+      if (mode !== 'online') {
+        applyAction(state, { type: 'study_tick', ms }, { now: now() });
+        studyUnsavedMs += ms;
+        if (studyUnsavedMs >= STUDY_FLUSH_MS) { studyUnsavedMs = 0; save(); }
+        return;
+      }
+      studyUnflushedMs += ms;
+      if (now() - studyLastFlushAt >= STUDY_FLUSH_MS) flushStudy();
+    }
+
+    function displayedBillableMs() {
+      return (state.billableStudyMs || 0) + (mode === 'online' ? studyUnflushedMs : 0);
+    }
+
+    function flushStudy({ beacon = false } = {}) {
+      if (mode !== 'online' || studyUnflushedMs <= 0 || !transport) return false;
+      const ms = Math.round(studyUnflushedMs);
+      studyUnflushedMs = 0;
+      studyLastFlushAt = now();
+      const envelope = { clientId, seq: ++seq, action: { type: 'study_tick', ms } };
+      if (beacon && transport.beacon) return transport.beacon(envelope);
+      queue = queue.then(() => transport.act(envelope).then(adoptServerState)).catch(() => { studyUnflushedMs += ms; });
+      return true;
+    }
+
+    // Online only: adopt the account document after a reload or resync.
+    function adoptAccountState(response) {
+      adoptServerState(response);
+    }
+    Object.assign(exports, { configureProgress, isOnline, progressClientId, dispatch, recordStudy, displayedBillableMs, flushStudy, adoptAccountState });
+  },
+  "js/actions.js": (exports, require) => {
+    // Action dispatcher shared by solo play and the online account service.
+    //
+    // `applyAction(player, action, ctx)` applies one semantic action to a character
+    // with server-supplied time. Partner replies that have come due are settled
+    // first, and a failed action leaves the character exactly as it was.
+
+    const { settleReplies, saveDraft, commitWriting, submitReview, buyCosmetic, equipCosmetic, requestJurisdiction } = require("js/apprenticeship.js");
+    const { saveCanadaDraft, commitCanadaEmail } = require("js/canada.js");
+    const { orderBarDrink } = require("js/lounge.js");
+    const { saveSidebarDraft } = require("js/data/sidebar.js");
+    const { answerScenario, buyHint, buyTip, buyUpgrade, docReviewStart, docReviewCycle, docReviewStop, rest, drinkCoffee, drinkEspresso, eat, takeMoneybags, drinkWhiskey, sendHrEmail, studyTick, resetSeen, arcadeInsertCoin, arcadeStartRound, adoptPet, setPracticePack, setZone, setAppearance, createCharacter, } = require("js/economy.js");
+
+    const HANDLERS = {
+      answer_scenario: (p, a) => answerScenario(p, a.scenarioId, a.choiceIndex),
+      buy_hint: (p, a) => buyHint(p, a.scenarioId),
+      buy_tip: (p, _a, ctx) => buyTip(p, ctx),
+      buy_upgrade: (p, a) => buyUpgrade(p, a.id),
+      doc_review_start: (p, _a, ctx) => docReviewStart(p, ctx),
+      doc_review_cycle: (p, _a, ctx) => docReviewCycle(p, ctx),
+      doc_review_stop: (p) => docReviewStop(p),
+      rest: (p, _a, ctx) => rest(p, ctx),
+      coffee: (p) => drinkCoffee(p),
+      espresso: (p, _a, ctx) => drinkEspresso(p, ctx),
+      eat: (p, a) => eat(p, a.item),
+      arcade_play: (p) => arcadeInsertCoin(p),
+      arcade_round: (p) => arcadeStartRound(p),
+      adopt_pet: (p, a) => adoptPet(p, a),
+      take_moneybags: (p) => takeMoneybags(p),
+      drink_whiskey: (p, _a, ctx) => drinkWhiskey(p, ctx),
+      bar_drink: (p, a, ctx) => {
+        const { drink, slowUntil } = orderBarDrink(p, a.id, ctx.now);
+        return { id: drink.id, name: drink.name, cost: drink.cost, slows: drink.slows, slowUntil };
+      },
+      hr_email: (p, a) => sendHrEmail(p, a.category),
+      study_tick: (p, a, ctx) => studyTick(p, a.ms, ctx),
+      reset_seen: (p) => resetSeen(p),
+      set_practice_pack: (p, a) => setPracticePack(p, a.id),
+      set_zone: (p, a, ctx) => setZone(p, a.zone, ctx),
+      set_appearance: (p, a) => setAppearance(p, a.key, a.value),
+      set_sidebar_draft: (p, a) => saveSidebarDraft(p, a.topicId, a.text),
+      apprenticeship_introduced: (p) => { p.apprenticeship.introduced = true; return { introduced: true }; },
+      apprenticeship_save_draft: (p, a) => ({ saved: saveDraft(p, a.taskId, a.draft || {}) }),
+      apprenticeship_review_draft: (p, a) => {
+        p.apprenticeship.reviewDrafts[String(a.packId)] = {
+          selected: Array.isArray(a.selected) ? a.selected.map(String).slice(0, 200) : [],
+          notes: String(a.notes ?? '').slice(0, 6000),
+        };
+        return { saved: true };
+      },
+      apprenticeship_commit: (p, a, ctx) => commitWriting(p, a.taskId, ctx.now),
+      apprenticeship_submit_review: (p, a, ctx) => submitReview(p, a.packId, Array.isArray(a.selected) ? a.selected : [], a.notes, ctx.now),
+      apprenticeship_buy_cosmetic: (p, a) => buyCosmetic(p, a.id),
+      apprenticeship_equip: (p, a) => equipCosmetic(p, a.id, !!a.worn),
+      apprenticeship_request_jurisdiction: (p, a) => requestJurisdiction(p, a.label, a.topic, a.help),
+      canada_draft: (p, a) => { saveCanadaDraft(p, a.id, a.text); return { saved: true }; },
+      canada_commit_email: (p, a, ctx) => commitCanadaEmail(p, a.id, ctx.now),
+      settle: () => ({}),
+      create_character: (p, a, ctx) => createCharacter(p, a, ctx),
+    };
+
+    const ACTION_TYPES = Object.keys(HANDLERS);
+
+    // Frequent or draft-only actions skip the settle pass and the rollback snapshot.
+    const LIGHT = new Set(['study_tick', 'settle', 'set_zone', 'set_sidebar_draft', 'apprenticeship_save_draft', 'apprenticeship_review_draft', 'canada_draft']);
+
+    function isAction(type) { return Object.hasOwn(HANDLERS, type); }
+
+    function applyAction(player, action, ctx) {
+      const type = action?.type;
+      const handler = HANDLERS[type];
+      if (!handler) throw new Error(`Unknown action: ${type}`);
+      if (!ctx || !Number.isFinite(ctx.now)) throw new Error('Action context requires a clock.');
+      const context = { rng: Math.random, ...ctx };
+      const light = LIGHT.has(type);
+      const delivered = type === 'create_character' || (light && type !== 'settle') ? [] : settleReplies(player, context.now);
+      const snapshot = light ? null : JSON.stringify(player);
+      const wasActive = player.runStatus !== 'ended';
+      try {
+        const result = handler(player, action, context) ?? {};
+        const ended = wasActive && player.runStatus === 'ended';
+        if (ended) player.endedAt = context.now;
+        return { type, result, delivered, ended };
+      } catch (error) {
+        if (snapshot) {
+          const restored = JSON.parse(snapshot);
+          for (const key of Object.keys(player)) if (!(key in restored)) delete player[key];
+          Object.assign(player, restored);
+        }
+        throw error;
+      }
+    }
+    Object.assign(exports, { ACTION_TYPES, isAction, applyAction });
+  },
+  "js/lounge.js": (exports, require) => {
+    const { WHISKEY_SLOW_MS } = require("js/data/work.js");
+
+    const BAR_DRINKS = [
+      { id: 'old-fashioned', name: 'The Reasonable Old Fashioned', cost: 5, note: 'Orange peel, a polished glass, and no pending deadlines.', slows: true },
+      { id: 'wine', name: 'House Red · Reserved Judgment', cost: 5, note: 'Served in stemware by a very precise robot.', slows: true },
+      { id: 'ale', name: 'After-Hours Ale', cost: 3, note: 'The office is closed. Your walking pace takes a short break.', slows: true },
+      { id: 'water', name: 'Sparkling water', cost: 0, note: 'Complimentary. No movement or Ethics effect.', slows: false },
+    ];
+
+    function orderBarDrink(player, id, now) {
+      const drink = BAR_DRINKS.find((item) => item.id === id);
+      if (!drink || player.zone !== 'sidebar' || player.runStatus === 'ended' || player.ethics <= 0) throw new Error('Drinks are served in The Sidebar during an active run.');
+      if (player.apprenticeship.attempts.some((a) => a.status === 'pending')) throw new Error('Wait for your partner reply before making purchases.');
+      if (player.gold < drink.cost) throw new Error(`You need ${drink.cost} gold for that drink.`);
+      player.gold -= drink.cost;
+      player.sidebarDrinks = (player.sidebarDrinks || 0) + 1;
+      // Each alcoholic drink refreshes the short effect; it never damages Ethics.
+      if (drink.slows) player.slowUntil = Math.max(player.slowUntil || 0, now + WHISKEY_SLOW_MS);
+      return { drink, ethicsDamage: 0, slowUntil: player.slowUntil || 0 };
+    }
+
+    function movementMultiplier(player, now) { return player.slowUntil > now ? 0.5 : 1; }
+
+    const BOARD_KEY = 'lawscape_billable_board_v1';
+    let sessionBoard = [];
+    let unsavedEntries = [];
+    function validEntry(entry) {
+      return entry && typeof entry.runId === 'string' && typeof entry.name === 'string'
+        && Number.isFinite(entry.billableMs) && entry.billableMs >= 0 && Number.isFinite(entry.endedAt);
+    }
+    function readBillableBoard() {
+      try {
+        const saved = localStorage.getItem(BOARD_KEY);
+        const raw = saved === null ? sessionBoard : JSON.parse(saved);
+        if (Array.isArray(raw)) sessionBoard = raw.filter(validEntry);
+      } catch { /* retain the session copy if storage is unavailable */ }
+      const unique = new Map([...sessionBoard,...unsavedEntries].map((entry) => [entry.runId,entry]));
+      return [...unique.values()].sort((a,b) => b.billableMs-a.billableMs || a.endedAt-b.endedAt).slice(0,10);
+    }
+    function archiveDisbarredRun(player, now) {
+      if (player.ethics > 0 && player.runStatus !== 'ended') return { recorded: false, persisted: false };
+      const entries = readBillableBoard();
+      if (entries.some((entry) => entry.runId === player.runId)) return { recorded: false, duplicate: true };
+      if (!player.runId || !Number.isFinite(player.billableStudyMs) || player.billableStudyMs < 0) return { recorded: false, persisted: false };
+      sessionBoard = [...entries, { runId: player.runId, name: String(player.name).slice(0,80), billableMs: Math.floor(player.billableStudyMs), endedAt: now }]
+        .sort((a,b) => b.billableMs-a.billableMs || a.endedAt-b.endedAt).slice(0,10);
+      try { localStorage.setItem(BOARD_KEY,JSON.stringify(sessionBoard)); unsavedEntries=[]; return { recorded: true, persisted: true }; }
+      catch { unsavedEntries=[...sessionBoard]; return { recorded: true, persisted: false }; }
+    }
+    Object.assign(exports, { BAR_DRINKS, orderBarDrink, movementMultiplier, readBillableBoard, archiveDisbarredRun });
+  },
+  "js/data/work.js": (exports, require) => {
+    // Shared economy values for the office's repeatable work and NPC interactions.
+    // Keeping them in a small data module makes the launch promises testable.
+
+    const DOC_REVIEW_CYCLE_MS = 60_000;
+    const DOC_REVIEW_REWARD = 5;
+    const COFFEE_ETHICS_RESTORE = 2;
+    const APARTMENT_FOOD_COST = 5;
+    const RAMEN_ETHICS_RESTORE = 5;
+    const COOKED_MEAL_ETHICS_RESTORE = 30;
+    const LINDA_TIP_COST = 5;
+    const RILEY_HINT_COST = 100;
+    const WHISKEY_ETHICS_DAMAGE = 2;
+    const WHISKEY_SLOW_MS = 40_000;
+    const MONEYBAGS_SAFE_GOLD = 6_000;
+    const MONEYBAGS_ETHICS_DAMAGE = 99;
+    const MONEYBAGS_GRACE_PURCHASES = 2;
+    const ARCADE_PLAY_COST = 5;
+    const ARCADE_ROUNDS_PER_PLAY = 3;
+    const ESPRESSO_ETHICS_RESTORE = 5;
+    const ESPRESSO_COOLDOWN_MS = 90_000;
+    const DRUNK_AT_WORK_ETHICS_DAMAGE = 10;
+    // Arriving impaired at the firm or the courthouse costs Ethics; home, the
+    // street and The Sidebar never do.
+    const DRUNK_PENALTY_ZONES = ['office', 'corner_office', 'linda_office', 'conference_room', 'associates', 'courtroom'];
+    const STREAK_GOLD_STEP = 0.1;
+    const STREAK_GOLD_CAP = 1.5;
+    const LAWYER_ASSISTANCE_PHONE = '866-828-0022';
+    const LAWYER_ASSISTANCE_URL = 'https://nvbar.org/for-lawyers/resources/wellbeing/lcl/';
+
+    // Linda's paid tips. Canada test play swaps in the pack's rule briefings.
+    const ETHICS_TIPS = [
+      'Client consent to a conflict usually must be informed and confirmed in writing. A signature without an explanation of material risks is not enough.',
+      'Advance fees belong in trust until earned. Calling money “nonrefundable” does not transform unearned money into the firm’s property.',
+      'Confidentiality is broader than attorney-client privilege. Do not use the two concepts as synonyms.',
+      'With an unrepresented person whose interests may conflict with your client’s, the safest legal advice is: get your own lawyer.',
+      'Candor to the tribunal can require correcting a false statement even when correction hurts the client’s position.',
+      'A subordinate lawyer remains responsible for a clear ethics violation even when a supervisor ordered it.',
+      'Reporting misconduct requires a substantial question about honesty, trustworthiness, or fitness—not every technical rule violation.',
+      'When client and third-party claims to funds conflict, keep the disputed portion separate while promptly releasing any undisputed portion.',
+    ];
+
+    function rileyHintEligible(upgrades) {
+      return upgrades.includes('paralegal') && upgrades.includes('subscription');
+    }
+
+    // Beta rebalance: ethics violations hurt. A fresh 100-Ethics attorney is
+    // disbarred by THREE consecutive wrong answers (30 + 45 + 45), not four.
+    function wrongAnswerDamage(wrongStreak, rileyHired = false) {
+      const damage = wrongStreak >= 4 ? 60 : wrongStreak >= 2 ? 45 : 30;
+      return rileyHired ? Math.ceil(damage / 2) : damage;
+    }
+
+    // Consecutive correct answers multiply question gold: x1.0, x1.1 … capped at
+    // x1.5 from the sixth answer in a row. Rounded so 1.2 is 1.2, not 1.2000000000000002.
+    function streakMultiplier(streak) {
+      return Math.min(STREAK_GOLD_CAP, Math.round((1 + STREAK_GOLD_STEP * Math.max(0, streak - 1)) * 100) / 100);
+    }
+
+    function moneybagsAuditTriggered(purchasesAfterTheft) {
+      return purchasesAfterTheft > MONEYBAGS_GRACE_PURCHASES;
+    }
+
+    function formatBillableTime(milliseconds = 0) {
+      const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = totalSeconds % 60;
+      return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+    Object.assign(exports, { DOC_REVIEW_CYCLE_MS, DOC_REVIEW_REWARD, COFFEE_ETHICS_RESTORE, APARTMENT_FOOD_COST, RAMEN_ETHICS_RESTORE, COOKED_MEAL_ETHICS_RESTORE, LINDA_TIP_COST, RILEY_HINT_COST, WHISKEY_ETHICS_DAMAGE, WHISKEY_SLOW_MS, MONEYBAGS_SAFE_GOLD, MONEYBAGS_ETHICS_DAMAGE, MONEYBAGS_GRACE_PURCHASES, ARCADE_PLAY_COST, ARCADE_ROUNDS_PER_PLAY, ESPRESSO_ETHICS_RESTORE, ESPRESSO_COOLDOWN_MS, DRUNK_AT_WORK_ETHICS_DAMAGE, DRUNK_PENALTY_ZONES, STREAK_GOLD_STEP, STREAK_GOLD_CAP, LAWYER_ASSISTANCE_PHONE, LAWYER_ASSISTANCE_URL, ETHICS_TIPS, rileyHintEligible, wrongAnswerDamage, streakMultiplier, moneybagsAuditTriggered, formatBillableTime });
+  },
+  "js/data/sidebar.js": (exports, require) => {
+    // Room/topic IDs are stable attachment points for the room service. Live
+    // presence comes from js/online/*; table chat is not part of the pilot, so no
+    // chat transport or agent execution exists here.
+    const SIDEBAR_ROOM = { id: 'sidebar', title: 'The Sidebar', mode: 'local-preview', participantLimit: 10 };
+    const SIDEBAR_TOPICS = [
+      { id: 'commons', label: 'The commons', prompt: 'Meet the other attorneys and introduce the work you enjoy practicing.' },
+      { id: 'evidence', label: 'Evidence table', prompt: 'Compare how you checked a synthetic file. Mark spoilers and cite the exercise passage.' },
+      { id: 'writing', label: 'Writing table', prompt: 'Trade ideas for a clearer partner update and more useful next steps.' },
+      { id: 'agents', label: 'AI & agents table', prompt: 'Discuss checking AI work. In the future pilot, approved AI agents will be clearly labeled and controlled by their owners.' },
+    ];
+
+    function sidebarTopic(id) { return SIDEBAR_TOPICS.find((topic) => topic.id === id) || SIDEBAR_TOPICS[0]; }
+    function saveSidebarDraft(player, topicId, text) {
+      const topic = sidebarTopic(topicId);
+      player.sidebar.topic = topic.id;
+      player.sidebar.drafts[topic.id] = String(text).slice(0, 500);
+      return { status: 'local-draft', topic: topic.id, text: player.sidebar.drafts[topic.id] };
+    }
+    Object.assign(exports, { SIDEBAR_ROOM, SIDEBAR_TOPICS, sidebarTopic, saveSidebarDraft });
+  },
+  "js/economy.js": (exports, require) => {
+    // Progress rules shared by solo play and the online account service.
+    //
+    // Every function takes the player (character) object, mutates it, throws an
+    // Error with the player-facing message when the action is not allowed, and
+    // returns a JSON-safe result the interface renders from. Nothing here reads a
+    // clock, the DOM, storage or the state singleton: time arrives in `ctx.now`
+    // and randomness in `ctx.rng`, so the same code can run inside a server.
+
+    const { freshState, playerHasUpgrade, playerMaxEthics, healPlayer, damagePlayer } = require("js/state.js");
+    const { normalizeAppearance } = require("js/data/appearance.js");
+    const { ALL_MAIL_SCENARIOS, practiceInbox } = require("js/data/mail.js");
+    const { STREAK_HEAL } = require("js/data/ethics.js");
+    const { bonuses, findUpgrade } = require("js/data/upgrades.js");
+    const { PRACTICE_PACKS, packIdForSourceType } = require("js/data/practice-packs.js");
+    const { CANADA_PACK } = require("js/data/canada.js");
+    const { COSMETICS } = require("js/data/apprenticeship.js");
+    const { pendingAttempt, grantUnlocks } = require("js/apprenticeship.js");
+    const { findHrCategory } = require("js/data/feedback.js");
+    const { PET_COST, petKind, sanitizePetName } = require("js/data/pets.js");
+    const { ZONES } = require("js/world/zones.js");
+    const { COFFEE_ETHICS_RESTORE, APARTMENT_FOOD_COST, RAMEN_ETHICS_RESTORE, COOKED_MEAL_ETHICS_RESTORE, DOC_REVIEW_CYCLE_MS, DOC_REVIEW_REWARD, LINDA_TIP_COST, RILEY_HINT_COST, WHISKEY_ETHICS_DAMAGE, WHISKEY_SLOW_MS, MONEYBAGS_SAFE_GOLD, MONEYBAGS_ETHICS_DAMAGE, MONEYBAGS_GRACE_PURCHASES, ETHICS_TIPS, ARCADE_PLAY_COST, ARCADE_ROUNDS_PER_PLAY, ESPRESSO_ETHICS_RESTORE, ESPRESSO_COOLDOWN_MS, DRUNK_AT_WORK_ETHICS_DAMAGE, DRUNK_PENALTY_ZONES, moneybagsAuditTriggered, rileyHintEligible, wrongAnswerDamage, streakMultiplier, } = require("js/data/work.js");
+
+    const GENDERS = ['male', 'female', 'nonbinary'];
+    const STUDY_TICK_MAX_MS = 10_000;
+    const APARTMENT_FOOD = {
+      ramen: { name: 'Ramen Noodles', restore: RAMEN_ETHICS_RESTORE, requires: null, replacedBy: 'kitchen' },
+      meal: { name: 'Home-Cooked Meal', restore: COOKED_MEAL_ETHICS_RESTORE, requires: 'kitchen', replacedBy: null },
+    };
+    const PURCHASE_WAIT = 'Wait for the partner reply before making purchases.';
+
+    function activeRun(player) {
+      if (player.runStatus === 'ended' || player.ethics <= 0) throw new Error('This character run has ended.');
+    }
+
+    function eligibleScenario(player, scenarioId) {
+      const scenario = practiceInbox(player, ALL_MAIL_SCENARIOS).unread.find((item) => item.id === scenarioId);
+      if (!scenario) throw new Error('That message is not open in your practice inbox.');
+      return scenario;
+    }
+
+    // BarMail ethics scenario. Every pack (Canada included) applies the full
+    // economy: gold scaled by upgrades and the correct-answer streak, Ethics
+    // damage for wrong answers, and per-pack correct counts for wardrobe unlocks.
+    function answerScenario(player, scenarioId, choiceIndex) {
+      activeRun(player);
+      const scenario = eligibleScenario(player, scenarioId);
+      const choice = scenario.choices[choiceIndex];
+      if (!Number.isInteger(choiceIndex) || !choice) throw new Error('Choose one of the listed replies.');
+      if (pendingAttempt(player)) throw new Error('Wait for the pending partner reply before submitting another answer.');
+      const b = bonuses(player.upgrades);
+      player.casesDone++;
+      player.hintScenarioId = null;
+      let earned = 0, healed = 0, dmg = 0, disbarred = false, multiplier = 1, unlocked = [];
+      if (choice.grade === 'correct') {
+        player.streak++;
+        multiplier = streakMultiplier(player.streak);
+        earned = Math.round(scenario.gold * b.goldMult * multiplier + b.goldFlat);
+        player.gold += earned;
+        player.wrongStreak = 0;
+        player.correctDone++;
+        const packId = packIdForSourceType(scenario.sourceType);
+        if (packId) {
+          if (!player.packCorrect || typeof player.packCorrect !== 'object') player.packCorrect = {};
+          player.packCorrect[packId] = (player.packCorrect[packId] || 0) + 1;
+        }
+        if (player.streak >= 2) {
+          const before = player.ethics;
+          healPlayer(player, STREAK_HEAL + b.streakHealBonus);
+          healed = player.ethics - before;
+        }
+        unlocked = grantUnlocks(player);
+      } else {
+        player.wrongStreak++;
+        dmg = wrongAnswerDamage(player.wrongStreak, playerHasUpgrade(player, 'paralegal'));
+        player.streak = 0;
+        disbarred = damagePlayer(player, dmg);
+      }
+      if (!player.seen.includes(scenario.id)) player.seen.push(scenario.id);
+      return {
+        scenarioId, choiceIndex, grade: choice.grade, correct: choice.grade === 'correct',
+        earned, healed, dmg, disbarred, multiplier, unlocked, streak: player.streak, wrongStreak: player.wrongStreak,
+        rileyHalved: dmg > 0 && playerHasUpgrade(player, 'paralegal'),
+      };
+    }
+
+    function buyHint(player, scenarioId) {
+      activeRun(player);
+      if (pendingAttempt(player)) throw new Error(PURCHASE_WAIT);
+      const scenario = eligibleScenario(player, scenarioId);
+      if (player.hintScenarioId === scenarioId) throw new Error('Riley has already researched this rule.');
+      if (!rileyHintEligible(player.upgrades)) throw new Error('Riley needs both the Paralegal Upgrade and Ethics Treatise Shelf.');
+      if (player.gold < RILEY_HINT_COST) throw new Error(`You need ${RILEY_HINT_COST} gold for an ethics hint.`);
+      player.gold -= RILEY_HINT_COST;
+      player.hintsPurchased++;
+      player.hintScenarioId = scenarioId;
+      return { scenarioId, rule: scenario.rule, cost: RILEY_HINT_COST };
+    }
+
+    // Linda's tips follow the practice pack: Canada players get the pack's rule
+    // briefings, everyone else the US-source tips.
+    function tipPool(player) {
+      return player.practicePack === 'canada'
+        ? CANADA_PACK.rules.map((rule) => `${rule.title}: ${rule.summary} ${rule.limits}`)
+        : ETHICS_TIPS;
+    }
+
+    function buyTip(player, ctx) {
+      activeRun(player);
+      if (player.moneybagsStolen) throw new Error('Linda is not taking questions while the client gold is missing.');
+      if (!playerHasUpgrade(player, 'paralegal')) throw new Error('Hire Riley Readsalot before asking Linda for tips.');
+      if (pendingAttempt(player)) throw new Error(PURCHASE_WAIT);
+      if (player.gold < LINDA_TIP_COST) throw new Error(`Come back with ${LINDA_TIP_COST} gold if you want an ethics tip.`);
+      player.gold -= LINDA_TIP_COST;
+      player.tipsPurchased++;
+      const tips = tipPool(player);
+      const tipIndex = Math.min(tips.length - 1, Math.floor(ctx.rng() * tips.length));
+      return { tipIndex, source: player.practicePack === 'canada' ? 'canada' : 'us', cost: LINDA_TIP_COST };
+    }
+
+    function buyUpgrade(player, id) {
+      activeRun(player);
+      const u = findUpgrade(id);
+      if (!u) throw new Error('Unknown upgrade.');
+      if (playerHasUpgrade(player, u.id)) throw new Error(`You already own ${u.name}.`);
+      if (pendingAttempt(player)) throw new Error(PURCHASE_WAIT);
+      if (player.gold < u.cost) throw new Error(`You need ${u.cost} gold for ${u.name}.`);
+      const previousMax = playerMaxEthics(player);
+      player.gold -= u.cost;
+      player.upgrades.push(u.id);
+      const addedEthicsCapacity = playerMaxEthics(player) - previousMax;
+      if (addedEthicsCapacity > 0) healPlayer(player, addedEthicsCapacity);
+      let audit = false;
+      if (player.moneybagsStolen) {
+        player.moneybagsPurchases = (player.moneybagsPurchases || 0) + 1;
+        if (moneybagsAuditTriggered(player.moneybagsPurchases)) {
+          player.ethics = 0;
+          player.runStatus = 'ended';
+          audit = true;
+        }
+      }
+      return {
+        id: u.id, name: u.name, cost: u.cost, audit,
+        moneybagsPurchases: player.moneybagsStolen ? player.moneybagsPurchases : 0,
+        escaped: player.moneybagsStolen ? Math.min(player.moneybagsPurchases, MONEYBAGS_GRACE_PURCHASES) : 0,
+      };
+    }
+
+    function docReviewActive(player) { return player.docReviewStartedAt > 0; }
+
+    function docReviewStart(player, ctx) {
+      activeRun(player);
+      if (!['office', 'associates'].includes(player.zone)) throw new Error('The active files are in the main office.');
+      if (docReviewActive(player)) return { startedAt: player.docReviewStartedAt, resumed: true };
+      player.docReviewStartedAt = ctx.now;
+      player.lastDocReviewAt = 0;
+      return { startedAt: ctx.now, resumed: false };
+    }
+
+    // Pays every completed one-minute cycle since the last payment, keeping the
+    // original cadence so a late call never shortens the next cycle.
+    function docReviewCycle(player, ctx) {
+      activeRun(player);
+      if (!docReviewActive(player)) throw new Error('Document review is not active.');
+      const anchor = player.lastDocReviewAt || player.docReviewStartedAt;
+      const cycles = Math.max(0, Math.floor((ctx.now - anchor) / DOC_REVIEW_CYCLE_MS));
+      const earned = cycles * DOC_REVIEW_REWARD;
+      if (cycles > 0) {
+        player.gold += earned;
+        player.documentsReviewed += cycles;
+        player.lastDocReviewAt = anchor + cycles * DOC_REVIEW_CYCLE_MS;
+      }
+      const nextAt = (player.lastDocReviewAt || player.docReviewStartedAt) + DOC_REVIEW_CYCLE_MS;
+      return { cycles, earned, nextAt, documentsReviewed: player.documentsReviewed };
+    }
+
+    function docReviewStop(player) {
+      const wasActive = docReviewActive(player);
+      player.docReviewStartedAt = 0;
+      player.lastDocReviewAt = 0;
+      return { wasActive };
+    }
+
+    function rest(player, ctx) {
+      activeRun(player);
+      if (player.zone !== 'apartment') throw new Error('Rest in your apartment bed.');
+      const b = bonuses(player.upgrades);
+      const since = ctx.now - player.lastRestAt;
+      if (since < b.restCooldownMs) {
+        const wait = Math.ceil((b.restCooldownMs - since) / 1000);
+        throw new Error(`You're not tired yet. Rest again in ${wait}s.`);
+      }
+      if (player.ethics >= playerMaxEthics(player)) throw new Error('Your conscience is already spotless. (Ethics is full.)');
+      player.lastRestAt = ctx.now;
+      const before = player.ethics;
+      healPlayer(player, b.restHeal);
+      return { healed: player.ethics - before };
+    }
+
+    // Office espresso: a small heal on a cooldown that also ends any drink-induced
+    // slowdown, so an impaired attorney can sober up before facing a partner.
+    function drinkEspresso(player, ctx) {
+      activeRun(player);
+      if (player.zone !== 'office') throw new Error('The espresso machine is in the main office.');
+      if (!playerHasUpgrade(player, 'espresso')) throw new Error('There is no espresso machine yet. Buy it from the Office Upgrades catalog.');
+      const since = player.lastEspressoAt ? ctx.now - player.lastEspressoAt : Infinity;
+      if (since < ESPRESSO_COOLDOWN_MS) throw new Error(`The machine is still heating up. Try again in ${Math.ceil((ESPRESSO_COOLDOWN_MS - since) / 1000)}s.`);
+      const sobered = (player.slowUntil || 0) > ctx.now;
+      if (!sobered && player.ethics >= playerMaxEthics(player)) throw new Error('Your Ethics is already full. Save the espresso for a harder day.');
+      player.lastEspressoAt = ctx.now;
+      if (sobered) player.slowUntil = ctx.now;
+      const before = player.ethics;
+      healPlayer(player, ESPRESSO_ETHICS_RESTORE);
+      return { healed: player.ethics - before, sobered };
+    }
+
+    // Briefcase Dash credits are server-owned: five gold buys three rounds, and
+    // each round is consumed when a run starts.
+    function arcadeInsertCoin(player) {
+      activeRun(player);
+      if (player.zone !== 'sidebar') throw new Error('The Briefcase Dash cabinet is in The Sidebar.');
+      if (pendingAttempt(player)) throw new Error(PURCHASE_WAIT);
+      if ((player.arcadeCredits || 0) > 0) throw new Error('You still have credits in the machine.');
+      if (player.gold < ARCADE_PLAY_COST) throw new Error(`You need ${ARCADE_PLAY_COST} gold for ${ARCADE_ROUNDS_PER_PLAY} rounds of Briefcase Dash.`);
+      player.gold -= ARCADE_PLAY_COST;
+      player.arcadeCredits = (player.arcadeCredits || 0) + ARCADE_ROUNDS_PER_PLAY;
+      return { cost: ARCADE_PLAY_COST, credits: player.arcadeCredits };
+    }
+
+    function arcadeStartRound(player) {
+      activeRun(player);
+      if (player.zone !== 'sidebar') throw new Error('The Briefcase Dash cabinet is in The Sidebar.');
+      if ((player.arcadeCredits || 0) <= 0) throw new Error(`Insert ${ARCADE_PLAY_COST} gold for ${ARCADE_ROUNDS_PER_PLAY} rounds.`);
+      player.arcadeCredits -= 1;
+      return { credits: player.arcadeCredits };
+    }
+
+    // One pet per character, chosen and named from the apartment's furniture catalog.
+    function adoptPet(player, { kind, name } = {}) {
+      activeRun(player);
+      if (player.zone !== 'apartment') throw new Error('Adoptions are arranged from your apartment.');
+      if (player.pet) throw new Error(`${player.pet.name} is already waiting for you at home.`);
+      if (!petKind(kind)) throw new Error('Choose a cat or a dog.');
+      if (pendingAttempt(player)) throw new Error(PURCHASE_WAIT);
+      if (player.gold < PET_COST) throw new Error(`You need ${PET_COST} gold to adopt a ${kind}.`);
+      player.gold -= PET_COST;
+      player.pet = { kind, name: sanitizePetName(name), adoptedAt: 0 };
+      return { ...player.pet, cost: PET_COST };
+    }
+
+    function drinkCoffee(player) {
+      activeRun(player);
+      if (player.zone !== 'apartment') throw new Error('The coffee machine is in your apartment.');
+      if (!playerHasUpgrade(player, 'coffee')) throw new Error('The counter is empty. Buy the Coffee Machine from the furniture catalog first.');
+      if (player.ethics >= playerMaxEthics(player)) throw new Error('Your Ethics is already full. Save the coffee for a harder day.');
+      const before = player.ethics;
+      healPlayer(player, COFFEE_ETHICS_RESTORE);
+      return { healed: player.ethics - before };
+    }
+
+    function eat(player, item) {
+      activeRun(player);
+      const food = APARTMENT_FOOD[item];
+      if (!food) throw new Error('Unknown meal.');
+      if (player.zone !== 'apartment') throw new Error('Meals are served in your apartment.');
+      if (food.requires && !playerHasUpgrade(player, food.requires)) throw new Error('Buy the Kitchen Upgrade to cook a meal.');
+      if (food.replacedBy && playerHasUpgrade(player, food.replacedBy)) throw new Error('The kitchen replaced the instant noodles. Cook a meal instead.');
+      if (pendingAttempt(player)) throw new Error(PURCHASE_WAIT);
+      if (player.ethics >= playerMaxEthics(player)) throw new Error('Your Ethics is already full. Save the food for a harder day.');
+      if (player.gold < APARTMENT_FOOD_COST) throw new Error(`You need ${APARTMENT_FOOD_COST} gold for ${food.name.toLowerCase()}.`);
+      player.gold -= APARTMENT_FOOD_COST;
+      const before = player.ethics;
+      healPlayer(player, food.restore);
+      return { item, name: food.name, cost: APARTMENT_FOOD_COST, healed: player.ethics - before };
+    }
+
+    function takeMoneybags(player) {
+      activeRun(player);
+      if (player.zone !== 'corner_office') throw new Error('The safe is in Jim Hardsell’s corner office.');
+      if (pendingAttempt(player)) throw new Error('Your partner has a pending reply. Even Jim can wait five seconds.');
+      if (player.moneybagsStolen) throw new Error('The safe is empty.');
+      player.moneybagsStolen = true;
+      player.moneybagsPurchases = 0;
+      player.gold += MONEYBAGS_SAFE_GOLD;
+      const disbarred = damagePlayer(player, MONEYBAGS_ETHICS_DAMAGE);
+      return { disbarred, gold: MONEYBAGS_SAFE_GOLD, damage: MONEYBAGS_ETHICS_DAMAGE };
+    }
+
+    function drinkWhiskey(player, ctx) {
+      activeRun(player);
+      if (player.zone !== 'corner_office') throw new Error('The bar cart is in Jim Hardsell’s corner office.');
+      if (player.whiskeyDrinks > 0) throw new Error('A second drink at work is a warning sign.');
+      player.whiskeyDrinks++;
+      const disbarred = damagePlayer(player, WHISKEY_ETHICS_DAMAGE);
+      if (!disbarred) player.slowUntil = Math.max(player.slowUntil || 0, ctx.now + WHISKEY_SLOW_MS);
+      return { disbarred, damage: WHISKEY_ETHICS_DAMAGE, slowUntil: player.slowUntil };
+    }
+
+    function sendHrEmail(player, categoryId) {
+      const category = findHrCategory(categoryId);
+      player.hrEmailsSent = (player.hrEmailsSent || 0) + 1;
+      return { categoryId: category.id, ticket: String(player.hrEmailsSent).padStart(4, '0') };
+    }
+
+    // Billable study time. The credit is bounded by the real time since the last
+    // tick so a client cannot report more study than has elapsed.
+    function studyTick(player, ms, ctx) {
+      if (player.runStatus === 'ended' || player.ethics <= 0) return { credited: 0 };
+      if (!Number.isFinite(ms) || ms < 0) throw new Error('Invalid study tick.');
+      const sinceLast = player.lastStudyTickAt ? Math.max(0, ctx.now - player.lastStudyTickAt) * 1.1 + 250 : ms;
+      const credited = Math.min(ms, STUDY_TICK_MAX_MS, sinceLast);
+      player.billableStudyMs = (player.billableStudyMs || 0) + credited;
+      player.lastStudyTickAt = ctx.now;
+      return { credited };
+    }
+
+    // "Start another study round": forget this tier's answered mail.
+    function resetSeen(player) {
+      activeRun(player);
+      const ids = new Set(practiceInbox(player, ALL_MAIL_SCENARIOS).eligible.map((item) => item.id));
+      player.seen = player.seen.filter((id) => !ids.has(id));
+      return { pack: player.practicePack, cleared: ids.size };
+    }
+
+    function setPracticePack(player, id) {
+      const wanted = id === 'canada-test' ? 'canada' : id; // pre-0.8.0 pack id
+      player.practicePack = PRACTICE_PACKS.some((pack) => pack.id === wanted) ? wanted : 'mixed';
+      return { id: player.practicePack };
+    }
+
+    // Changing rooms. Arriving at the firm or the courthouse while a drink is
+    // still slowing you costs Ethics once per drinking episode; home, the street
+    // and The Sidebar never charge.
+    function setZone(player, zone, ctx) {
+      if (!ZONES[zone]) throw new Error('Unknown location.');
+      player.zone = zone;
+      let ethicsLost = 0, disbarred = false;
+      const now = ctx?.now ?? 0;
+      const impaired = player.runStatus !== 'ended' && player.ethics > 0 && (player.slowUntil || 0) > now;
+      if (impaired && DRUNK_PENALTY_ZONES.includes(zone) && player.drunkPenaltyFor !== player.slowUntil) {
+        player.drunkPenaltyFor = player.slowUntil;
+        ethicsLost = DRUNK_AT_WORK_ETHICS_DAMAGE;
+        disbarred = damagePlayer(player, ethicsLost);
+      }
+      return { zone, ethicsLost, disbarred };
+    }
+
+    function setAppearance(player, key, value) {
+      const keys = Object.keys(normalizeAppearance());
+      if (!keys.includes(key)) throw new Error('Unknown appearance option.');
+      Object.assign(player, normalizeAppearance({ ...player, [key]: value }));
+      if (key === 'tieColor') {
+        // Picking a tie color puts away any wardrobe tie; it stays owned.
+        const ties = new Set(COSMETICS.filter((item) => item.look?.tie).map((item) => item.id));
+        player.apprenticeship.equipped = player.apprenticeship.equipped.filter((id) => !ties.has(id));
+      }
+      return { key, value: player[key] };
+    }
+
+    // A brand-new character on this save or account. Nothing from a previous run
+    // is retained except what the caller passes in.
+    function createCharacter(player, { name, gender, appearance } = {}, ctx) {
+      const fresh = freshState();
+      if (ctx?.uuid) fresh.runId = ctx.uuid();
+      for (const key of Object.keys(player)) delete player[key];
+      Object.assign(player, fresh);
+      player.name = String(name ?? '').trim().slice(0, 80) || 'Alex Barrister';
+      player.gender = GENDERS.includes(gender) ? gender : 'nonbinary';
+      Object.assign(player, normalizeAppearance(appearance || {}));
+      return { runId: player.runId, name: player.name };
+    }
+    Object.assign(exports, { GENDERS, STUDY_TICK_MAX_MS, APARTMENT_FOOD, answerScenario, buyHint, tipPool, buyTip, buyUpgrade, docReviewActive, docReviewStart, docReviewCycle, docReviewStop, rest, drinkEspresso, arcadeInsertCoin, arcadeStartRound, adoptPet, drinkCoffee, eat, takeMoneybags, drinkWhiskey, sendHrEmail, studyTick, resetSeen, setPracticePack, setZone, setAppearance, createCharacter });
+  },
+  "js/data/mail.js": (exports, require) => {
     const { SCENARIOS } = require("js/data/ethics.js");
     const { CANADA_SCENARIOS } = require("js/data/canada.js");
 
-    // Keep the desk, BarMail and question totals aligned with the actual pool.
-    const PRACTICE_PACKS = [
-      { id: 'mixed', label: 'Mixed practice', sourceType: null, note: 'All five question packs; read the jurisdiction on each email.' },
-      { id: 'ca', label: 'California', sourceType: 'california-style', note: 'Original California professional-responsibility questions.' },
-      { id: 'ny', label: 'New York', sourceType: 'new-york-style', note: '28 workplace emails and five short New York dilemmas.' },
-      { id: 'mpre', label: 'US MPRE-style', sourceType: 'mpre-style', note: 'Model-rule and exam-style study, not a state-specific pack.' },
-      { id: 'sqe', label: 'England & Wales SQE-style', sourceType: 'sqe-style', note: 'Original ethics questions for England and Wales.' },
-      { id: 'juris', label: 'LawScape original dilemmas', sourceType: 'lawscape', note: 'Fictional office dilemmas with their original mixed Arizona/Nevada rule labels.' },
-      { id: 'canada-test', label: 'Canada · TEST PACK', sourceType: 'canada-test', isTestPack: true, note: '25 questions + 5 emails · Ontario, BC and Saskatchewan · Practitioner review required. No Ethics or gold effects; separate from mixed practice.' },
-    ].map(pack => ({ ...pack, count: pack.isTestPack ? CANADA_SCENARIOS.length : SCENARIOS.filter(s => !pack.sourceType || s.sourceType === pack.sourceType).length }));
+    // Every scenario BarMail can serve, across all practice packs.
+    const ALL_MAIL_SCENARIOS = [...SCENARIOS, ...CANADA_SCENARIOS];
 
-    const practicePack = id => PRACTICE_PACKS.find(pack => pack.id === id) || PRACTICE_PACKS[0];
-    Object.assign(exports, { PRACTICE_PACKS, practicePack });
+    // BarMail runs on the office computer, the Work Phone anywhere, or an open desk
+    // on the Associates' Floor once the player has claimed one.
+    function canAccessBarMail(player, seatedAtDesk = false) {
+      return player.zone === 'office' || player.upgrades.includes('work_phone')
+        || (player.zone === 'associates' && seatedAtDesk);
+    }
+    function scenarioMatchesPack(scenario, pack) {
+      if (pack === 'canada') return scenario.sourceType === 'canada-style';
+      if (pack === 'ca') return scenario.sourceType === 'california-style';
+      if (pack === 'ny') return scenario.sourceType === 'new-york-style';
+      if (pack === 'sqe') return scenario.sourceType === 'sqe-style';
+      if (pack === 'mpre') return scenario.sourceType === 'mpre-style';
+      if (pack === 'juris') return scenario.sourceType === 'lawscape';
+      return true;
+    }
+    function practiceInbox(player, scenarios) {
+      const difficulty = player.casesDone < 5 ? 1 : player.casesDone < 12 ? 2 : 3;
+      const pool = scenarios.filter((scenario) => scenarioMatchesPack(scenario, player.practicePack));
+      const tier = pool.filter((scenario) => scenario.difficulty === difficulty);
+      const eligible = tier.length ? tier : pool;
+      return { eligible, unread: eligible.filter((scenario) => !player.seen.includes(scenario.id)), difficulty, levelLabel: tier.length ? `Level ${difficulty}` : 'All levels' };
+    }
+    function billableMessageOpen({ inGame, visible, mailOpen, messageOpen }) {
+      return inGame && visible && mailOpen && messageOpen;
+    }
+    Object.assign(exports, { ALL_MAIL_SCENARIOS, canAccessBarMail, scenarioMatchesPack, practiceInbox, billableMessageOpen });
   },
   "js/data/feedback.js": (exports, require) => {
     // Email HR — LawScape's bug-report and feedback channel, played in character.
@@ -11080,10 +11343,16 @@
   },
   "js/world/zones.js": (exports, require) => {
     // Zone definitions: floor tiles, props, portals, NPCs, and interaction nodes.
-    // The world is an office suite, apartment, courtroom and future social lounge.
-    // Office portals lead to the partners' offices and conference room.
+    // The world is an office suite, apartment, courtroom, The Sidebar lounge and
+    // the street that joins the buildings. Office portals lead to the partners'
+    // offices and conference room; every building door opens onto the street.
     //
-    // Tile chars: 'w' wood  'r' rug  'x' void (never walkable)
+    // Tile chars: 'w' wood  'r' rug  'm'/'M' marble  'p' pavement  'a' asphalt
+    //             'x' void (never walkable)
+    // Prop extras: `facing:'n'` (chairs/benches open toward the back wall),
+    // `screen:'n'` (desk monitors face the person seated north of the desk),
+    // `broken:()=>bool` (Liz's chair), `label` (bookshelf plaque).
+    // NPC extras: `seated:true`, `wander:true`, `look` may be a function.
 
     const { hasUpgrade, state } = require("js/state.js");
 
@@ -11111,14 +11380,17 @@
             interact: { label: 'Case Board — Your Record', action: 'record' } },
           { type: 'bookshelf', x: 10, y: 1, full: () => hasUpgrade('subscription'),
             interact: { label: 'Ethics Treatises — Rule Library', action: 'rules' } },
-          { type: 'clientchair', x: 5, y: 4 },
           { type: 'cabinet', x: 3, y: 3,
             interact: { label: 'Office Upgrades Catalog', action: 'shop_office' } },
           { type: 'filingstation', x: 1, y: 3,
             interact: { label: 'Filing Cabinet — Review Documents', action: 'doc_review' } },
           { type: 'paralegaldesk', x: 1, y: 8 },
           { type: 'paralegaldesk', x: 9, y: 8, visible: () => hasUpgrade('paralegal') },
-          { type: 'officechair', x: 3, y: 8, visible: () => hasUpgrade('liz_chair') },
+          // Liz sits at the screen side of her desk. The chair is broken until the
+          // "Chair for Liz Loza" upgrade replaces it.
+          { type: 'officechair', x: 1, y: 9, broken: () => !hasUpgrade('liz_chair') },
+          { type: 'coffeemachine', x: 12, y: 1, owned: () => true, visible: () => hasUpgrade('espresso'),
+            interact: { label: 'Espresso Machine — +5 Ethics, sobers you up', action: 'espresso' } },
           { type: 'plant', x: 1, y: 6, visible: () => hasUpgrade('houseplants') },
           { type: 'plant', x: 4, y: 1, visible: () => hasUpgrade('houseplants') },
           { type: 'dotpainting', x: 8, y: 0, visible: () => hasUpgrade('artwork') },
@@ -11128,10 +11400,10 @@
           { x: 13, y: 5, label: 'Linda Firestone’s Office', to: 'linda_office' },
           { x: 13, y: 7, label: 'Associates’ Floor', to: 'associates', dest: { x: 16, y: 6 } },
           { x: 13, y: 9, label: 'Conference Room', to: 'conference_room' },
-          { x: 6, y: 11, label: 'Leave the Office', travel: true },
+          { x: 6, y: 11, label: 'Leave the Office — to the street', to: 'street', dest: { x: 4, y: 2 } },
         ],
         npcs: [
-          { id: 'secretary', name: 'Liz Loza, Secretary', x: 2, y: 7,
+          { id: 'secretary', name: 'Liz Loza, Secretary', x: 1, y: 9, seated: true,
             look: { suit: '#6e2436', gender: 'female', skin: 2, hair: 1, hairStyle: 3, eye: 2 },
             icon: 'dot', talk: 'secretary' },
           { id: 'paralegal', name: 'Riley Readsalot, Paralegal', x: 10, y: 7,
@@ -11157,20 +11429,21 @@
           { type: 'wallwindow', x: 3, y: 0 },
           { type: 'wallwindow', x: 5, y: 0 },
           { type: 'wallwindow', x: 7, y: 0 },
-          { type: 'executivedesk', x: 3, y: 3, nameplate: true },
-          { type: 'clientchair', x: 3, y: 5 },
-          { type: 'clientchair', x: 6, y: 5 },
+          { type: 'executivedesk', x: 3, y: 3, nameplate: true, screen: 'n' },
+          { type: 'officechair', x: 4, y: 2 },
+          { type: 'clientchair', x: 3, y: 5, facing: 'n' },
+          { type: 'clientchair', x: 6, y: 5, facing: 'n' },
           { type: 'plant', x: 2, y: 6 },
           { type: 'safe', x: 1, y: 5, empty: () => state.moneybagsStolen,
             interact: { label: 'Mr. Hardsell’s Safe — Client Gold', action: 'moneybags_safe' } },
-          { type: 'barcart', x: 8, y: 5,
+          { type: 'barcart', x: 8, y: 1,
             interact: { label: 'Bar Cart — Decanter and Glass', action: 'whiskey' } },
         ],
         portals: [
           { x: 5, y: 7, label: 'Return to the Main Office', to: 'office', dest: { x: 12, y: 2 } },
         ],
         npcs: [
-          { id: 'jim', name: 'Jim Hardsell, Managing Partner', x: 4, y: 2,
+          { id: 'jim', name: 'Jim Hardsell, Managing Partner', x: 4, y: 2, seated: true,
             look: { suit: '#2b2b33', gender: 'male', skin: 4, hair: 3, hairStyle: 0, eye: 0 },
             icon: 'dot', talk: 'jim' },
         ],
@@ -11191,15 +11464,16 @@
           { type: 'wallwindow', x: 1, y: 0 },
           { type: 'wallwindow', x: 3, y: 0 },
           { type: 'wallwindow', x: 5, y: 0 },
-          { type: 'executivedesk', x: 3, y: 3, nameplate: true },
-          { type: 'bookshelf', x: 6, y: 4, full: true },
+          { type: 'executivedesk', x: 3, y: 3, nameplate: true, screen: 'n' },
+          { type: 'officechair', x: 4, y: 2 },
+          { type: 'bookshelf', x: 7, y: 1, full: true, label: 'CASE REPORTS' },
           { type: 'plant', x: 1, y: 5 },
         ],
         portals: [
           { x: 4, y: 7, label: 'Return to the Main Office', to: 'office', dest: { x: 12, y: 5 } },
         ],
         npcs: [
-          { id: 'linda', name: 'Linda Firestone, Partner', x: 4, y: 2,
+          { id: 'linda', name: 'Linda Firestone, Partner', x: 4, y: 2, seated: true,
             look: { suit: '#6e2436', gender: 'female', skin: 1, hair: 2, hairStyle: 1, eye: 1 },
             icon: 'dot', talk: 'linda' },
         ],
@@ -11221,10 +11495,12 @@
           { type: 'conftable', x: 4, y: 4 },
           { type: 'clientchair', x: 3, y: 4 },
           { type: 'clientchair', x: 7, y: 4 },
-          { type: 'clientchair', x: 4, y: 6 },
-          { type: 'clientchair', x: 6, y: 6 },
-          { type: 'plant', x: 1, y: 6 },
-          { type: 'plant', x: 9, y: 6 },
+          { type: 'clientchair', x: 4, y: 6, facing: 'n' },
+          { type: 'clientchair', x: 6, y: 6, facing: 'n' },
+          { type: 'plant', x: 1, y: 2 },
+          { type: 'plant', x: 1, y: 7 },
+          { type: 'plant', x: 10, y: 2 },
+          { type: 'plant', x: 10, y: 7 },
         ],
         portals: [
           { x: 5, y: 8, label: 'Return to the Main Office', to: 'office', dest: { x: 12, y: 9 } },
@@ -11249,12 +11525,12 @@
           { type: 'clerkcounter', x: 9, y: 3 },
           { type: 'counseltable', x: 3, y: 6 },
           { type: 'counseltable', x: 8, y: 6 },
-          { type: 'bench', x: 2, y: 8 },
-          { type: 'bench', x: 5, y: 8 },
-          { type: 'bench', x: 8, y: 8 },
+          { type: 'bench', x: 2, y: 8, facing: 'n' },
+          { type: 'bench', x: 5, y: 8, facing: 'n' },
+          { type: 'bench', x: 8, y: 8, facing: 'n' },
         ],
         portals: [
-          { x: 6, y: 10, label: 'Leave the Courtroom', travel: true },
+          { x: 6, y: 10, label: 'Leave the Courtroom — to the street', to: 'street', dest: { x: 20, y: 2 } },
         ],
         npcs: [
           { id: 'derek_balam', name: 'Derek Balam, Bailiff', x: 10, y: 5,
@@ -11295,7 +11571,7 @@
           { type: 'arcade', x: 8, y: 1,
             interact: { label: 'Briefcase Dash — Arcade Cabinet', action: 'arcade' } },
         ],
-        portals: [{ x: 7, y: 11, label: 'Leave The Sidebar', travel: true }],
+        portals: [{ x: 7, y: 11, label: 'Leave The Sidebar — to the street', to: 'street', dest: { x: 28, y: 2 } }],
         npcs: [
           { id: 'sidebar_host', name: 'B.A.R.T., Robotic Butler & Bartender', x: 5, y: 2,
             look: { robotButler: true },
@@ -11319,7 +11595,7 @@
               type: 'opendesk', x, y, deskId, seat: { x, y: y + 1 }, occupant: null, monitors: () => 1,
               interact: { label: (prop) => prop.occupant ? `Open desk ${deskId} — ${prop.occupant}` : `Open desk ${deskId} — Sit down`, action: 'desk_sit' },
             })),
-          { type: 'bookshelf', x: 16, y: 1, full: () => true,
+          { type: 'bookshelf', x: 16, y: 1, full: () => true, label: 'FIRM LIBRARY',
             interact: { label: 'Firm Library — Rule Library', action: 'rules' } },
           { type: 'noticeboard', x: 4, y: 0 },
           { type: 'wallclock', x: 9, y: 0 },
@@ -11330,7 +11606,42 @@
         ],
         portals: [
           { x: 17, y: 6, label: 'Main Office', to: 'office', dest: { x: 12, y: 7 } },
-          { x: 9, y: 12, label: 'Leave the Associates’ Floor', travel: true },
+          { x: 9, y: 12, label: 'Leave the Associates’ Floor — to the street', to: 'street', dest: { x: 4, y: 2 } },
+        ],
+        npcs: [],
+      },
+
+      // ------------------------------------------------------------------ STREET
+      // A long, shallow sidewalk that reads side-on: facades along the top row,
+      // the road below. Every building door is a portal in front of its doorway.
+      street: {
+        id: 'street',
+        name: 'Juris Avenue',
+        w: 32, h: 6,
+        outdoor: true,
+        spawn: { x: 4, y: 2 },
+        tile(x, y) {
+          return y <= 3 ? 'p' : 'a';
+        },
+        props: [
+          { type: 'facade', x: 2, y: 0, style: 'office' },
+          { type: 'facade', x: 10, y: 0, style: 'apartment' },
+          { type: 'facade', x: 18, y: 0, style: 'court' },
+          { type: 'facade', x: 26, y: 0, style: 'sidebar' },
+          { type: 'lamppost', x: 8, y: 2 },
+          { type: 'lamppost', x: 16, y: 2 },
+          { type: 'lamppost', x: 24, y: 2 },
+          { type: 'tree', x: 0, y: 2 },
+          { type: 'tree', x: 31, y: 2 },
+          { type: 'planter', x: 7, y: 1 },
+          { type: 'planter', x: 15, y: 1 },
+          { type: 'planter', x: 23, y: 1 },
+        ],
+        portals: [
+          { x: 4, y: 1, label: 'Hardsell & Firestone — Law Office', to: 'office', dest: { x: 6, y: 11 } },
+          { x: 12, y: 1, label: 'Apartments — Your Apartment', to: 'apartment', dest: { x: 4, y: 8 } },
+          { x: 20, y: 1, label: 'Courthouse', to: 'courtroom', dest: { x: 6, y: 10 } },
+          { x: 28, y: 1, label: 'The Sidebar — Local Lounge', to: 'sidebar', dest: { x: 7, y: 11 } },
         ],
         npcs: [],
       },
@@ -11354,7 +11665,7 @@
           { type: 'stove', x: 5, y: 1, visible: () => hasUpgrade('kitchen'),
             interact: { label: 'Kitchen — Cook Meal (5 gold / +30 Ethics)', action: 'cook_meal' } },
           { type: 'fridge', x: 7, y: 1, visible: () => hasUpgrade('kitchen') },
-          { type: 'coffeemachine', x: 8, y: 2, owned: () => hasUpgrade('coffee'),
+          { type: 'coffeemachine', x: 8, y: 1, owned: () => hasUpgrade('coffee'),
             interact: { label: 'Coffee Machine', action: 'flavor_coffee' } },
           { type: 'wardrobe', x: 1, y: 5, expanded: () => hasUpgrade('wardrobe_rack'), interact: { label: 'Wardrobe', action: 'wardrobe' } },
           { type: 'cabinet', x: 1, y: 4,
@@ -11363,12 +11674,17 @@
           { type: 'wallwindow', x: 3, y: 0, visible: () => hasUpgrade('cityview') },
           { type: 'sofa', x: 4, y: 5, visible: () => hasUpgrade('cityview'),
             interact: { label: 'Couch — Sit and Enjoy the City View', action: 'watch_tv' } },
-          { type: 'plant', x: 2, y: 6 },
+          { type: 'plant', x: 1, y: 7 },
         ],
         portals: [
-          { x: 4, y: 8, label: 'Leave the Apartment', travel: true },
+          { x: 4, y: 8, label: 'Leave the Apartment — to the street', to: 'street', dest: { x: 12, y: 2 } },
         ],
-        npcs: [],
+        npcs: [
+          // The adopted pet wanders the apartment once `adopt_pet` has run.
+          { id: 'pet', get name() { return state.pet?.name || 'Pet'; }, x: 6, y: 6,
+            look: () => ({ pet: state.pet }), talk: 'pet', wander: true, speed: 2,
+            visible: () => !!state.pet },
+        ],
       },
     };
     Object.assign(exports, { ZONES });
@@ -11703,7 +12019,7 @@
         case 'review': return clampLabel(`Document review · cycle ${reviewed + 1}`);
         case 'study': {
           const pack = PRACTICE_PACKS.find((item) => item.id === detail.pack);
-          const name = pack ? pack.label.replace(/ · TEST PACK$/, ' test') : 'ethics';
+          const name = pack ? pack.label : 'ethics';
           return clampLabel(`Studying ${name} · streak x${streak}`);
         }
         case 'journal': {
@@ -11946,7 +12262,7 @@
     const { dispatch } = require("js/progress.js");
     const { now } = require("js/clock.js");
     const { DOCUMENT_PACKS, WRITING_TASKS, CAPSTONE, FIRM_PACKS, COSMETICS, TRAINING_JURISDICTION, evidenceAt } = require("js/data/apprenticeship.js");
-    const { taskById, pendingAttempt, taskAttempts, returnedTasks, capstoneReady, requestIssueUrl } = require("js/apprenticeship.js");
+    const { taskById, pendingAttempt, taskAttempts, returnedTasks, capstoneReady, requestIssueUrl, cosmeticLock } = require("js/apprenticeship.js");
     const { Actor } = require("js/entities/actor.js");
     const { appearanceLook } = require("js/data/appearance.js");
     const { mountAppearanceEditor } = require("js/ui/appearance.js");
@@ -12150,10 +12466,10 @@
 
       function renderFirm(prefill = '') {
         body.innerHTML = section('Your firm · Jurisdictions', 'Choose your practice', 'Open a question pack in BarMail. Without a Work Phone, this takes you to your office computer.')
-          + `<div class="desk-card-grid">${PRACTICE_PACKS.map(pack => `<article class="desk-card"><span class="desk-badge">${pack.count} questions · ${pack.isTestPack ? 'TEST · review required' : 'Playable'}</span><h3>${e(pack.label)}</h3><p>${e(pack.note)}</p>${button('Play ' + pack.label, 'practice-pack', pack.id)}</article>`).join('')}</div>`
+          + `<div class="desk-card-grid">${PRACTICE_PACKS.map(pack => `<article class="desk-card"><span class="desk-badge">${pack.count} questions · ${pack.review === 'pending' ? 'Playable · review pending' : 'Playable'}</span><h3>${e(pack.label)}</h3><p>${e(pack.note)}</p>${button('Play ' + pack.label, 'practice-pack', pack.id)}</article>`).join('')}</div>`
           + note('Unofficial educational questions with authored feedback. California and New York source checks: September 27, 2026. These question packs are separate from a full jurisdiction-specific firm curriculum.')
           + `<h3 class="desk-subheading">Your fictional firm apprenticeship</h3><p>State of Juris office policies govern six writing assignments, two synthetic files and one capstone. No real jurisdiction is implied.</p>${button('Open your journal', 'journal')}`
-          + `<details class="desk-disclosure"><summary>Future firm curricula and worldwide expansion</summary><p>${e(GLOBAL_CURRICULUM.mission)}</p><div class="global-regions">${GLOBAL_CURRICULUM.regions.map(region => `<article><h4>${e(region.name)}</h4><p>${region.places.map(e).join(' · ')}</p></article>`).join('')}</div><p>These are future targets. Canada has a local test pack above; practitioner review and a full continuing-matter curriculum remain pending. A country may contain several legal systems.</p><div class="desk-card-grid">${FIRM_PACKS.filter(pack => pack.id !== 'juris').map(pack => `<article class="desk-card"><h4>${e(pack.label)} firm curriculum</h4><p>${e(pack.status)} · ${e(pack.note)}</p>${button('Request this curriculum', 'request-prefill', pack.label)}</article>`).join('')}</div></details>`
+          + `<details class="desk-disclosure"><summary>Future firm curricula and worldwide expansion</summary><p>${e(GLOBAL_CURRICULUM.mission)}</p><div class="global-regions">${GLOBAL_CURRICULUM.regions.map(region => `<article><h4>${e(region.name)}</h4><p>${region.places.map(e).join(' · ')}</p></article>`).join('')}</div><p>These are future targets. Canada is playable above; practitioner review of its answer key and a full continuing-matter curriculum remain pending. A country may contain several legal systems.</p><div class="desk-card-grid">${FIRM_PACKS.filter(pack => pack.id !== 'juris').map(pack => `<article class="desk-card"><h4>${e(pack.label)} firm curriculum</h4><p>${e(pack.status)} · ${e(pack.note)}</p>${button('Request this curriculum', 'request-prefill', pack.label)}</article>`).join('')}</div></details>`
           + `<form id="jurisdiction-form" class="request-form"><h3>Put a jurisdiction on the wish list</h3><p>Use an exact legal system, such as a U.S. state, England & Wales, Scotland or Northern Ireland. No real client facts or private documents.</p><label class="desk-label" for="request-label">Jurisdiction</label><input id="request-label" name="label" maxlength="80" required value="${e(prefill)}"><label class="desk-label" for="request-topic">What would you like to practice?</label><textarea id="request-topic" name="topic" maxlength="500" rows="2" required></textarea><label class="desk-label" for="request-help">Optional reviewer offer or public-source links</label><textarea id="request-help" name="help" maxlength="500" rows="2"></textarea><p class="desk-note">This saves a local request draft. You can then review it on GitHub and choose whether to submit it publicly. Nothing is sent automatically.</p><p id="request-error" class="desk-error" role="alert"></p><button type="submit">Save request locally</button></form>`
           + `<h3 class="desk-subheading">Your local request drafts</h3>${state.apprenticeship.requests.length ? state.apprenticeship.requests.map((request) => `<article class="desk-card"><h4>${e(request.label)}</h4><p>${e(request.topic)}</p><p class="desk-note">${e(request.status)}</p><a class="desk-link" href="${e(requestIssueUrl(request))}" target="_blank" rel="noopener noreferrer">Review draft on GitHub ↗</a></article>`).join('') : note('No requests saved yet. A repeat request for the same jurisdiction reopens the existing local entry.')}`;
         $('jurisdiction-form').addEventListener('submit', (event) => {
@@ -12165,12 +12481,15 @@
       }
 
       function renderWardrobe() {
-        body.innerHTML = section('The wardrobe', 'An attorney with character.', 'Change your hair, face and clothes whenever you like. Identity options are free; earned accessories stay with this character run.')
+        body.innerHTML = section('The wardrobe', 'An attorney with character.', 'Change your hair, face and clothes whenever you like. Identity options are free; accessories, jewelry and formal wear are bought with study gold or earned, and stay with this character run.')
           + '<div id="wardrobe-appearance"></div>'
-          + `<h3 class="desk-subheading">Earned accessories</h3><div class="desk-card-grid">${COSMETICS.map((item) => {
+          + `<h3 class="desk-subheading">Accessories, jewelry and formal wear</h3><div class="desk-card-grid">${COSMETICS.map((item) => {
             const owned = state.apprenticeship.cosmetics.includes(item.id), equipped = state.apprenticeship.equipped.includes(item.id);
-            return `<article class="desk-card"><span class="desk-badge">${owned ? 'Owned' : `${item.price} gold`}</span><h3>${e(item.label)}</h3><p>${e(item.note)}</p>${button(owned ? equipped ? 'Unequip' : 'Equip' : 'Purchase & wear', owned ? 'equip' : 'buy', item.id, !owned && (state.gold < item.price || pendingAttempt(state)) ? 'disabled' : '')}</article>`;
-          }).join('')}</div>` + note('The earned gold tie overrides the base tie color while equipped. Selecting another tie color puts it away; it remains in your wardrobe.');
+            const lock = owned ? null : cosmeticLock(state, item);
+            const badge = owned ? 'Owned' : item.price === 0 ? 'Earned reward' : `${item.price} gold`;
+            const label = owned ? (equipped ? 'Unequip' : 'Equip') : item.price === 0 ? 'Claim & wear' : 'Purchase & wear';
+            return `<article class="desk-card"><span class="desk-badge">${badge}</span><h3>${e(item.label)}</h3><p>${e(item.note)}</p>${lock ? `<p class="desk-note">${e(lock)}</p>` : ''}${button(label, owned ? 'equip' : 'buy', item.id, !owned && (lock || state.gold < item.price || pendingAttempt(state)) ? 'disabled' : '')}</article>`;
+          }).join('')}</div>` + note('The gold tie overrides the base tie color while equipped; selecting another tie color puts it away. The tuxedo and gown replace your suit while worn and need the apartment Wardrobe Rack. Only one formal outfit is worn at a time.');
         mountAppearanceEditor($('wardrobe-appearance'), {
           prefix: 'wardrobe', read: () => state, equipped: () => state.apprenticeship.equipped,
           onChange: (key, value) => {
@@ -12254,7 +12573,7 @@
     // follows an A* path of tile steps. Drawing is a layered paper-doll figure.
 
     const { PAL, shade } = require("js/engine/palette.js");
-    const { drawRobotButler } = require("js/entities/robots.js");
+    const { drawRobotButler, drawPet } = require("js/entities/robots.js");
 
     class Actor {
       constructor(x, y, look = {}, opts = {}) {
@@ -12312,6 +12631,7 @@
       draw(ctx, sx, sy, t, isPlayer = false) {
         const look = this.look;
         if (look.robotButler) { drawRobotButler(ctx,sx,sy,t); return; }
+        if (look.pet) { drawPet(ctx,sx,sy,t,look.pet,this.facing,this.walking); return; }
         const seated = ['reviewing', 'watching', 'sitting'].includes(this.activity);
         const walking = this.walking && !seated;
         const stride = walking ? Math.sin(t * 9) : 0;
@@ -12319,9 +12639,15 @@
         const skin = PAL.skin[look.skin ?? 0] || PAL.skin[0];
         const hair = PAL.hair[look.hair ?? 0] || PAL.hair[0];
         const eye = PAL.eyes[look.eye ?? 0] || PAL.eyes[0];
-        const suit = look.suit || PAL.navy;
-        const shirt = look.shirt || '#f3eee1';
+        // Formal wear from the wardrobe replaces the suit while equipped.
+        const tux = look.formal === 'tuxedo', gown = look.formal === 'gown';
+        const suit = tux ? '#141418' : (look.suit || PAL.navy);
+        // shade() takes hex only, so every gown tone derives from the hex suit color.
+        const gownBase = look.suit || PAL.navy;
+        const gownColor = shade(gownBase, -0.08), gownLight = shade(gownBase, -0.01), gownDark = shade(gownBase, -0.28), gownSeam = shade(gownBase, 0.06);
+        const shirt = tux ? '#f7f4ec' : (look.shirt || '#f3eee1');
         const tie = look.tie || PAL.burgundy;
+        const wig = !!look.wig;
         const style = look.hairStyle ?? 0;
         const beard = look.facialHair ?? 0;
         const face = look.faceShape ?? 0;
@@ -12360,8 +12686,15 @@
         }
         ctx.translate(0, lift);
 
+        // A powdered wig replaces the hair entirely: tail and side rolls behind,
+        // cap and frontal roll in front of the head.
+        if (wig) {
+          round(-6.4,-77,13,22,[6,6,3,3],'#dcd8cc');
+          for (const side of [-1,1]) { ellipse(side*6.6,-70,2.6,2,'#e6e2d8'); ellipse(side*6.8,-66,2.3,1.8,'#e6e2d8'); }
+          poly([[-5,-65.5],[-1.5,-64],[-5,-62.5]],'#15151a'); poly([[5,-65.5],[1.5,-64],[5,-62.5]],'#15151a');
+        }
         // Rear hair is attached to the skull and sits behind the shoulders.
-        if ([1, 8, 10, 11, 15].includes(style)) {
+        if (!wig && [1, 8, 10, 11, 15].includes(style)) {
           const length = style === 8 ? 14 : 24;
           round(-6.4, -77, 13, length, [6,6,3,3], shade(hair, -0.06));
           if ([1, 15].includes(style)) {
@@ -12380,7 +12713,7 @@
             }
           }
         }
-        if ([2,9].includes(style)) {
+        if (!wig && [2,9].includes(style)) {
           const rootY = style === 9 ? -77 : -69;
           const sway = walking ? stride * 1.4 : 0;
           // Curved taper grows from the back of the head; never a floating rectangle.
@@ -12393,46 +12726,96 @@
           ellipse(-5.3,rootY,2,1.2,'#b59458');
           line([[-7,rootY+2],[-8+sway,rootY+10],[-7+sway,rootY+17]], shade(hair,.12),.65);
         }
-        if (style === 3) ellipse(-4.3,-77,3.6,3.5,hair);
-        if (style === 15) ellipse(-4,-73,2.4,2.5,hair);
+        if (!wig && style === 3) ellipse(-4.3,-77,3.6,3.5,hair);
+        if (!wig && style === 15) ellipse(-4,-73,2.4,2.5,hair);
 
         // Legs articulate from the hip, with separate knee and shoe placement.
-        for (const side of [-1,1]) {
+        // A skirt shows hosiery-toned legs; a gown covers them to the floor.
+        if (gown) {
+          if (seated) {
+            for (const side of [-1,1]) round(side*8.2-2.8,-21,7.8,4,1.5,'#272b30');
+            poly([[-waist,-37],[waist,-37],[waist+9,-28],[waist+9,-18.5],[-waist-9,-18.5],[-waist-9,-28]],gownColor);
+            poly([[0,-37],[waist,-37],[waist+9,-28],[waist+9,-18.5],[0,-18.5]],gownLight);
+            line([[-waist-9,-18.5],[waist+9,-18.5]],gownDark,.8);
+          } else {
+            for (const side of [-1,1]) round(side*4.4-2.8,-3,7.8,4,1.5,'#272b30');
+            const sway = stride * 1.5;
+            poly([[-waist,-37],[waist,-37],[waist+6+sway,-1.5],[-waist-6+sway,-1.5]],gownColor);
+            poly([[0,-37],[waist,-37],[waist+6+sway,-1.5],[0+sway*.5,-1.5]],gownLight);
+            line([[-waist-6+sway,-1.5],[waist+6+sway,-1.5]],gownDark,.8);
+            line([[1,-34],[1.5+sway*.5,-4]],gownSeam,.5);
+          }
+        }
+        for (const side of gown ? [] : [-1,1]) {
           const step = side * stride;
           const footY = seated ? -lift : -Math.max(0, step) * 3.2;
           const hipX = side * 3.8;
           const kneeX = side * (seated ? 7.5 : 4.1) + step * 1.5;
           const kneeY = seated ? -30 : -17;
           const footX = side * (seated ? 8.2 : 4.4) + step * 2;
-          poly([[hipX-3.1,-36],[hipX+3.1,-36],[kneeX+2.6,kneeY],[footX+2,footY-2],[footX-2.5,footY-2],[kneeX-2.8,kneeY]], skirt ? shade(skin,-.025) : shade(suit,side < 0 ? -.17 : -.085));
-          if (!skirt) line([[hipX,-32],[kneeX,kneeY],[footX,footY-5]],shade(suit,side < 0 ? -.10 : .015),.6);
+          poly([[hipX-3.1,-36],[hipX+3.1,-36],[kneeX+2.6,kneeY],[footX+2,footY-2],[footX-2.5,footY-2],[kneeX-2.8,kneeY]], skirt ? shade(skin,-.07) : shade(suit,side < 0 ? -.17 : -.085));
+          if (!skirt) line([[hipX,-32],[kneeX,kneeY],[footX,footY-5]],tux ? '#2a2a33' : shade(suit,side < 0 ? -.10 : .015),tux ? .9 : .6);
           round(footX-2.8,footY-3,7.8,4,1.5,'#272b30');
           line([[footX-1.6,footY-2],[footX+3,footY-2]],'#515451',.6);
         }
-        if (skirt) {
-          const hem = seated ? -25 : -19;
-          poly([[-waist,-37],[waist,-37],[waist+2,hem],[-waist-2,hem]],shade(suit,-.08));
-          poly([[1,-35],[waist,-36],[waist+2,hem],[3,hem]],shade(suit,.025));
-          line([[-waist-1.5,hem],[waist+1.5,hem]],shade(suit,-.18),.8);
-          line([[1,hem-6],[1,hem]],shade(suit,-.22),.65);
+        if (skirt && !gown) {
+          // Pencil skirt: waistband, a slight flare at the hip, knee-length hem.
+          round(-waist-.4,-38.5,waist*2+.8,2.2,.5,shade(suit,-.22));
+          if (seated) {
+            poly([[-waist-.2,-36.5],[waist+.2,-36.5],[waist+5,-30],[waist+4.6,-26],[-waist-4.6,-26],[-waist-5,-30]],shade(suit,-.1));
+            poly([[0,-36.5],[waist+.2,-36.5],[waist+5,-30],[waist+4.6,-26],[0,-26]],shade(suit,-.02));
+            line([[-waist-4.8,-26],[waist+4.8,-26]],shade(suit,-.25),.8);
+          } else {
+            const hem = -16, lead = stride * .5;
+            poly([[-waist-.2,-36.5],[waist+.2,-36.5],[waist+1.1,-28],[waist+.6+lead,hem],[-waist-.6+lead,hem],[-waist-1.1,-28]],shade(suit,-.1));
+            poly([[0,-36.5],[waist+.2,-36.5],[waist+1.1,-28],[waist+.6+lead,hem],[lead*.5,hem]],shade(suit,-.02));
+            line([[0,-34],[lead*.5,hem]],shade(suit,-.16),.5);
+            line([[-waist-.8+lead,hem],[waist+.8+lead,hem]],shade(suit,-.25),.8);
+          }
         }
 
-        // Jacket shoulders taper into the waist. The shirt is a real inset layer.
-        poly([[-4.5,-62],[-shoulder,-58],[-shoulder+.8,-49],[-waist,-36],[-waist-1,-32],[0,-33],[waist+1,-32],[waist,-36],[shoulder-.8,-49],[shoulder,-58],[4.5,-62]],suit);
-        poly([[-shoulder,-58],[-4,-58],[-1,-42],[-2,-33],[-waist-1,-32],[-waist,-44]],shade(suit,-.13));
-        poly([[4,-59],[shoulder,-57],[waist,-42],[waist+1,-32],[1,-34],[1,-47]],shade(suit,.07));
-        poly([[-3.7,-61],[3.7,-61],[2.4,-42],[-2.4,-42]],shirt);
-        poly([[-2.8,-60],[0,-57],[-2.1,-54],[-4.5,-60]],shade(shirt,-.1));
-        poly([[2.8,-60],[0,-57],[2.1,-54],[4.5,-60]],shade(shirt,.025));
-        poly([[-1.1,-56],[1.2,-56],[1.7,-44],[0,-42],[-1.7,-44]],tie);
-        poly([[-1.4,-58],[1.4,-58],[1,-55],[-1,-55]],shade(tie,-.08));
-        poly([[-4,-62],[-7,-57],[-4.5,-53],[-5.5,-51],[-1.5,-43],[-2,-53]],shade(suit,.15));
-        poly([[4,-62],[7,-57],[4.5,-53],[5.5,-51],[1.5,-43],[2,-53]],shade(suit,.19));
-        line([[.7,-42],[.7,-35]],shade(suit,-.15),.75);
-        ellipse(.7,-39,.65,.65,'#b8ada0');
-        line([[4.6,-48],[7.3,-48]],shade(suit,-.2),.65);
-        poly([[5,-49],[6,-50.3],[7,-49]],shirt);
-        line([[-6,-38],[-3,-38]],shade(suit,-.22),.65);
+        if (gown) {
+          // Décolletage, then a fitted bodice with thin straps. No jacket or tie.
+          poly([[-shoulder+1,-61],[shoulder-1,-61],[shoulder-2,-56],[-shoulder+2,-56]],skin);
+          poly([[-shoulder+1.4,-57],[shoulder-1.4,-57],[waist+1,-36],[-waist-1,-36]],gownColor);
+          poly([[0,-57],[shoulder-1.4,-57],[waist+1,-36],[0,-36]],gownLight);
+          line([[-shoulder+2,-57],[-shoulder+3,-61]],gownColor,.8); line([[shoulder-2,-57],[shoulder-3,-61]],gownColor,.8);
+          line([[-waist-1,-36.5],[waist+1,-36.5]],gownDark,.6);
+        } else {
+          // Jacket shoulders taper into the waist. The shirt is a real inset layer.
+          poly([[-4.5,-62],[-shoulder,-58],[-shoulder+.8,-49],[-waist,-36],[-waist-1,-32],[0,-33],[waist+1,-32],[waist,-36],[shoulder-.8,-49],[shoulder,-58],[4.5,-62]],suit);
+          poly([[-shoulder,-58],[-4,-58],[-1,-42],[-2,-33],[-waist-1,-32],[-waist,-44]],shade(suit,-.13));
+          poly([[4,-59],[shoulder,-57],[waist,-42],[waist+1,-32],[1,-34],[1,-47]],shade(suit,.07));
+          poly([[-3.7,-61],[3.7,-61],[2.4,-42],[-2.4,-42]],shirt);
+          poly([[-2.8,-60],[0,-57],[-2.1,-54],[-4.5,-60]],shade(shirt,-.1));
+          poly([[2.8,-60],[0,-57],[2.1,-54],[4.5,-60]],shade(shirt,.025));
+          if (tux) {
+            // Bow tie, shirt studs and satin lapels.
+            poly([[-3.2,-57.6],[-.4,-56.3],[-3.2,-55]],'#111115'); poly([[3.2,-57.6],[.4,-56.3],[3.2,-55]],'#111115');
+            round(-.8,-57.1,1.6,1.6,.4,'#1c1c22');
+            for (const y of [-52,-49,-46]) ellipse(0,y,.55,.55,'#e9e4d6');
+            poly([[-4,-62],[-7,-57],[-4.5,-53],[-5.5,-51],[-1.5,-43],[-2,-53]],'#2a2a33');
+            poly([[4,-62],[7,-57],[4.5,-53],[5.5,-51],[1.5,-43],[2,-53]],'#30303a');
+            line([[-6.2,-56],[-2.6,-46]],'#ffffff22',.6); line([[6.2,-56],[2.6,-46]],'#ffffff22',.6);
+          } else {
+            poly([[-1.1,-56],[1.2,-56],[1.7,-44],[0,-42],[-1.7,-44]],tie);
+            poly([[-1.4,-58],[1.4,-58],[1,-55],[-1,-55]],shade(tie,-.08));
+            poly([[-4,-62],[-7,-57],[-4.5,-53],[-5.5,-51],[-1.5,-43],[-2,-53]],shade(suit,.15));
+            poly([[4,-62],[7,-57],[4.5,-53],[5.5,-51],[1.5,-43],[2,-53]],shade(suit,.19));
+          }
+          line([[.7,-42],[.7,-35]],shade(suit,-.15),.75);
+          ellipse(.7,-39,.65,.65,'#b8ada0');
+          line([[4.6,-48],[7.3,-48]],shade(suit,-.2),.65);
+          poly([[5,-49],[6,-50.3],[7,-49]],look.pocketSquare || shirt);
+          if (look.pocketSquare) poly([[4.6,-49],[5.6,-50.8],[6.6,-49.6],[7.5,-49]],look.pocketSquare);
+          line([[-6,-38],[-3,-38]],shade(suit,-.22),.65);
+        }
+        if (look.necklace) {
+          for (let i = 0; i < 7; i++) {
+            const x = -3.6 + i * 1.2, y = -59.6 + Math.sin(i / 6 * Math.PI) * 2.2;
+            ellipse(x+.2,y+.3,.8,.8,'#00000033'); ellipse(x,y,.8,.8,look.necklace);
+          }
+        }
 
         // Arms, cuffs and hands are separate tapered shapes, with a restrained swing.
         for (const side of [-1,1]) {
@@ -12440,8 +12823,9 @@
           const elbowX = side * (shoulder + 1.7);
           const handX = seated ? side * 6 : side * (shoulder + 1.1) + swing * .45;
           const handY = seated ? -36 : -35 + swing;
-          poly([[side*(shoulder-1),-58],[side*(shoulder+2),-56],[elbowX+side*1.5,-45],[handX+side*1.6,handY],[handX-side*1.8,handY+1],[elbowX-side*2,-45]],shade(suit,side < 0 ? -.075 : .025));
-          line([[handX-1.4,handY],[handX+1.5,handY]],shirt,1.5);
+          poly([[side*(shoulder-1),-58],[side*(shoulder+2),-56],[elbowX+side*1.5,-45],[handX+side*1.6,handY],[handX-side*1.8,handY+1],[elbowX-side*2,-45]],gown ? shade(skin,side < 0 ? -.05 : .02) : shade(suit,side < 0 ? -.075 : .025));
+          if (!gown) line([[handX-1.4,handY],[handX+1.5,handY]],shirt,1.5);
+          if (look.watch && side < 0) { round(handX-2.2,handY-.2,4.4,1.6,.5,look.watch); ellipse(handX,handY+.6,1,1,'#efe6c8'); }
           ellipse(handX,handY+2.2,1.8,3,skin);
           line([[handX+.8,handY+1],[handX+.8,handY+3]],shade(skin,-.13),.5);
         }
@@ -12490,7 +12874,12 @@
         if ([3,6].includes(beard)) poly([[headX-1.5,-66],[headX+1.5,-66],[headX+1.8,-63],[headX,-62.2],[headX-1.8,-63]],hair);
 
         // Front hair: distinct original silhouettes; scalp/face remain visible.
-        if (style !== 5) {
+        if (wig) {
+          round(headX-5.4,-80.5,10.8,7,[4,4,2,2],'#e8e4da');
+          ellipse(headX,-78.5,5.2,2.2,'#f0ece2');
+          for (const side of [-1,1]) { ellipse(headX+side*5.6,-72.5,2.4,1.9,'#ebe7dd'); ellipse(headX+side*5.8,-69,2.2,1.7,'#e6e2d8'); }
+          line([[headX-4,-77.5],[headX+4,-77.5]],'#d2cdc0',.5);
+        } else if (style !== 5) {
           const short = style === 6;
           ctx.fillStyle = hair; ctx.beginPath();
           ctx.moveTo(headX-5,-70.5);
@@ -12515,7 +12904,17 @@
           if ([10,11].includes(style)) for (const x of [-3,-1,1,3]) line([[headX+x,-77],[headX+x*.8,-75]],shade(hair,.13),.65);
           if (style===7) for (const x of [-2,0,2]) line([[headX+x,-75.4],[headX+x-1,-77.7]],shade(hair,.13),.6);
         }
-        if (look.glasses) {
+        if (look.earrings) {
+          for (const side of [-1,1]) {
+            line([[headX+side*5.1,-69.4],[headX+side*5.3,-67.4]],look.earrings,.6);
+            ellipse(headX+side*5.3,-66.6,.8,.8,look.earrings);
+          }
+        }
+        if (look.sunglasses) {
+          for (const x of [-2.1,2.1]) { round(headX+x-1.9,-73.3,3.8,2.7,.9,'#1a1c20'); line([[headX+x-1.2,-72.7],[headX+x-.2,-72.7]],'#ffffff55',.5); }
+          line([[headX-.4,-72.4],[headX+.4,-72.4]],'#1a1c20',.6);
+          line([[headX-3.9,-72.2],[headX-5,-72.6]],'#1a1c20',.6);
+        } else if (look.glasses) {
           ctx.strokeStyle = '#3b3f3d'; ctx.lineWidth = .55;
           for (const x of [-2.1,2.1]) { ctx.beginPath(); ctx.roundRect(headX+x-1.75,-73,3.5,2.2,.7); ctx.stroke(); }
           line([[headX-.4,-72.4],[headX+.4,-72.4]],'#3b3f3d',.5);
@@ -12606,7 +13005,46 @@
       ctx.fillText('z',23,-91-Math.sin(t)*2);ctx.fillText('Z',31,-101-Math.sin(t)*2);
       ctx.restore();
     }
-    Object.assign(exports, { drawRobotButler, drawSleepingJudge });
+
+    // Apartment pets. `pet` is { kind: 'cat' | 'dog', name }. Drawn at the
+    // actor's ground point; `facing` flips the sprite and `walking` adds a bob.
+    function drawPet(ctx,x,y,t,pet,facing=1,walking=false) {
+      ctx.save(); ctx.translate(x,y);
+      oval(ctx,0,2,11,3.5,'#10191840');
+      ctx.scale(facing<0?-1:1,1);
+      ctx.translate(0,walking?Math.sin(t*10)*.8:0);
+      const swing=walking?Math.sin(t*10)*2:0;
+      if (pet?.kind==='dog') {
+        const coat='#8b6b4a', dark='#6d5238', light='#a98a66';
+        for (const [lx,s] of [[-6,1],[-2,-1],[3,1],[7,-1]]) rounded(ctx,lx-1.2+s*swing*.5,-6,2.6,6.5,1,dark);
+        const wag=walking?0:Math.sin(t*12)*6;
+        line(ctx,[[-10,-11],[-14,-16+wag]],coat,2.2);
+        oval(ctx,0,-9,11,5.5,coat);
+        oval(ctx,2,-7.5,7,3.2,light);
+        oval(ctx,10,-14,5,4.5,coat);
+        oval(ctx,14,-13,3,2,light);
+        oval(ctx,16.5,-13.5,1.1,.9,'#1d1a1a');
+        oval(ctx,8,-18,2.2,3.4,dark);
+        oval(ctx,11.5,-15.5,.75,.75,'#1d1a1a');
+        rounded(ctx,5,-11,5,1.8,.8,'#b4322e');
+        oval(ctx,8,-8.8,1,1,'#cba64b');
+      } else {
+        const coat='#c9a26a', stripe='#a9834f';
+        for (const [lx,s] of [[-5,1],[-2,-1],[2,1],[5,-1]]) rounded(ctx,lx-1+s*swing*.4,-5,2.2,5.5,1,coat);
+        const sway=Math.sin(t*2)*3;
+        line(ctx,[[-8,-9],[-13,-14+sway],[-11,-20+sway]],coat,1.8);
+        oval(ctx,0,-7.5,9,4.5,coat);
+        for (const sx of [-5,-1,3]) line(ctx,[[sx,-11],[sx+1,-6]],stripe,1.1);
+        oval(ctx,8,-12,4.5,4,coat);
+        polygon(ctx,[[5,-14],[6,-19],[8.5,-15]],coat); polygon(ctx,[[9,-15],[11,-19],[12,-14]],coat);
+        polygon(ctx,[[5.6,-14.6],[6.3,-17.6],[7.8,-15]],'#e4b9b0'); polygon(ctx,[[9.5,-15],[10.8,-17.6],[11.5,-14.6]],'#e4b9b0');
+        oval(ctx,7,-12.5,.7,.9,'#2a5a3a'); oval(ctx,10,-12.5,.7,.9,'#2a5a3a');
+        oval(ctx,11.8,-10.8,.7,.5,'#d58a8a');
+        for (const s of [-1,1]) line(ctx,[[12,-10.5],[15,-11.5+s]],'#e8dcc3',.5);
+      }
+      ctx.restore();
+    }
+    Object.assign(exports, { drawRobotButler, drawSleepingJudge, drawPet });
   },
   "js/ui/appearance.js": (exports, require) => {
     const { PAL } = require("js/engine/palette.js");
@@ -12907,11 +13345,20 @@
         stroke(ctx,[[11,6],[11,17]],'#253e55',1.2);
       });
     }
-    function monitor(ctx,ox,oy,u,v,lift) {
+    // `back` turns the screen toward the person seated north of the desk: the
+    // camera sees the panel's rear instead of the display.
+    function monitor(ctx,ox,oy,u,v,lift,back=false) {
       const c=p(ox,oy,u,v);
       surface(ctx,ox,oy,u+.1,v+.08,lift,()=>roundRect(ctx,0,0,14,8,1,'#646f73'));
       face(ctx,ox,oy,u,v,lift,()=>{
         roundRect(ctx,11,-12,3,14,1,'#7b898c');
+        if(back){
+          roundRect(ctx,-4,-37,37,26,2,'#2e3a40');
+          roundRect(ctx,6,-31,18,13,1,'#3b474e');
+          for(let y=-29;y<-20;y+=2.4)stroke(ctx,[[8,y],[22,y]],'#242d33',.7);
+          ctx.fillStyle='#8fa3a8';ctx.beginPath();ctx.arc(14.5,-15.5,1.2,0,Math.PI*2);ctx.fill();
+          return;
+        }
         roundRect(ctx,-4,-37,37,26,2,'#17252d');
         roundRect(ctx,-2,-35,33,21,1,'#d3e2df');
         ctx.fillStyle='#305c63';ctx.fillRect(-2,-35,33,4);
@@ -12931,7 +13378,7 @@
         for(let y=-24;y<-4;y+=8){ctx.strokeStyle='#453c31';ctx.lineWidth=.6;ctx.strokeRect(1,y,14,7);ctx.fillStyle='#bba474';ctx.fillRect(5,y+3,6,1.2);}
       });
       const monitors=typeof prop.monitors==='function'?prop.monitors():1;
-      for(let i=0;i<monitors;i++)monitor(ctx,ox,oy,.25+i*.88,-.16,lift+4);
+      for(let i=0;i<monitors;i++)monitor(ctx,ox,oy,.25+i*.88,-.16,lift+4,prop.screen==='n');
       surface(ctx,ox,oy,.28,.32,lift+5,()=>{
         roundRect(ctx,-2,0,26,9,1,'#35494b');
         for(let y=1;y<7;y+=2)for(let x=0;x<22;x+=3){ctx.fillStyle='#b7c1b8';ctx.fillRect(x,y,2,1.2);}
@@ -13092,14 +13539,17 @@
           ctx.fillRect(a.x + 12, a.y - 45, 3, 3); ctx.fillRect(a.x + 30, a.y - 39, 3, 3);
         },
       },
+      // `facing:'n'` puts the backrest on the camera side so the seat opens toward
+      // the back wall (benches facing the judge, chairs facing a desk).
       bench: {
         w:2,h:1,solid:true,
-        draw(ctx,ox,oy) {
+        draw(ctx,ox,oy,prop) {
+          const n=prop?.facing==='n';
           for(const u of [-.3,1.2])box(ctx,ox,oy,u,-.12,.12,.5,17,'#594531');
           box(ctx,ox,oy,-.4,-.24,1.85,.62,5,'#94704a',17);
-          for(const z of [24,34])box(ctx,ox,oy,-.4,-.29,1.85,.12,8,'#a07b52',z);
-          for(const u of [-.39,1.34])box(ctx,ox,oy,u,-.3,.1,.15,43,'#6b4c34');
-          face(ctx,ox,oy,-.38,-.17,0,()=>{for(const y of [-27,-37])stroke(ctx,[[2,y],[55,y]],'#dfc18a44',.7);});
+          for(const z of [24,34])box(ctx,ox,oy,-.4,n?.26:-.29,1.85,.12,8,'#a07b52',z);
+          for(const u of [-.39,1.34])box(ctx,ox,oy,u,n?.24:-.3,.1,.15,43,'#6b4c34');
+          face(ctx,ox,oy,-.38,n?.38:-.17,0,()=>{for(const y of [-27,-37])stroke(ctx,[[2,y],[55,y]],'#dfc18a44',.7);});
         },
       },
       lamppost: {
@@ -13133,16 +13583,21 @@
       // Building facades framing the square. Doorway gap is drawn dark; the
       // actual portal is the glowing tile in front (renderer draws that).
       facade: {
-        w: 4, h: 1, solid: true,
+        w: 4, h: 1, solid: true, noShadow: true,
         draw(ctx, ox, oy, prop) {
           const styles = {
             office: { wall: PAL.wood, trim: PAL.navy, sign: 'LAW OFFICE' },
             court: { wall: PAL.marble, trim: PAL.navy, sign: 'COURTHOUSE' },
             library: { wall: PAL.archiveGreen, trim: PAL.brass, sign: 'LAW LIBRARY' },
             apartment: { wall: PAL.burgundy, trim: PAL.parchment, sign: 'APARTMENTS' },
+            sidebar: { wall: '#3a2f2a', trim: PAL.brass, sign: 'THE SIDEBAR' },
           };
           const s = styles[prop.style] || styles.office;
           box(ctx, ox, oy, -0.5, -0.5, 4, 1, 74, s.wall);
+          // Upper-floor windows, lit, on the street-facing wall.
+          face(ctx, ox, oy, -0.5, 0.5, 0, () => {
+            for (let i = 0; i < 4; i++) { if (prop.style === 'court' && (i === 0 || i === 3)) continue; ctx.fillStyle = '#e9d58a'; ctx.fillRect(8 + i * 30, -66, 12, 10); ctx.fillStyle = '#00000033'; ctx.fillRect(8 + i * 30, -61, 12, 1); ctx.fillRect(13.5 + i * 30, -66, 1, 10); }
+          });
           // doorway (dark opening) on the south-west face, centered
           const d1 = p(ox, oy, 1.4, 0.5), d2 = p(ox, oy, 2.6, 0.5);
           ctx.fillStyle = shade(PAL.ink, -0.05);
@@ -13324,22 +13779,28 @@
         w: 2, h: 1, solid: true,
         draw(ctx,ox,oy,prop) {
           const full=typeof prop.full==='function'?prop.full():true;
+          // The face is 1.8 tiles (57.6 px) wide: a centred upright splits it into
+          // two bays and books are laid out per bay so they never cross an upright.
+          const W=57.6, label=prop.label||'ETHICS TREATISES';
           box(ctx,ox,oy,-.4,-.22,1.8,.44,72,'#71503a',4);
           face(ctx,ox,oy,-.4,.22,4,()=>{
-            ctx.fillStyle='#312c25';ctx.fillRect(3,-68,51,65);
-            for(const x of [1,27,54]){ctx.fillStyle='#a78154';ctx.fillRect(x,-68,2,65);}
+            ctx.fillStyle='#312c25';ctx.fillRect(1.5,-68,W-3,65);
+            for(const x of [0,W/2-1,W-2]){ctx.fillStyle='#a78154';ctx.fillRect(x,-68,2,65);}
+            const bays=[[2.5,W/2-1],[W/2+1,W-2.5]];
             for(let row=0;row<3;row++) {
-              const base=-5-row*21;
-              for(let i=0;i<(full?11:row===0?4:0);i++) {
-                const x=4+i*4.4, height=13+(i*7+row)%5;
-                ctx.fillStyle=['#703e3d','#283e51','#485943','#9a7846'][(i+row)%4];ctx.fillRect(x,base-height,3.5,height);
-                ctx.fillStyle='#ddc385';ctx.fillRect(x+.3,base-height+2,2.9,.7);ctx.fillRect(x+.3,base-2,2.9,.7);
-                ctx.fillStyle='#ddcda1';ctx.fillRect(x+.8,base-height+5,1.8,3);
-                ctx.fillStyle='#ffffff12';ctx.fillRect(x+.3,base-height,.5,height);
-              }
-              ctx.fillStyle='#a37d51';ctx.fillRect(2,base,52,2);ctx.fillStyle='#483524';ctx.fillRect(2,base+2,52,1);
+              const base=-5-row*21, perBay=full?5:row===0?2:0;
+              bays.forEach(([left],bay)=>{
+                for(let i=0;i<perBay;i++) {
+                  const n=bay*5+i, x=left+i*4.6, height=13+(n*7+row)%5;
+                  ctx.fillStyle=['#703e3d','#283e51','#485943','#9a7846'][(n+row)%4];ctx.fillRect(x,base-height,3.5,height);
+                  ctx.fillStyle='#ddc385';ctx.fillRect(x+.3,base-height+2,2.9,.7);ctx.fillRect(x+.3,base-2,2.9,.7);
+                  ctx.fillStyle='#ddcda1';ctx.fillRect(x+.8,base-height+5,1.8,3);
+                  ctx.fillStyle='#ffffff12';ctx.fillRect(x+.3,base-height,.5,height);
+                }
+              });
+              ctx.fillStyle='#a37d51';ctx.fillRect(0,base,W,2);ctx.fillStyle='#483524';ctx.fillRect(0,base+2,W,1);
             }
-            ctx.fillStyle='#ccb474';ctx.fillRect(13,-74,31,5);ctx.fillStyle='#302f27';ctx.font='3.4px Verdana';ctx.fillText('ETHICS TREATISES',14,-70.5);
+            ctx.fillStyle='#ccb474';ctx.fillRect(W/2-17,-74,34,5);ctx.fillStyle='#302f27';ctx.font='3.4px Verdana';ctx.textAlign='center';ctx.fillText(label,W/2,-70.5);ctx.textAlign='start';
           });
           box(ctx,ox,oy,-.46,-.27,1.92,.54,4,'#93734b',76);
           box(ctx,ox,oy,-.44,-.26,1.88,.52,5,'#71503a');
@@ -13347,24 +13808,34 @@
       },
       clientchair: {
         w:1,h:1,solid:true,
-        draw(ctx,ox,oy) {
+        draw(ctx,ox,oy,prop) {
+          const n=prop?.facing==='n';
           for(const u of [-.25,.22])for(const v of [-.22,.24])box(ctx,ox,oy,u,v,.09,.09,16,'#503e31');
           box(ctx,ox,oy,-.3,-.28,.65,.65,7,'#6f4146',16);
-          box(ctx,ox,oy,-.3,-.33,.65,.12,28,'#63383f',21);
-          face(ctx,ox,oy,-.25,-.2,21,()=>{roundRect(ctx,0,-25,17,21,3,'#81565a');ctx.strokeStyle='#ae818166';ctx.lineWidth=.5;ctx.strokeRect(2,-23,13,17);});
+          box(ctx,ox,oy,-.3,n?.21:-.33,.65,.12,28,'#63383f',21);
+          if(n) face(ctx,ox,oy,-.25,.33,21,()=>{roundRect(ctx,0,-25,17,21,3,shade('#63383f',-.08));stroke(ctx,[[2,-14],[15,-14]],'#ae818133',.5);});
+          else face(ctx,ox,oy,-.25,-.2,21,()=>{roundRect(ctx,0,-25,17,21,3,'#81565a');ctx.strokeStyle='#ae818166';ctx.lineWidth=.5;ctx.strokeRect(2,-23,13,17);});
           for(const u of [-.34,.3])box(ctx,ox,oy,u,-.05,.09,.42,3,'#8b6647',28);
         },
       },
+      // `broken:()=>bool` draws Liz's pre-upgrade chair: a missing caster, a sagging
+      // seat and a backrest that leans and is held together with tape.
       officechair: {
         w:1,h:1,solid:true,
-        draw(ctx,ox,oy) {
+        draw(ctx,ox,oy,prop) {
+          const n=prop?.facing==='n', broken=typeof prop?.broken==='function'?prop.broken():false;
+          const sag=broken?5:0, cushion=broken?'#3e4e4f':'#43595b';
           const c=p(ox,oy,0,0);ctx.strokeStyle='#88958f';ctx.lineWidth=2;
-          for(let i=0;i<5;i++){const a=i*Math.PI*2/5;const x=c.x+Math.cos(a)*15,y=c.y+Math.sin(a)*6;stroke(ctx,[[c.x,c.y-6],[x,y]],'#87928b',2);roundRect(ctx,x-2,y-1,4,3,1,'#202b30');}
-          box(ctx,ox,oy,-.05,-.05,.1,.1,20,'#87948f');
-          box(ctx,ox,oy,-.3,-.25,.65,.62,7,'#344a4c',19);
-          box(ctx,ox,oy,-.3,-.34,.65,.14,30,'#283c41',26);
-          face(ctx,ox,oy,-.26,-.2,26,()=>{roundRect(ctx,0,-27,17,25,4,'#43595b');for(let y=-24;y<-4;y+=3)stroke(ctx,[[2,y],[15,y]],'#728b8244',.6);});
-          for(const u of [-.34,.3]){box(ctx,ox,oy,u,.03,.07,.12,14,'#7a8983',16);box(ctx,ox,oy,u-.02,-.07,.13,.45,3,'#263a3e',30);}
+          for(let i=0;i<(broken?4:5);i++){const a=i*Math.PI*2/5;const x=c.x+Math.cos(a)*15,y=c.y+Math.sin(a)*6;stroke(ctx,[[c.x,c.y-6],[x,y]],'#87928b',2);roundRect(ctx,x-2,y-1,4,3,1,'#202b30');}
+          if(broken){const l=p(ox,oy,.38,.35);roundRect(ctx,l.x-2,l.y-1,4,3,1,'#202b30');stroke(ctx,[[l.x-3,l.y+2],[l.x+4,l.y+1]],'#87928b',1.2);}
+          box(ctx,ox,oy,-.05,-.05,.1,.1,20-sag,'#87948f');
+          box(ctx,ox,oy,-.3,-.25,.65,.62,7,'#344a4c',19-sag);
+          if(broken){ctx.save();ctx.translate(c.x,c.y);ctx.transform(1,0,-.2,1,0,0);ctx.translate(-c.x,-c.y);}
+          box(ctx,ox,oy,-.3,n?.2:-.34,.65,.14,30,'#283c41',26-sag);
+          if(n) face(ctx,ox,oy,-.26,.34,26-sag,()=>{roundRect(ctx,0,-27,17,25,4,shade(cushion,-.12));stroke(ctx,[[2,-15],[15,-15]],'#728b8233',.6);if(broken)roundRect(ctx,3,-18,11,2,.5,'#b8a37a');});
+          else face(ctx,ox,oy,-.26,-.2,26-sag,()=>{roundRect(ctx,0,-27,17,25,4,cushion);for(let y=-24;y<-4;y+=3)stroke(ctx,[[2,y],[15,y]],'#728b8244',.6);if(broken)roundRect(ctx,3,-18,11,2,.5,'#b8a37a');});
+          if(broken)ctx.restore();
+          for(const u of [-.34,.3]){box(ctx,ox,oy,u,.03,.07,.12,14,'#7a8983',16-sag);box(ctx,ox,oy,u-.02,-.07,.13,.45,3,'#263a3e',30-sag);}
         },
       },
       cabinet: {
@@ -13884,6 +14355,8 @@
       'w': PAL.wood,
       'r': PAL.burgundy,
       'g': '#5e7a68',
+      'p': '#b3ada0',   // street pavement
+      'a': '#454a52',   // street asphalt
     };
 
     const WALL_COLORS = {
@@ -13927,6 +14400,9 @@
         this.cam.x = w / 2 - pp.x;
         this.cam.y = h / 2 - pp.y + 40;
         ctx.translate(this.cam.x, this.cam.y);
+
+        // ---- distant skyline behind an outdoor zone ----
+        if (zone.outdoor) this.drawSkyline(zone);
 
         // ---- ground ----
         for (let y = 0; y < zone.h; y++) {
@@ -14064,12 +14540,36 @@
         ctx.textAlign = 'start';
       }
 
+      // A seeded row of dark towers along the back of the street so the empty
+      // background reads as a city block rather than a void.
+      drawSkyline(zone) {
+        const { ctx } = this;
+        for (let x = -4; x <= zone.w + 4; x++) {
+          const seed = (x * 73 + 11) % 17;
+          const s = gridToScreen(x, -1.5);
+          const height = 90 + seed * 9, width = 26 + (seed % 4) * 6;
+          ctx.fillStyle = seed % 3 === 0 ? '#1f2730' : '#232c36';
+          ctx.fillRect(s.x - width / 2, s.y - height - 40, width, height);
+          ctx.fillStyle = 'rgba(233,213,138,0.35)';
+          for (let wy = 0; wy < height - 20; wy += 14) if ((seed + wy) % 5 !== 0) ctx.fillRect(s.x - width / 2 + 6, s.y - height - 32 + wy, 4, 5);
+        }
+      }
+
       // Surface detail in tile space: x runs along +u, y along +v, 32 units per tile.
       drawFloorDetail(zone, ch, x, y, s, base) {
         const { ctx } = this;
         ctx.save();
         ctx.transform(1, 0.5, -1, 0.5, s.x, s.y - TILE_H / 2);
-        if (ch === 'w') {
+        if (ch === 'p') {
+          // Paving slabs with seams, and a kerb edge where the pavement meets the road.
+          ctx.fillStyle = 'rgba(0,0,0,0.12)';
+          ctx.fillRect(0, 15.5, 32, 0.8); ctx.fillRect(15.5, 0, 0.8, 32);
+          if (y + 1 < zone.h && zone.tile(x, y + 1) === 'a') { ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fillRect(0, 28, 32, 4); }
+        } else if (ch === 'a') {
+          ctx.fillStyle = 'rgba(0,0,0,0.18)';
+          for (let i = 0; i < 3; i++) ctx.fillRect((x * 13 + y * 7 + i * 11) % 30, (x * 5 + i * 9) % 30, 1.5, 1.5);
+          if (y > 0 && zone.tile(x, y - 1) === 'a' && (y + 1 >= zone.h || zone.tile(x, y + 1) !== 'a')) { ctx.fillStyle = '#d9c98a'; ctx.fillRect(6, 0, 14, 1.4); }
+        } else if (ch === 'w') {
           // Four boards per tile, each with its own tone, seams and staggered end joints.
           for (let row = 0; row < 4; row++) {
             const n = (x * 7 + y * 13 + row * 5) % 7;
@@ -14396,10 +14896,14 @@
 
     const { ARCADE, newArcadeRun, stepArcade, arcadeMeters, readArcadeBest, recordArcadeScore } = require("js/arcade.js");
     const { PAL, shade } = require("js/engine/palette.js");
+    const { ARCADE_PLAY_COST, ARCADE_ROUNDS_PER_PLAY } = require("js/data/work.js");
 
     const W = 640, H = 240, GROUND = 196; // logical canvas size; GROUND is the sidewalk line
 
-    function mountArcade(body, { look = {}, onClose = () => {} } = {}) {
+    // `credits`/`gold` read the player's state; `insertCoin` and `startRound`
+    // dispatch the server-owned `arcade_play` / `arcade_round` actions and return
+    // promises. Without them (tests, previews) the cabinet plays for free.
+    function mountArcade(body, { look = {}, credits = () => Infinity, gold = () => 0, insertCoin = null, startRound = null, onClose = () => {} } = {}) {
       body.innerHTML = `
         <div class="arcade">
           <div class="arcade-bezel">
@@ -14410,6 +14914,10 @@
             <div class="arcade-touch">
               <button type="button" id="arcade-jump">Jump</button>
               <button type="button" id="arcade-duck">Duck</button>
+            </div>
+            <div class="arcade-coin">
+              <span>Credits: <b id="arcade-credits">0</b></span>
+              <button type="button" id="arcade-insert">Insert ${ARCADE_PLAY_COST} gold · ${ARCADE_ROUNDS_PER_PLAY} rounds</button>
             </div>
           </div>
           <p id="arcade-status" class="arcade-status" role="status"></p>
@@ -14423,12 +14931,32 @@
 
       let run = newArcadeRun();
       let best = readArcadeBest();
-      let jumpQueued = false, duckHeld = false, recorded = false;
+      let jumpQueued = false, duckHeld = false, recorded = false, starting = false;
       let last = performance.now(), raf = 0, scroll = 0;
 
+      const creditsEl = body.querySelector('#arcade-credits'), insertBtn = body.querySelector('#arcade-insert');
+      const creditsLeft = () => credits();
+      function refreshCoin() {
+        const n = creditsLeft();
+        creditsEl.textContent = Number.isFinite(n) ? String(n) : '∞';
+        insertBtn.hidden = !insertCoin;
+        insertBtn.disabled = !insertCoin || n > 0 || gold() < ARCADE_PLAY_COST;
+      }
+      insertBtn.addEventListener('click', () => {
+        if (!insertCoin) return;
+        insertBtn.disabled = true;
+        Promise.resolve(insertCoin()).then(refreshCoin, refreshCoin);
+      });
+      refreshCoin();
+
+      // Space / tap: jump mid-run, otherwise spend a credit to start the next run.
       const restartOrJump = () => {
-        if (run.status === 'crashed' || run.status === 'arrived') { run = newArcadeRun(); recorded = false; }
-        jumpQueued = true;
+        if (run.status === 'running') { jumpQueued = true; return; }
+        if (starting) return;
+        const begin = () => { if (run.status !== 'ready') { run = newArcadeRun(); recorded = false; } jumpQueued = true; };
+        if (!startRound) { begin(); return; }
+        starting = true;
+        Promise.resolve(startRound()).then(begin).catch(() => {}).finally(() => { starting = false; refreshCoin(); });
       };
       const onKey = (event) => {
         if (!canvas.isConnected) return;
@@ -14471,11 +14999,15 @@
           recorded = true;
           const result = recordArcadeScore(arcadeMeters(run));
           best = result.best;
+          const next = creditsLeft() > 0 ? 'Press Space to play again.' : `Out of credits. Insert ${ARCADE_PLAY_COST} gold for ${ARCADE_ROUNDS_PER_PLAY} more rounds.`;
           status.textContent = run.status === 'arrived'
-            ? `You made it to the office in ${run.time.toFixed(1)} seconds.${result.isNew ? ' New personal best!' : ''}`
-            : `Tripped by a ${run.hit} at ${arcadeMeters(run)} m.${result.isNew ? ' New personal best!' : ''} Press Space to try again.`;
+            ? `You made it to the office in ${run.time.toFixed(1)} seconds.${result.isNew ? ' New personal best!' : ''} ${next}`
+            : `Tripped by a ${run.hit} at ${arcadeMeters(run)} m.${result.isNew ? ' New personal best!' : ''} ${next}`;
+          refreshCoin();
         } else if (run.status === 'ready') {
-          status.textContent = 'Press Space or tap Jump to start walking to the office.';
+          status.textContent = creditsLeft() > 0
+            ? 'Press Space or tap Jump to start walking to the office.'
+            : `Insert ${ARCADE_PLAY_COST} gold for ${ARCADE_ROUNDS_PER_PLAY} rounds, then press Space.`;
         } else if (run.status === 'running') {
           status.textContent = '';
         }
@@ -16123,7 +16655,7 @@
       const e = escapeCanadaHtml, progress = canadaProgress(player);
       const attempts = progress.emailAttempts.filter(a => a.taskId === id), latest = attempts.at(-1);
       const composing = !latest || Object.hasOwn(progress.drafts, id);
-      container.innerHTML = `<section class="canada-email"><p class="canada-banner">CANADA TEST PACK · Practitioner review required · No Ethics or gold effects</p><h2>${e(task.title)}</h2><p><b>To:</b> ${e(task.to)} · <b>Role:</b> ${e(task.practitionerRole)}</p><p>${e(task.jurisdiction)} · ${e(task.forum)}</p><p class="canada-note">${e(task.setting)}. All people and records are fictional.</p><p>${e(task.prompt)}</p><details open><summary>Assignment record</summary>${task.records.map(r=>`<p><b>${e(r.id)}</b> ${e(r.text)}</p>`).join('')}</details><details><summary>Relevant rules and scope</summary>${canadaRulesHtml(task.ruleIds)}</details><p class="canada-note">Your prose is for self-comparison and practitioner review. The partner guidance is prewritten. This is a local exercise; no email is sent.</p><div id="canada-compose"></div><div id="canada-correspondence"></div><p id="canada-save-status" role="status"></p><p><a href="canada-test/review.html#${e(id)}" target="_blank" rel="noopener">Open practitioner review for this assignment</a></p><button id="canada-back" type="button">Back to inbox</button></section>`;
+      container.innerHTML = `<section class="canada-email"><p class="canada-banner">CANADA PACK · Writing exercise · Not graded · Practitioner review pending</p><h2>${e(task.title)}</h2><p><b>To:</b> ${e(task.to)} · <b>Role:</b> ${e(task.practitionerRole)}</p><p>${e(task.jurisdiction)} · ${e(task.forum)}</p><p class="canada-note">${e(task.setting)}. All people and records are fictional.</p><p>${e(task.prompt)}</p><details open><summary>Assignment record</summary>${task.records.map(r=>`<p><b>${e(r.id)}</b> ${e(r.text)}</p>`).join('')}</details><details><summary>Relevant rules and scope</summary>${canadaRulesHtml(task.ruleIds)}</details><p class="canada-note">Your prose is for self-comparison and practitioner review. The partner guidance is prewritten. This is a local exercise; no email is sent.</p><div id="canada-compose"></div><div id="canada-correspondence"></div><p id="canada-save-status" role="status"></p><p><a href="canada-test/review.html#${e(id)}" target="_blank" rel="noopener">Open practitioner review for this assignment</a></p><button id="canada-back" type="button">Back to inbox</button></section>`;
       container.querySelector('#canada-back').onclick = back;
       const status = container.querySelector('#canada-save-status');
       const saveStatus = (ok) => { status.textContent = ok ? 'Saved.' : 'Session only — storage is unavailable. Copy your reply or export it before closing.'; return ok; };

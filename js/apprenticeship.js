@@ -1,4 +1,6 @@
 import { CURRICULUM_VERSION, TRAINING_JURISDICTION, DOCUMENT_PACKS, WRITING_TASKS, CAPSTONE, COSMETICS, evidenceAt } from './data/apprenticeship.js';
+import { findUpgrade } from './data/upgrades.js';
+import { PRACTICE_PACKS } from './data/practice-packs.js';
 
 export const PARTNER_DELAY_MS = 5_000;
 export function freshApprenticeship() {
@@ -94,15 +96,56 @@ export function submitReview(player, packId, selected, notes, now) {
   return receipt;
 }
 
+// Why a wardrobe item cannot be bought yet, or null when it is available.
+export function cosmeticLock(player, item) {
+  if (item.requires && !player.upgrades.includes(item.requires)) {
+    const upgrade = findUpgrade(item.requires);
+    return `Needs the ${upgrade?.name || item.requires} (Furniture Catalog, ${upgrade?.cost || '?'} gold).`;
+  }
+  if (item.unlock) {
+    const have = player.packCorrect?.[item.unlock.pack] || 0;
+    if (have < item.unlock.correct) {
+      const pack = PRACTICE_PACKS.find((entry) => entry.id === item.unlock.pack);
+      return `Answer ${item.unlock.correct} ${pack?.label || item.unlock.pack} questions correctly (${have}/${item.unlock.correct}).`;
+    }
+  }
+  return null;
+}
+
+// Earned items join the wardrobe (owned, not worn) as soon as their
+// threshold is met. Returns the ids granted by this call.
+export function grantUnlocks(player) {
+  const granted = [];
+  for (const item of COSMETICS) {
+    if (!item.unlock || player.apprenticeship.cosmetics.includes(item.id) || cosmeticLock(player, item)) continue;
+    player.apprenticeship.cosmetics.push(item.id);
+    granted.push(item.id);
+  }
+  return granted;
+}
+
+// Wear or put away an owned item. Items that share a `slot` (formal wear)
+// are mutually exclusive.
+export function equipCosmetic(player, id, worn) {
+  const item = COSMETICS.find((cosmetic) => cosmetic.id === id);
+  if (!item || !player.apprenticeship.cosmetics.includes(id)) throw new Error('You do not own that item.');
+  const others = new Set(item.slot ? COSMETICS.filter((entry) => entry.slot === item.slot).map((entry) => entry.id) : [id]);
+  const kept = player.apprenticeship.equipped.filter((worn) => worn !== id && !(worn && others.has(worn)));
+  player.apprenticeship.equipped = worn ? [...kept, id] : kept;
+  return { id, worn: !!worn };
+}
+
 export function buyCosmetic(player, id) {
   if (!activeRun(player) || pendingAttempt(player)) throw new Error('Finish the pending partner reply before making a purchase.');
   const item = COSMETICS.find((cosmetic) => cosmetic.id === id);
   if (!item) throw new Error('Unknown wardrobe item.');
   if (player.apprenticeship.cosmetics.includes(id)) throw new Error('You already own this item.');
+  const lock = cosmeticLock(player, item);
+  if (lock) throw new Error(lock);
   if (player.gold < item.price) throw new Error(`You need ${item.price} gold.`);
   player.gold -= item.price;
   player.apprenticeship.cosmetics.push(id);
-  player.apprenticeship.equipped.push(id);
+  equipCosmetic(player, id, true);
   return item;
 }
 

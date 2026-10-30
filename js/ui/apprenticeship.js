@@ -2,7 +2,7 @@ import { state } from '../state.js';
 import { dispatch } from '../progress.js';
 import { now } from '../clock.js';
 import { DOCUMENT_PACKS, WRITING_TASKS, CAPSTONE, FIRM_PACKS, COSMETICS, TRAINING_JURISDICTION, evidenceAt } from '../data/apprenticeship.js';
-import { taskById, pendingAttempt, taskAttempts, returnedTasks, capstoneReady, requestIssueUrl } from '../apprenticeship.js';
+import { taskById, pendingAttempt, taskAttempts, returnedTasks, capstoneReady, requestIssueUrl, cosmeticLock } from '../apprenticeship.js';
 import { Actor } from '../entities/actor.js';
 import { appearanceLook } from '../data/appearance.js';
 import { mountAppearanceEditor } from './appearance.js';
@@ -206,10 +206,10 @@ export function createApprenticeshipUI({ beforeOpen, onChange, onPractice, onWri
 
   function renderFirm(prefill = '') {
     body.innerHTML = section('Your firm · Jurisdictions', 'Choose your practice', 'Open a question pack in BarMail. Without a Work Phone, this takes you to your office computer.')
-      + `<div class="desk-card-grid">${PRACTICE_PACKS.map(pack => `<article class="desk-card"><span class="desk-badge">${pack.count} questions · ${pack.isTestPack ? 'TEST · review required' : 'Playable'}</span><h3>${e(pack.label)}</h3><p>${e(pack.note)}</p>${button('Play ' + pack.label, 'practice-pack', pack.id)}</article>`).join('')}</div>`
+      + `<div class="desk-card-grid">${PRACTICE_PACKS.map(pack => `<article class="desk-card"><span class="desk-badge">${pack.count} questions · ${pack.review === 'pending' ? 'Playable · review pending' : 'Playable'}</span><h3>${e(pack.label)}</h3><p>${e(pack.note)}</p>${button('Play ' + pack.label, 'practice-pack', pack.id)}</article>`).join('')}</div>`
       + note('Unofficial educational questions with authored feedback. California and New York source checks: September 27, 2026. These question packs are separate from a full jurisdiction-specific firm curriculum.')
       + `<h3 class="desk-subheading">Your fictional firm apprenticeship</h3><p>State of Juris office policies govern six writing assignments, two synthetic files and one capstone. No real jurisdiction is implied.</p>${button('Open your journal', 'journal')}`
-      + `<details class="desk-disclosure"><summary>Future firm curricula and worldwide expansion</summary><p>${e(GLOBAL_CURRICULUM.mission)}</p><div class="global-regions">${GLOBAL_CURRICULUM.regions.map(region => `<article><h4>${e(region.name)}</h4><p>${region.places.map(e).join(' · ')}</p></article>`).join('')}</div><p>These are future targets. Canada has a local test pack above; practitioner review and a full continuing-matter curriculum remain pending. A country may contain several legal systems.</p><div class="desk-card-grid">${FIRM_PACKS.filter(pack => pack.id !== 'juris').map(pack => `<article class="desk-card"><h4>${e(pack.label)} firm curriculum</h4><p>${e(pack.status)} · ${e(pack.note)}</p>${button('Request this curriculum', 'request-prefill', pack.label)}</article>`).join('')}</div></details>`
+      + `<details class="desk-disclosure"><summary>Future firm curricula and worldwide expansion</summary><p>${e(GLOBAL_CURRICULUM.mission)}</p><div class="global-regions">${GLOBAL_CURRICULUM.regions.map(region => `<article><h4>${e(region.name)}</h4><p>${region.places.map(e).join(' · ')}</p></article>`).join('')}</div><p>These are future targets. Canada is playable above; practitioner review of its answer key and a full continuing-matter curriculum remain pending. A country may contain several legal systems.</p><div class="desk-card-grid">${FIRM_PACKS.filter(pack => pack.id !== 'juris').map(pack => `<article class="desk-card"><h4>${e(pack.label)} firm curriculum</h4><p>${e(pack.status)} · ${e(pack.note)}</p>${button('Request this curriculum', 'request-prefill', pack.label)}</article>`).join('')}</div></details>`
       + `<form id="jurisdiction-form" class="request-form"><h3>Put a jurisdiction on the wish list</h3><p>Use an exact legal system, such as a U.S. state, England & Wales, Scotland or Northern Ireland. No real client facts or private documents.</p><label class="desk-label" for="request-label">Jurisdiction</label><input id="request-label" name="label" maxlength="80" required value="${e(prefill)}"><label class="desk-label" for="request-topic">What would you like to practice?</label><textarea id="request-topic" name="topic" maxlength="500" rows="2" required></textarea><label class="desk-label" for="request-help">Optional reviewer offer or public-source links</label><textarea id="request-help" name="help" maxlength="500" rows="2"></textarea><p class="desk-note">This saves a local request draft. You can then review it on GitHub and choose whether to submit it publicly. Nothing is sent automatically.</p><p id="request-error" class="desk-error" role="alert"></p><button type="submit">Save request locally</button></form>`
       + `<h3 class="desk-subheading">Your local request drafts</h3>${state.apprenticeship.requests.length ? state.apprenticeship.requests.map((request) => `<article class="desk-card"><h4>${e(request.label)}</h4><p>${e(request.topic)}</p><p class="desk-note">${e(request.status)}</p><a class="desk-link" href="${e(requestIssueUrl(request))}" target="_blank" rel="noopener noreferrer">Review draft on GitHub ↗</a></article>`).join('') : note('No requests saved yet. A repeat request for the same jurisdiction reopens the existing local entry.')}`;
     $('jurisdiction-form').addEventListener('submit', (event) => {
@@ -221,12 +221,15 @@ export function createApprenticeshipUI({ beforeOpen, onChange, onPractice, onWri
   }
 
   function renderWardrobe() {
-    body.innerHTML = section('The wardrobe', 'An attorney with character.', 'Change your hair, face and clothes whenever you like. Identity options are free; earned accessories stay with this character run.')
+    body.innerHTML = section('The wardrobe', 'An attorney with character.', 'Change your hair, face and clothes whenever you like. Identity options are free; accessories, jewelry and formal wear are bought with study gold or earned, and stay with this character run.')
       + '<div id="wardrobe-appearance"></div>'
-      + `<h3 class="desk-subheading">Earned accessories</h3><div class="desk-card-grid">${COSMETICS.map((item) => {
+      + `<h3 class="desk-subheading">Accessories, jewelry and formal wear</h3><div class="desk-card-grid">${COSMETICS.map((item) => {
         const owned = state.apprenticeship.cosmetics.includes(item.id), equipped = state.apprenticeship.equipped.includes(item.id);
-        return `<article class="desk-card"><span class="desk-badge">${owned ? 'Owned' : `${item.price} gold`}</span><h3>${e(item.label)}</h3><p>${e(item.note)}</p>${button(owned ? equipped ? 'Unequip' : 'Equip' : 'Purchase & wear', owned ? 'equip' : 'buy', item.id, !owned && (state.gold < item.price || pendingAttempt(state)) ? 'disabled' : '')}</article>`;
-      }).join('')}</div>` + note('The earned gold tie overrides the base tie color while equipped. Selecting another tie color puts it away; it remains in your wardrobe.');
+        const lock = owned ? null : cosmeticLock(state, item);
+        const badge = owned ? 'Owned' : item.price === 0 ? 'Earned reward' : `${item.price} gold`;
+        const label = owned ? (equipped ? 'Unequip' : 'Equip') : item.price === 0 ? 'Claim & wear' : 'Purchase & wear';
+        return `<article class="desk-card"><span class="desk-badge">${badge}</span><h3>${e(item.label)}</h3><p>${e(item.note)}</p>${lock ? `<p class="desk-note">${e(lock)}</p>` : ''}${button(label, owned ? 'equip' : 'buy', item.id, !owned && (lock || state.gold < item.price || pendingAttempt(state)) ? 'disabled' : '')}</article>`;
+      }).join('')}</div>` + note('The gold tie overrides the base tie color while equipped; selecting another tie color puts it away. The tuxedo and gown replace your suit while worn and need the apartment Wardrobe Rack. Only one formal outfit is worn at a time.');
     mountAppearanceEditor($('wardrobe-appearance'), {
       prefix: 'wardrobe', read: () => state, equipped: () => state.apprenticeship.equipped,
       onChange: (key, value) => {

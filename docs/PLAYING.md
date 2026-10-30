@@ -4,8 +4,9 @@
 
 ## Start with one activity
 
-Create a new attorney and enter Hardsell & Firestone. Customize freely; you can
-change your appearance later in **Journal → Wardrobe**.
+Create a new attorney and enter Hardsell & Firestone. Customize freely, or press
+**Surprise me** for a random look; you can change your appearance later in
+**Journal → Wardrobe**.
 
 - **A quick ethics question:** open **BarMail** at your office computer, select
   a practice pack, and open a subject line. Read all the facts before choosing
@@ -20,43 +21,53 @@ lets you revisit the current tier once its questions have been answered.
 
 ## Choose a jurisdiction
 
-Use **Journal → Firm jurisdictions** for counts and a **Play** button, or select
-a pack inside BarMail. California, New York, US MPRE-style, England & Wales
-SQE-style and LawScape original dilemmas are available. Mixed practice includes
-all five, so check each email's jurisdiction. The [jurisdiction catalog](JURISDICTIONS.md)
+New attorneys start on the **LawScape original dilemmas**. Use **Journal → Firm
+jurisdictions** for counts and a **Play** button, or select a pack inside
+BarMail. California, New York, US MPRE-style, England & Wales SQE-style, Canada
+and the original dilemmas are available. Mixed practice includes all six, so
+check each email's jurisdiction. The [jurisdiction catalog](JURISDICTIONS.md)
 explains coverage and source-review limits.
 
 Without a Work Phone, a catalog Play button takes you to the office computer.
 With the upgrade, you can open BarMail in any location.
 
-This local build also offers **Canada · TEST PACK**, with 25 questions and five
-email assignments awaiting practitioner review. All 25 are available at every
-level and are excluded from mixed practice. Their answers do not change Ethics,
-gold or streaks. Choose **All mail** or **Writing assignments** to open the five
-emails. Draft, commit, compare the authored guidance, and export your responses
-from a committed email. [Open the practitioner review package](../canada-test/review.html).
+The **Canada** pack's 25 questions pay gold and cost Ethics like every other
+pack; practitioner review of its answer key is still pending and the inbox says
+so. The pack also carries five email assignments. Choose **All mail** or
+**Writing assignments** to open them, then draft, commit, compare the authored
+guidance, and export your responses from a committed email. They are not graded.
+[Open the practitioner review package](../canada-test/review.html).
 
 ## Move and explore
 
 Click or tap a floor tile to walk. Select a highlighted person or object to walk
-over and interact. WASD and arrow keys also move. Use **Travel** for destinations
-and doors for connected rooms. Close a panel with its close button or Escape.
+over and interact. WASD and arrow keys also move. Every building door opens onto
+**Juris Avenue**, a street with the law office, the apartments, the courthouse
+and The Sidebar; walk along it and step into a doorway. **Travel** (or T) is a
+quick-travel shortcut. Close a panel with its close button or Escape.
 
 Explore your office, Jim's corner office, Linda's office, the conference room,
-courtroom, The Sidebar and your apartment. The courtroom has scripted characters;
-live hearings and AI judges are planned. The Sidebar offers seating, drinks,
-local table notes, a local completed-run billable-time board and the Briefcase
-Dash arcade cabinet: press Space to jump caterpillars and the down arrow to duck
-butterflies on the walk to the office. Shared chat and
-other-player presence are not available yet.
+the Associates' Floor, the courtroom, The Sidebar, the street and your apartment.
+The courtroom has scripted characters; live hearings and AI judges are planned.
+The Sidebar offers seating, drinks, local table notes, a local completed-run
+billable-time board and the Briefcase Dash arcade cabinet: insert 5 gold for
+three rounds, then press Space to jump caterpillars and the down arrow to duck
+butterflies on the walk to the office. Drinks at The Sidebar cost no Ethics but
+slow you down; arriving at the firm or the courthouse while still impaired costs
+10 Ethics, once per drink. Your apartment, the street and the lounge are safe,
+and the office Espresso Machine upgrade sobers you up.
 
 ## Gold, Ethics and your character run
 
-Correct ethics answers earn gold. Consecutive mistakes cause 30, then 45, then
-60 Ethics damage; the Paralegal upgrade halves that damage. A correct streak
-starts healing after two answers. Rest in your apartment and use available food
-and coffee interactions to recover. Office and apartment upgrades affect play;
-wardrobe accessories make your earnings visible.
+Correct ethics answers earn gold, and a streak of correct answers multiplies it
+(×1.1, ×1.2 … up to ×1.5 from the sixth in a row). Consecutive mistakes cause
+30, then 45, then 60 Ethics damage; the Paralegal upgrade halves that damage. A
+correct streak starts healing after two answers. Rest in your apartment and use
+available food and coffee interactions to recover. Office and apartment upgrades
+affect play; wardrobe accessories, jewelry and formal wear make your earnings
+visible. Five correct England & Wales answers earn a powdered barrister's wig;
+the tuxedo and evening gown need the apartment Wardrobe Rack. With 2,000 gold
+you can adopt a cat or a dog from the apartment furniture catalog and name it.
 
 **Zero Ethics ends the run.** Disbarment clears that character's gold, upgrades,
 writing drafts and progress. A local completed-run billable-time record can

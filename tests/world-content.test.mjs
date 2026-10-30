@@ -5,11 +5,71 @@ import { ZONES } from '../js/world/zones.js';
 import { PROPS } from '../js/world/props.js';
 import { findPath } from '../js/engine/pathfind.js';
 
-test('the local world contains eight playable zones including The Sidebar and the Associates’ Floor', () => {
+test('the local world contains nine playable zones including The Sidebar, the Associates’ Floor and the street', () => {
   assert.deepEqual(
     Object.keys(ZONES),
-    ['office', 'corner_office', 'linda_office', 'conference_room', 'courtroom', 'sidebar', 'associates', 'apartment'],
+    ['office', 'corner_office', 'linda_office', 'conference_room', 'courtroom', 'sidebar', 'associates', 'street', 'apartment'],
   );
+});
+
+// Walkability that honours upgrade-gated props (none owned in tests).
+const walkIn = (zone) => (x, y) => x >= 0 && y >= 0 && x < zone.w && y < zone.h && zone.tile(x, y) !== 'x'
+  && !(zone.walls && (x === 0 || y === 0))
+  && !zone.props.some((prop) => { if (prop.visible && !prop.visible()) return false; const def = PROPS[prop.type]; return def.solid && x >= prop.x && x < prop.x + def.w && y >= prop.y && y < prop.y + def.h; });
+
+test('every building door opens onto the street and each street door leads back inside', () => {
+  const street = ZONES.street;
+  assert.equal(street.outdoor, true); assert.equal(street.walls, undefined);
+  assert.ok(street.w >= 30 && street.h <= 6, 'the street reads side-on: wide and shallow');
+  assert.ok(street.props.filter((prop) => prop.type === 'facade').length >= 4);
+  for (const id of ['office', 'associates', 'apartment', 'courtroom', 'sidebar']) {
+    const door = ZONES[id].portals.find((portal) => portal.to === 'street');
+    assert.ok(door && !door.travel, `${id} should lead to the street`);
+    assert.ok(walkIn(street)(door.dest.x, door.dest.y), `${id} street arrival tile`);
+    assert.notEqual(findPath(walkIn(street), street.w, street.h, street.spawn.x, street.spawn.y, door.dest.x, door.dest.y), null);
+  }
+  for (const door of street.portals) {
+    const target = ZONES[door.to];
+    assert.ok(target, door.label);
+    assert.ok(walkIn(target)(door.dest.x, door.dest.y), `${door.to} arrival tile`);
+    assert.notEqual(findPath(walkIn(street), street.w, street.h, street.spawn.x, street.spawn.y, door.x, door.y), null, door.label);
+  }
+  assert.deepEqual(street.portals.map((portal) => portal.to), ['office', 'apartment', 'courtroom', 'sidebar']);
+  assert.ok(Object.values(ZONES).every((zone) => zone.portals.every((portal) => !portal.travel)), 'no teleport-only exits remain');
+});
+
+test('furniture faces the right way and sits against the walls', () => {
+  const office = ZONES.office;
+  const lizChair = office.props.find((prop) => prop.type === 'officechair');
+  assert.deepEqual({ x: lizChair.x, y: lizChair.y }, { x: 1, y: 9 });
+  assert.equal(typeof lizChair.broken, 'function'); assert.equal(lizChair.broken(), true, 'broken until the upgrade');
+  const liz = office.npcs.find((npc) => npc.id === 'secretary');
+  assert.equal(liz.seated, true); assert.deepEqual({ x: liz.x, y: liz.y }, { x: 1, y: 9 });
+  assert.equal(office.props.some((prop) => prop.type === 'clientchair'), false, 'no stray chair in the middle of the office');
+  const espresso = office.props.find((prop) => prop.interact?.action === 'espresso');
+  assert.equal(espresso.type, 'coffeemachine'); assert.equal(typeof espresso.visible, 'function');
+
+  const jim = ZONES.corner_office;
+  assert.ok(jim.props.filter((prop) => prop.type === 'clientchair').every((prop) => prop.facing === 'n'), 'client chairs face Jim’s desk');
+  assert.equal(jim.props.find((prop) => prop.type === 'barcart').y, 1, 'bar cart against the back wall');
+  assert.equal(jim.props.find((prop) => prop.type === 'executivedesk').screen, 'n');
+  assert.equal(jim.npcs[0].seated, true);
+
+  const linda = ZONES.linda_office;
+  assert.equal(linda.props.find((prop) => prop.type === 'bookshelf').y, 1, 'bookshelf against the back wall');
+  assert.equal(linda.props.find((prop) => prop.type === 'executivedesk').screen, 'n');
+  assert.ok(linda.props.some((prop) => prop.type === 'officechair')); assert.equal(linda.npcs[0].seated, true);
+
+  const plants = ZONES.conference_room.props.filter((prop) => prop.type === 'plant');
+  assert.ok(plants.length >= 2 && plants.every((prop) => prop.x === 1 || prop.x === ZONES.conference_room.w - 1), 'conference plants along the sides');
+  assert.ok(ZONES.courtroom.props.filter((prop) => prop.type === 'bench').every((prop) => prop.facing === 'n'), 'benches face the judge');
+
+  const apartment = ZONES.apartment;
+  assert.equal(apartment.props.find((prop) => prop.type === 'plant').x, 1);
+  assert.equal(apartment.props.find((prop) => prop.type === 'coffeemachine').y, 1);
+  const pet = apartment.npcs.find((npc) => npc.id === 'pet');
+  assert.equal(pet.wander, true); assert.equal(pet.talk, 'pet'); assert.equal(typeof pet.visible, 'function'); assert.equal(pet.visible(), false);
+  assert.equal(typeof pet.look, 'function');
 });
 
 test('every zone prop has a drawable definition', () => {
@@ -24,7 +84,7 @@ test('the main office connects the requested workspaces and filing cabinet', () 
   const office = ZONES.office;
   assert.deepEqual(
     office.portals.filter((portal) => portal.to).map((portal) => portal.to),
-    ['corner_office', 'linda_office', 'associates', 'conference_room'],
+    ['corner_office', 'linda_office', 'associates', 'conference_room', 'street'],
   );
   const filingStation = office.props.find(
     (prop) => prop.type === 'filingstation' && prop.interact?.action === 'doc_review',
@@ -114,7 +174,7 @@ test('Derek Balam is the courtroom bailiff with an interactive role and badge', 
 });
 
 test('the new lounge and courtroom interactions are reachable from their entrances', () => {
-  for (const zone of [ZONES.sidebar, ZONES.courtroom, ZONES.associates]) {
+  for (const zone of [ZONES.sidebar, ZONES.courtroom, ZONES.associates, ZONES.street, ZONES.office, ZONES.apartment, ZONES.corner_office, ZONES.linda_office, ZONES.conference_room]) {
     const walk = (x, y) => x > 0 && y > 0 && x < zone.w && y < zone.h && zone.tile(x,y) !== 'x'
       && !zone.props.some((prop) => { const def = PROPS[prop.type]; return def.solid && x >= prop.x && x < prop.x+def.w && y >= prop.y && y < prop.y+def.h; });
     assert.ok(walk(zone.spawn.x,zone.spawn.y), `${zone.id} spawn`);

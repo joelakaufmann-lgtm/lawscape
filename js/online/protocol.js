@@ -127,7 +127,7 @@ export function composeStatusLabel(kind, detail = {}, progress = {}) {
     case 'review': return clampLabel(`Document review · cycle ${reviewed + 1}`);
     case 'study': {
       const pack = PRACTICE_PACKS.find((item) => item.id === detail.pack);
-      const name = pack ? pack.label.replace(/ · TEST PACK$/, ' test') : 'ethics';
+      const name = pack ? pack.label : 'ethics';
       return clampLabel(`Studying ${name} · streak x${streak}`);
     }
     case 'journal': {

@@ -8,13 +8,12 @@ The package contains 25 original multiple-choice questions and five email assign
 
 1. Open [the complete practitioner review](review.html) in a browser. It contains all questions, every option explanation, email records, sample replies, rubrics, sources and a notes field for each of the 30 exercises.
 2. Open [the editable overview](overview.html) for the meeting summary. It uses LawScape colours and includes explanation popups, editing and HTML/template exports.
-3. To play, open [LawScape](../index.html), create or continue a character, then choose **Journal → Firm jurisdictions → Canada · TEST PACK**. BarMail’s practice selector also offers the pack. Choose **All mail** to see both questions and emails, or **Writing assignments** for the five emails.
+3. To play, open [LawScape](../index.html), create or continue a character, then choose **Journal → Firm jurisdictions → Canada**. BarMail’s practice selector also offers the pack. Choose **All mail** to see both questions and emails, or **Writing assignments** for the five emails.
 4. For a shared review, send the complete ZIP. Extract it before opening files. The files run locally without an account or a backend. This run does not publish a live URL or send anything to your practitioner.
 
 ## What the local test does
 
-- All 25 questions are available regardless of the character’s level. Answers show the proposed key, decisive fact, option explanations and source context.
-- Canada is explicitly opt-in and excluded from mixed practice. Canadian responses do not change Ethics, gold, streaks, or released-question difficulty counts. Existing game-world actions outside these exercises retain their usual effects.
+- Since LawScape 0.8.0 the 25 questions are a full practice pack: they follow the shared difficulty tiers, pay gold by difficulty, cost Ethics when wrong, count toward streaks and appear in mixed practice. The inbox and each question are labelled "practitioner review pending" until a Canadian practitioner signs off on the answer key. The review package here is unchanged.
 - Each email supplies a fictional record and asks for approximately 100–200 words. Drafts save locally. Committing preserves a reply; a revision retains earlier replies. Authored partner guidance, a sample and a 10-point rubric are available for comparison. No software grades the free text.
 - Practice responses can be exported from a committed Canadian email. A full character reset clears the character’s test progress, consistent with the game’s reset behaviour. Export work first if it needs to be retained.
 - Reviewer notes save in the browser separately from the game and can be exported as Markdown or JSON. These exports contain the pack version and content hash. “Proposed ready” is a review decision, not formal approval or publication. There is no automatic sync or sending.

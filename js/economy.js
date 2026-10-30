@@ -11,17 +11,20 @@ import { normalizeAppearance } from './data/appearance.js';
 import { ALL_MAIL_SCENARIOS, practiceInbox } from './data/mail.js';
 import { STREAK_HEAL } from './data/ethics.js';
 import { bonuses, findUpgrade } from './data/upgrades.js';
-import { PRACTICE_PACKS } from './data/practice-packs.js';
+import { PRACTICE_PACKS, packIdForSourceType } from './data/practice-packs.js';
 import { CANADA_PACK } from './data/canada.js';
-import { recordCanadaAnswer, nextCanadaRound } from './canada.js';
-import { pendingAttempt } from './apprenticeship.js';
+import { COSMETICS } from './data/apprenticeship.js';
+import { pendingAttempt, grantUnlocks } from './apprenticeship.js';
 import { findHrCategory } from './data/feedback.js';
+import { PET_COST, petKind, sanitizePetName } from './data/pets.js';
 import { ZONES } from './world/zones.js';
 import {
   COFFEE_ETHICS_RESTORE, APARTMENT_FOOD_COST, RAMEN_ETHICS_RESTORE, COOKED_MEAL_ETHICS_RESTORE,
   DOC_REVIEW_CYCLE_MS, DOC_REVIEW_REWARD, LINDA_TIP_COST, RILEY_HINT_COST, WHISKEY_ETHICS_DAMAGE,
   WHISKEY_SLOW_MS, MONEYBAGS_SAFE_GOLD, MONEYBAGS_ETHICS_DAMAGE, MONEYBAGS_GRACE_PURCHASES, ETHICS_TIPS,
-  moneybagsAuditTriggered, rileyHintEligible, wrongAnswerDamage,
+  ARCADE_PLAY_COST, ARCADE_ROUNDS_PER_PLAY, ESPRESSO_ETHICS_RESTORE, ESPRESSO_COOLDOWN_MS,
+  DRUNK_AT_WORK_ETHICS_DAMAGE, DRUNK_PENALTY_ZONES,
+  moneybagsAuditTriggered, rileyHintEligible, wrongAnswerDamage, streakMultiplier,
 } from './data/work.js';
 
 export const GENDERS = ['male', 'female', 'nonbinary'];
@@ -42,33 +45,37 @@ function eligibleScenario(player, scenarioId) {
   return scenario;
 }
 
-// BarMail ethics scenario. Canada test-pack answers are recorded without any
-// gold, Ethics or streak effect; every other pack applies the full economy.
-export function answerScenario(player, scenarioId, choiceIndex, ctx) {
+// BarMail ethics scenario. Every pack (Canada included) applies the full
+// economy: gold scaled by upgrades and the correct-answer streak, Ethics
+// damage for wrong answers, and per-pack correct counts for wardrobe unlocks.
+export function answerScenario(player, scenarioId, choiceIndex) {
   activeRun(player);
   const scenario = eligibleScenario(player, scenarioId);
   const choice = scenario.choices[choiceIndex];
   if (!Number.isInteger(choiceIndex) || !choice) throw new Error('Choose one of the listed replies.');
-  if (scenario.isTestPack) {
-    const attempt = recordCanadaAnswer(player, scenario.id, choice.id, ctx.now);
-    return { testPack: true, scenarioId, choiceIndex, matchesProposedKey: attempt.matchesProposedKey };
-  }
   if (pendingAttempt(player)) throw new Error('Wait for the pending partner reply before submitting another answer.');
   const b = bonuses(player.upgrades);
   player.casesDone++;
   player.hintScenarioId = null;
-  let earned = 0, healed = 0, dmg = 0, disbarred = false;
+  let earned = 0, healed = 0, dmg = 0, disbarred = false, multiplier = 1, unlocked = [];
   if (choice.grade === 'correct') {
-    earned = Math.round(scenario.gold * b.goldMult + b.goldFlat);
-    player.gold += earned;
     player.streak++;
+    multiplier = streakMultiplier(player.streak);
+    earned = Math.round(scenario.gold * b.goldMult * multiplier + b.goldFlat);
+    player.gold += earned;
     player.wrongStreak = 0;
     player.correctDone++;
+    const packId = packIdForSourceType(scenario.sourceType);
+    if (packId) {
+      if (!player.packCorrect || typeof player.packCorrect !== 'object') player.packCorrect = {};
+      player.packCorrect[packId] = (player.packCorrect[packId] || 0) + 1;
+    }
     if (player.streak >= 2) {
       const before = player.ethics;
       healPlayer(player, STREAK_HEAL + b.streakHealBonus);
       healed = player.ethics - before;
     }
+    unlocked = grantUnlocks(player);
   } else {
     player.wrongStreak++;
     dmg = wrongAnswerDamage(player.wrongStreak, playerHasUpgrade(player, 'paralegal'));
@@ -77,8 +84,8 @@ export function answerScenario(player, scenarioId, choiceIndex, ctx) {
   }
   if (!player.seen.includes(scenario.id)) player.seen.push(scenario.id);
   return {
-    testPack: false, scenarioId, choiceIndex, grade: choice.grade, correct: choice.grade === 'correct',
-    earned, healed, dmg, disbarred, streak: player.streak, wrongStreak: player.wrongStreak,
+    scenarioId, choiceIndex, grade: choice.grade, correct: choice.grade === 'correct',
+    earned, healed, dmg, disbarred, multiplier, unlocked, streak: player.streak, wrongStreak: player.wrongStreak,
     rileyHalved: dmg > 0 && playerHasUpgrade(player, 'paralegal'),
   };
 }
@@ -87,7 +94,6 @@ export function buyHint(player, scenarioId) {
   activeRun(player);
   if (pendingAttempt(player)) throw new Error(PURCHASE_WAIT);
   const scenario = eligibleScenario(player, scenarioId);
-  if (scenario.isTestPack) throw new Error('The Canada test pack includes a free rule briefing instead.');
   if (player.hintScenarioId === scenarioId) throw new Error('Riley has already researched this rule.');
   if (!rileyHintEligible(player.upgrades)) throw new Error('Riley needs both the Paralegal Upgrade and Ethics Treatise Shelf.');
   if (player.gold < RILEY_HINT_COST) throw new Error(`You need ${RILEY_HINT_COST} gold for an ethics hint.`);
@@ -97,8 +103,10 @@ export function buyHint(player, scenarioId) {
   return { scenarioId, rule: scenario.rule, cost: RILEY_HINT_COST };
 }
 
+// Linda's tips follow the practice pack: Canada players get the pack's rule
+// briefings, everyone else the US-source tips.
 export function tipPool(player) {
-  return player.practicePack === 'canada-test'
+  return player.practicePack === 'canada'
     ? CANADA_PACK.rules.map((rule) => `${rule.title}: ${rule.summary} ${rule.limits}`)
     : ETHICS_TIPS;
 }
@@ -113,7 +121,7 @@ export function buyTip(player, ctx) {
   player.tipsPurchased++;
   const tips = tipPool(player);
   const tipIndex = Math.min(tips.length - 1, Math.floor(ctx.rng() * tips.length));
-  return { tipIndex, source: player.practicePack === 'canada-test' ? 'canada' : 'us', cost: LINDA_TIP_COST };
+  return { tipIndex, source: player.practicePack === 'canada' ? 'canada' : 'us', cost: LINDA_TIP_COST };
 }
 
 export function buyUpgrade(player, id) {
@@ -195,6 +203,57 @@ export function rest(player, ctx) {
   return { healed: player.ethics - before };
 }
 
+// Office espresso: a small heal on a cooldown that also ends any drink-induced
+// slowdown, so an impaired attorney can sober up before facing a partner.
+export function drinkEspresso(player, ctx) {
+  activeRun(player);
+  if (player.zone !== 'office') throw new Error('The espresso machine is in the main office.');
+  if (!playerHasUpgrade(player, 'espresso')) throw new Error('There is no espresso machine yet. Buy it from the Office Upgrades catalog.');
+  const since = player.lastEspressoAt ? ctx.now - player.lastEspressoAt : Infinity;
+  if (since < ESPRESSO_COOLDOWN_MS) throw new Error(`The machine is still heating up. Try again in ${Math.ceil((ESPRESSO_COOLDOWN_MS - since) / 1000)}s.`);
+  const sobered = (player.slowUntil || 0) > ctx.now;
+  if (!sobered && player.ethics >= playerMaxEthics(player)) throw new Error('Your Ethics is already full. Save the espresso for a harder day.');
+  player.lastEspressoAt = ctx.now;
+  if (sobered) player.slowUntil = ctx.now;
+  const before = player.ethics;
+  healPlayer(player, ESPRESSO_ETHICS_RESTORE);
+  return { healed: player.ethics - before, sobered };
+}
+
+// Briefcase Dash credits are server-owned: five gold buys three rounds, and
+// each round is consumed when a run starts.
+export function arcadeInsertCoin(player) {
+  activeRun(player);
+  if (player.zone !== 'sidebar') throw new Error('The Briefcase Dash cabinet is in The Sidebar.');
+  if (pendingAttempt(player)) throw new Error(PURCHASE_WAIT);
+  if ((player.arcadeCredits || 0) > 0) throw new Error('You still have credits in the machine.');
+  if (player.gold < ARCADE_PLAY_COST) throw new Error(`You need ${ARCADE_PLAY_COST} gold for ${ARCADE_ROUNDS_PER_PLAY} rounds of Briefcase Dash.`);
+  player.gold -= ARCADE_PLAY_COST;
+  player.arcadeCredits = (player.arcadeCredits || 0) + ARCADE_ROUNDS_PER_PLAY;
+  return { cost: ARCADE_PLAY_COST, credits: player.arcadeCredits };
+}
+
+export function arcadeStartRound(player) {
+  activeRun(player);
+  if (player.zone !== 'sidebar') throw new Error('The Briefcase Dash cabinet is in The Sidebar.');
+  if ((player.arcadeCredits || 0) <= 0) throw new Error(`Insert ${ARCADE_PLAY_COST} gold for ${ARCADE_ROUNDS_PER_PLAY} rounds.`);
+  player.arcadeCredits -= 1;
+  return { credits: player.arcadeCredits };
+}
+
+// One pet per character, chosen and named from the apartment's furniture catalog.
+export function adoptPet(player, { kind, name } = {}) {
+  activeRun(player);
+  if (player.zone !== 'apartment') throw new Error('Adoptions are arranged from your apartment.');
+  if (player.pet) throw new Error(`${player.pet.name} is already waiting for you at home.`);
+  if (!petKind(kind)) throw new Error('Choose a cat or a dog.');
+  if (pendingAttempt(player)) throw new Error(PURCHASE_WAIT);
+  if (player.gold < PET_COST) throw new Error(`You need ${PET_COST} gold to adopt a ${kind}.`);
+  player.gold -= PET_COST;
+  player.pet = { kind, name: sanitizePetName(name), adoptedAt: 0 };
+  return { ...player.pet, cost: PET_COST };
+}
+
 export function drinkCoffee(player) {
   activeRun(player);
   if (player.zone !== 'apartment') throw new Error('The coffee machine is in your apartment.');
@@ -261,35 +320,46 @@ export function studyTick(player, ms, ctx) {
   return { credited };
 }
 
-// "Start another study round": forget this tier's answered mail, or advance
-// the Canada test pack to its next round.
+// "Start another study round": forget this tier's answered mail.
 export function resetSeen(player) {
   activeRun(player);
-  if (player.practicePack === 'canada-test') {
-    nextCanadaRound(player);
-    return { pack: 'canada-test', round: player.canada.round };
-  }
   const ids = new Set(practiceInbox(player, ALL_MAIL_SCENARIOS).eligible.map((item) => item.id));
   player.seen = player.seen.filter((id) => !ids.has(id));
   return { pack: player.practicePack, cleared: ids.size };
 }
 
 export function setPracticePack(player, id) {
-  player.practicePack = PRACTICE_PACKS.some((pack) => pack.id === id) ? id : 'mixed';
+  const wanted = id === 'canada-test' ? 'canada' : id; // pre-0.8.0 pack id
+  player.practicePack = PRACTICE_PACKS.some((pack) => pack.id === wanted) ? wanted : 'mixed';
   return { id: player.practicePack };
 }
 
-export function setZone(player, zone) {
+// Changing rooms. Arriving at the firm or the courthouse while a drink is
+// still slowing you costs Ethics once per drinking episode; home, the street
+// and The Sidebar never charge.
+export function setZone(player, zone, ctx) {
   if (!ZONES[zone]) throw new Error('Unknown location.');
   player.zone = zone;
-  return { zone };
+  let ethicsLost = 0, disbarred = false;
+  const now = ctx?.now ?? 0;
+  const impaired = player.runStatus !== 'ended' && player.ethics > 0 && (player.slowUntil || 0) > now;
+  if (impaired && DRUNK_PENALTY_ZONES.includes(zone) && player.drunkPenaltyFor !== player.slowUntil) {
+    player.drunkPenaltyFor = player.slowUntil;
+    ethicsLost = DRUNK_AT_WORK_ETHICS_DAMAGE;
+    disbarred = damagePlayer(player, ethicsLost);
+  }
+  return { zone, ethicsLost, disbarred };
 }
 
 export function setAppearance(player, key, value) {
   const keys = Object.keys(normalizeAppearance());
   if (!keys.includes(key)) throw new Error('Unknown appearance option.');
   Object.assign(player, normalizeAppearance({ ...player, [key]: value }));
-  if (key === 'tieColor') player.apprenticeship.equipped = player.apprenticeship.equipped.filter((id) => id !== 'tie-brass');
+  if (key === 'tieColor') {
+    // Picking a tie color puts away any wardrobe tie; it stays owned.
+    const ties = new Set(COSMETICS.filter((item) => item.look?.tie).map((item) => item.id));
+    player.apprenticeship.equipped = player.apprenticeship.equipped.filter((id) => !ties.has(id));
+  }
   return { key, value: player[key] };
 }
 

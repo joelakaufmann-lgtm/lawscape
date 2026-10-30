@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Actor } from '../js/entities/actor.js';
 import { PAL } from '../js/engine/palette.js';
-import { normalizeAppearance, appearanceLook, HAIR_STYLES, FACIAL_HAIR, HAIR_COLORS, TIE_COLORS } from '../js/data/appearance.js';
+import { normalizeAppearance, appearanceLook, randomAppearance, randomGender, HAIR_STYLES, FACIAL_HAIR, HAIR_COLORS, TIE_COLORS } from '../js/data/appearance.js';
 import { SIDEBAR_ROOM, sidebarTopic, saveSidebarDraft } from '../js/data/sidebar.js';
 import { freshState, state, save, load, reset } from '../js/state.js';
 
@@ -31,6 +31,24 @@ test('custom colors and accessories map consistently to the world and preview', 
   assert.equal(look.hairStyle, 15); assert.equal(look.facialHair, 6); assert.equal(look.outfit, 'skirt');
   assert.equal(appearanceLook(input, ['tie-brass']).tie, '#cba64b');
   assert.equal(input.tieColor, PAL.ties[5], 'equipping a reward must preserve the chosen base color');
+  const dressed = appearanceLook(input, ['sunglasses', 'outfit-gown', 'necklace-pearl', 'wig-powdered', 'watch-gold', 'bogus']);
+  assert.equal(dressed.sunglasses, true); assert.equal(dressed.formal, 'gown'); assert.equal(dressed.wig, true);
+  assert.equal(typeof dressed.necklace, 'string'); assert.equal(typeof dressed.watch, 'string');
+  assert.equal(appearanceLook(input).formal, undefined);
+});
+
+test('the creator randomiser only produces valid appearances and varies with the rng', () => {
+  const mulberry = (seed) => () => { seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const styles = new Set(), outfits = new Set(), genders = new Set();
+  for (let seed = 1; seed <= 200; seed++) {
+    const rng = mulberry(seed);
+    const look = randomAppearance(rng);
+    assert.deepEqual(normalizeAppearance(look), look);
+    styles.add(look.hairStyle); outfits.add(look.outfit); genders.add(randomGender(rng));
+  }
+  assert.ok(styles.size > 4 && outfits.size === 2 && genders.size === 3);
+  assert.deepEqual(normalizeAppearance(randomAppearance(() => 0.999999)), randomAppearance(() => 0.999999));
+  assert.equal(randomAppearance(() => 0).hairStyle, 0);
 });
 
 test('all hair, beard, outfit and pose branches render finite coordinates with balanced canvas state', () => {
@@ -46,8 +64,9 @@ test('all hair, beard, outfit and pose branches render finite coordinates with b
     set: (_target, key, value) => { if (key === 'fillStyle' || key === 'strokeStyle') assert.equal(typeof value, 'string'); return true; },
   });
   for (let hairStyle=0; hairStyle<HAIR_STYLES.length; hairStyle++) for (let facialHair=0; facialHair<FACIAL_HAIR.length; facialHair++) {
-    for (const outfit of ['trousers','skirt']) for (const pose of ['stand','walk','sit']) for (const facing of [-1,0,1]) {
-      const actor = new Actor(0,0,{ ...appearanceLook({ hairStyle, facialHair, outfit, hair: hairStyle % PAL.hair.length, faceShape: facialHair % 3, glasses: facialHair % 2 === 1 }), previewSeat: true, badge: true });
+    for (const outfit of ['trousers','skirt']) for (const pose of ['stand','walk','sit']) for (const facing of [-1,0,1]) for (const formal of [null,'tuxedo','gown']) {
+      const accessories = { formal, wig: hairStyle % 2 === 0, necklace: '#f1ecdf', sunglasses: facialHair % 3 === 0, earrings: '#e6c45c', watch: '#c9a53a', pocketSquare: '#d9b656' };
+      const actor = new Actor(0,0,{ ...appearanceLook({ hairStyle, facialHair, outfit, hair: hairStyle % PAL.hair.length, faceShape: facialHair % 3, glasses: facialHair % 2 === 1 }), ...accessories, previewSeat: true, badge: true });
       actor.facing = facing;
       if (pose === 'walk') actor.setPath([{x:1,y:0}]);
       if (pose === 'sit') actor.activity = 'sitting';

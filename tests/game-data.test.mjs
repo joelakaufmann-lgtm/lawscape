@@ -208,7 +208,7 @@ test('reset keeps a stable state reference and restores a new attorney', () => {
   assert.equal(state.hintsPurchased, 0);
   assert.equal(state.wrongStreak, 0);
   assert.equal(state.whiskeyDrinks, 0);
-  assert.equal(state.practicePack, 'mixed');
+  assert.equal(state.practicePack, 'juris');
   assert.equal(state.hrEmailsSent, 0);
   assert.equal(state.moneybagsStolen, false);
   assert.equal(state.moneybagsPurchases, 0);

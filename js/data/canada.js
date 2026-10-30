@@ -20,7 +20,7 @@ export const CANADA_PACK = {
     "Five focused topics in three provinces; not comprehensive Canadian ethics coverage.",
     "Primary sources retrieved; answers and rubrics are author interpretations awaiting Canadian practitioner review.",
     "No AI grading, actual email, audio capture, client records, or external AI transmission.",
-    "Canadian test answers do not award gold, alter Ethics, change streaks, or advance the released-question difficulty tiers."
+    "Canadian questions use the standard LawScape economy (gold by difficulty, Ethics damage, streaks and difficulty tiers) and are included in mixed practice; practitioner review of the answers remains pending."
   ],
   "sources": [
     {
@@ -1546,16 +1546,16 @@ export const CANADA_PACK = {
     }
   ]
 };
-export const CANADA_DIGEST = "ec8e0ce25436abde1fcca52589607ed6ca6b1ad70b95347eec0abdafc02da645";
+export const CANADA_DIGEST = "2431b107d9097a77ab52ac32162bb021d01d3c7a7072820f40725a3530fea2f9";
 export const CANADA_SCENARIOS = CANADA_PACK.questions.map(q => ({
-  id: q.id, difficulty: q.difficulty, sourceType: 'canada-test', isTestPack: true,
+  id: q.id, difficulty: q.difficulty, sourceType: 'canada-style',
   jurisdiction: q.jurisdiction, from: 'Canadian practice supervisor', role: q.practitionerRole,
   subject: q.title, body: q.setting + '\n\n' + q.body + '\n\nForum: ' + q.forum,
   rule: q.ruleIds.map(id => CANADA_PACK.rules.find(r => r.id === id).title).join(' · '),
   explanation: q.options.find(o => o.id === q.answer).explanation,
   choices: q.options.map(o => ({ id: o.id, text: o.text, grade: o.id === q.answer ? 'correct' : 'wrong', why: o.explanation })),
   sourceUrl: CANADA_PACK.sources.find(s => s.id === CANADA_PACK.rules.find(r => r.id === q.ruleIds[0]).sourceRefs[0].id).url,
-  sourceNote: 'Canada test pack · Practitioner review required · Original fictional exercise · No Ethics or gold effects.',
+  sourceNote: 'Canada pack · Original fictional exercise · Practitioner review pending.',
   localSourceFile: 'canada-test/review.html#' + q.id, sourceLabel: 'Question, explanations and practitioner review',
-  officialSourceLabel: 'Official primary source', gold: 0, ruleIds: q.ruleIds
+  officialSourceLabel: 'Official primary source', gold: q.difficulty === 1 ? 35 : q.difficulty === 2 ? 45 : 60, ruleIds: q.ruleIds
 }));

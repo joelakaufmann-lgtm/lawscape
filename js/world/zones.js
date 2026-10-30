@@ -1,8 +1,14 @@
 // Zone definitions: floor tiles, props, portals, NPCs, and interaction nodes.
-// The world is an office suite, apartment, courtroom and future social lounge.
-// Office portals lead to the partners' offices and conference room.
+// The world is an office suite, apartment, courtroom, The Sidebar lounge and
+// the street that joins the buildings. Office portals lead to the partners'
+// offices and conference room; every building door opens onto the street.
 //
-// Tile chars: 'w' wood  'r' rug  'x' void (never walkable)
+// Tile chars: 'w' wood  'r' rug  'm'/'M' marble  'p' pavement  'a' asphalt
+//             'x' void (never walkable)
+// Prop extras: `facing:'n'` (chairs/benches open toward the back wall),
+// `screen:'n'` (desk monitors face the person seated north of the desk),
+// `broken:()=>bool` (Liz's chair), `label` (bookshelf plaque).
+// NPC extras: `seated:true`, `wander:true`, `look` may be a function.
 
 import { hasUpgrade, state } from '../state.js';
 
@@ -30,14 +36,17 @@ export const ZONES = {
         interact: { label: 'Case Board — Your Record', action: 'record' } },
       { type: 'bookshelf', x: 10, y: 1, full: () => hasUpgrade('subscription'),
         interact: { label: 'Ethics Treatises — Rule Library', action: 'rules' } },
-      { type: 'clientchair', x: 5, y: 4 },
       { type: 'cabinet', x: 3, y: 3,
         interact: { label: 'Office Upgrades Catalog', action: 'shop_office' } },
       { type: 'filingstation', x: 1, y: 3,
         interact: { label: 'Filing Cabinet — Review Documents', action: 'doc_review' } },
       { type: 'paralegaldesk', x: 1, y: 8 },
       { type: 'paralegaldesk', x: 9, y: 8, visible: () => hasUpgrade('paralegal') },
-      { type: 'officechair', x: 3, y: 8, visible: () => hasUpgrade('liz_chair') },
+      // Liz sits at the screen side of her desk. The chair is broken until the
+      // "Chair for Liz Loza" upgrade replaces it.
+      { type: 'officechair', x: 1, y: 9, broken: () => !hasUpgrade('liz_chair') },
+      { type: 'coffeemachine', x: 12, y: 1, owned: () => true, visible: () => hasUpgrade('espresso'),
+        interact: { label: 'Espresso Machine — +5 Ethics, sobers you up', action: 'espresso' } },
       { type: 'plant', x: 1, y: 6, visible: () => hasUpgrade('houseplants') },
       { type: 'plant', x: 4, y: 1, visible: () => hasUpgrade('houseplants') },
       { type: 'dotpainting', x: 8, y: 0, visible: () => hasUpgrade('artwork') },
@@ -47,10 +56,10 @@ export const ZONES = {
       { x: 13, y: 5, label: 'Linda Firestone’s Office', to: 'linda_office' },
       { x: 13, y: 7, label: 'Associates’ Floor', to: 'associates', dest: { x: 16, y: 6 } },
       { x: 13, y: 9, label: 'Conference Room', to: 'conference_room' },
-      { x: 6, y: 11, label: 'Leave the Office', travel: true },
+      { x: 6, y: 11, label: 'Leave the Office — to the street', to: 'street', dest: { x: 4, y: 2 } },
     ],
     npcs: [
-      { id: 'secretary', name: 'Liz Loza, Secretary', x: 2, y: 7,
+      { id: 'secretary', name: 'Liz Loza, Secretary', x: 1, y: 9, seated: true,
         look: { suit: '#6e2436', gender: 'female', skin: 2, hair: 1, hairStyle: 3, eye: 2 },
         icon: 'dot', talk: 'secretary' },
       { id: 'paralegal', name: 'Riley Readsalot, Paralegal', x: 10, y: 7,
@@ -76,20 +85,21 @@ export const ZONES = {
       { type: 'wallwindow', x: 3, y: 0 },
       { type: 'wallwindow', x: 5, y: 0 },
       { type: 'wallwindow', x: 7, y: 0 },
-      { type: 'executivedesk', x: 3, y: 3, nameplate: true },
-      { type: 'clientchair', x: 3, y: 5 },
-      { type: 'clientchair', x: 6, y: 5 },
+      { type: 'executivedesk', x: 3, y: 3, nameplate: true, screen: 'n' },
+      { type: 'officechair', x: 4, y: 2 },
+      { type: 'clientchair', x: 3, y: 5, facing: 'n' },
+      { type: 'clientchair', x: 6, y: 5, facing: 'n' },
       { type: 'plant', x: 2, y: 6 },
       { type: 'safe', x: 1, y: 5, empty: () => state.moneybagsStolen,
         interact: { label: 'Mr. Hardsell’s Safe — Client Gold', action: 'moneybags_safe' } },
-      { type: 'barcart', x: 8, y: 5,
+      { type: 'barcart', x: 8, y: 1,
         interact: { label: 'Bar Cart — Decanter and Glass', action: 'whiskey' } },
     ],
     portals: [
       { x: 5, y: 7, label: 'Return to the Main Office', to: 'office', dest: { x: 12, y: 2 } },
     ],
     npcs: [
-      { id: 'jim', name: 'Jim Hardsell, Managing Partner', x: 4, y: 2,
+      { id: 'jim', name: 'Jim Hardsell, Managing Partner', x: 4, y: 2, seated: true,
         look: { suit: '#2b2b33', gender: 'male', skin: 4, hair: 3, hairStyle: 0, eye: 0 },
         icon: 'dot', talk: 'jim' },
     ],
@@ -110,15 +120,16 @@ export const ZONES = {
       { type: 'wallwindow', x: 1, y: 0 },
       { type: 'wallwindow', x: 3, y: 0 },
       { type: 'wallwindow', x: 5, y: 0 },
-      { type: 'executivedesk', x: 3, y: 3, nameplate: true },
-      { type: 'bookshelf', x: 6, y: 4, full: true },
+      { type: 'executivedesk', x: 3, y: 3, nameplate: true, screen: 'n' },
+      { type: 'officechair', x: 4, y: 2 },
+      { type: 'bookshelf', x: 7, y: 1, full: true, label: 'CASE REPORTS' },
       { type: 'plant', x: 1, y: 5 },
     ],
     portals: [
       { x: 4, y: 7, label: 'Return to the Main Office', to: 'office', dest: { x: 12, y: 5 } },
     ],
     npcs: [
-      { id: 'linda', name: 'Linda Firestone, Partner', x: 4, y: 2,
+      { id: 'linda', name: 'Linda Firestone, Partner', x: 4, y: 2, seated: true,
         look: { suit: '#6e2436', gender: 'female', skin: 1, hair: 2, hairStyle: 1, eye: 1 },
         icon: 'dot', talk: 'linda' },
     ],
@@ -140,10 +151,12 @@ export const ZONES = {
       { type: 'conftable', x: 4, y: 4 },
       { type: 'clientchair', x: 3, y: 4 },
       { type: 'clientchair', x: 7, y: 4 },
-      { type: 'clientchair', x: 4, y: 6 },
-      { type: 'clientchair', x: 6, y: 6 },
-      { type: 'plant', x: 1, y: 6 },
-      { type: 'plant', x: 9, y: 6 },
+      { type: 'clientchair', x: 4, y: 6, facing: 'n' },
+      { type: 'clientchair', x: 6, y: 6, facing: 'n' },
+      { type: 'plant', x: 1, y: 2 },
+      { type: 'plant', x: 1, y: 7 },
+      { type: 'plant', x: 10, y: 2 },
+      { type: 'plant', x: 10, y: 7 },
     ],
     portals: [
       { x: 5, y: 8, label: 'Return to the Main Office', to: 'office', dest: { x: 12, y: 9 } },
@@ -168,12 +181,12 @@ export const ZONES = {
       { type: 'clerkcounter', x: 9, y: 3 },
       { type: 'counseltable', x: 3, y: 6 },
       { type: 'counseltable', x: 8, y: 6 },
-      { type: 'bench', x: 2, y: 8 },
-      { type: 'bench', x: 5, y: 8 },
-      { type: 'bench', x: 8, y: 8 },
+      { type: 'bench', x: 2, y: 8, facing: 'n' },
+      { type: 'bench', x: 5, y: 8, facing: 'n' },
+      { type: 'bench', x: 8, y: 8, facing: 'n' },
     ],
     portals: [
-      { x: 6, y: 10, label: 'Leave the Courtroom', travel: true },
+      { x: 6, y: 10, label: 'Leave the Courtroom — to the street', to: 'street', dest: { x: 20, y: 2 } },
     ],
     npcs: [
       { id: 'derek_balam', name: 'Derek Balam, Bailiff', x: 10, y: 5,
@@ -214,7 +227,7 @@ export const ZONES = {
       { type: 'arcade', x: 8, y: 1,
         interact: { label: 'Briefcase Dash — Arcade Cabinet', action: 'arcade' } },
     ],
-    portals: [{ x: 7, y: 11, label: 'Leave The Sidebar', travel: true }],
+    portals: [{ x: 7, y: 11, label: 'Leave The Sidebar — to the street', to: 'street', dest: { x: 28, y: 2 } }],
     npcs: [
       { id: 'sidebar_host', name: 'B.A.R.T., Robotic Butler & Bartender', x: 5, y: 2,
         look: { robotButler: true },
@@ -238,7 +251,7 @@ export const ZONES = {
           type: 'opendesk', x, y, deskId, seat: { x, y: y + 1 }, occupant: null, monitors: () => 1,
           interact: { label: (prop) => prop.occupant ? `Open desk ${deskId} — ${prop.occupant}` : `Open desk ${deskId} — Sit down`, action: 'desk_sit' },
         })),
-      { type: 'bookshelf', x: 16, y: 1, full: () => true,
+      { type: 'bookshelf', x: 16, y: 1, full: () => true, label: 'FIRM LIBRARY',
         interact: { label: 'Firm Library — Rule Library', action: 'rules' } },
       { type: 'noticeboard', x: 4, y: 0 },
       { type: 'wallclock', x: 9, y: 0 },
@@ -249,7 +262,42 @@ export const ZONES = {
     ],
     portals: [
       { x: 17, y: 6, label: 'Main Office', to: 'office', dest: { x: 12, y: 7 } },
-      { x: 9, y: 12, label: 'Leave the Associates’ Floor', travel: true },
+      { x: 9, y: 12, label: 'Leave the Associates’ Floor — to the street', to: 'street', dest: { x: 4, y: 2 } },
+    ],
+    npcs: [],
+  },
+
+  // ------------------------------------------------------------------ STREET
+  // A long, shallow sidewalk that reads side-on: facades along the top row,
+  // the road below. Every building door is a portal in front of its doorway.
+  street: {
+    id: 'street',
+    name: 'Juris Avenue',
+    w: 32, h: 6,
+    outdoor: true,
+    spawn: { x: 4, y: 2 },
+    tile(x, y) {
+      return y <= 3 ? 'p' : 'a';
+    },
+    props: [
+      { type: 'facade', x: 2, y: 0, style: 'office' },
+      { type: 'facade', x: 10, y: 0, style: 'apartment' },
+      { type: 'facade', x: 18, y: 0, style: 'court' },
+      { type: 'facade', x: 26, y: 0, style: 'sidebar' },
+      { type: 'lamppost', x: 8, y: 2 },
+      { type: 'lamppost', x: 16, y: 2 },
+      { type: 'lamppost', x: 24, y: 2 },
+      { type: 'tree', x: 0, y: 2 },
+      { type: 'tree', x: 31, y: 2 },
+      { type: 'planter', x: 7, y: 1 },
+      { type: 'planter', x: 15, y: 1 },
+      { type: 'planter', x: 23, y: 1 },
+    ],
+    portals: [
+      { x: 4, y: 1, label: 'Hardsell & Firestone — Law Office', to: 'office', dest: { x: 6, y: 11 } },
+      { x: 12, y: 1, label: 'Apartments — Your Apartment', to: 'apartment', dest: { x: 4, y: 8 } },
+      { x: 20, y: 1, label: 'Courthouse', to: 'courtroom', dest: { x: 6, y: 10 } },
+      { x: 28, y: 1, label: 'The Sidebar — Local Lounge', to: 'sidebar', dest: { x: 7, y: 11 } },
     ],
     npcs: [],
   },
@@ -273,7 +321,7 @@ export const ZONES = {
       { type: 'stove', x: 5, y: 1, visible: () => hasUpgrade('kitchen'),
         interact: { label: 'Kitchen — Cook Meal (5 gold / +30 Ethics)', action: 'cook_meal' } },
       { type: 'fridge', x: 7, y: 1, visible: () => hasUpgrade('kitchen') },
-      { type: 'coffeemachine', x: 8, y: 2, owned: () => hasUpgrade('coffee'),
+      { type: 'coffeemachine', x: 8, y: 1, owned: () => hasUpgrade('coffee'),
         interact: { label: 'Coffee Machine', action: 'flavor_coffee' } },
       { type: 'wardrobe', x: 1, y: 5, expanded: () => hasUpgrade('wardrobe_rack'), interact: { label: 'Wardrobe', action: 'wardrobe' } },
       { type: 'cabinet', x: 1, y: 4,
@@ -282,11 +330,16 @@ export const ZONES = {
       { type: 'wallwindow', x: 3, y: 0, visible: () => hasUpgrade('cityview') },
       { type: 'sofa', x: 4, y: 5, visible: () => hasUpgrade('cityview'),
         interact: { label: 'Couch — Sit and Enjoy the City View', action: 'watch_tv' } },
-      { type: 'plant', x: 2, y: 6 },
+      { type: 'plant', x: 1, y: 7 },
     ],
     portals: [
-      { x: 4, y: 8, label: 'Leave the Apartment', travel: true },
+      { x: 4, y: 8, label: 'Leave the Apartment — to the street', to: 'street', dest: { x: 12, y: 2 } },
     ],
-    npcs: [],
+    npcs: [
+      // The adopted pet wanders the apartment once `adopt_pet` has run.
+      { id: 'pet', get name() { return state.pet?.name || 'Pet'; }, x: 6, y: 6,
+        look: () => ({ pet: state.pet }), talk: 'pet', wander: true, speed: 2,
+        visible: () => !!state.pet },
+    ],
   },
 };

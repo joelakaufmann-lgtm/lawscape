@@ -1,6 +1,6 @@
 # LawScape Roadmap
 
-Updated October 29, 2026 · Release 0.7.0 · Direction: Astra Plan v1.4
+Updated October 29, 2026 · Release 0.8.0 · Direction: Astra Plan v1.4
 
 Legal learning should be fun, including learning how attorneys in different
 jurisdictions approach the same dilemma. LawScape puts that learning inside
@@ -11,7 +11,8 @@ and room chat are the next major work. The local release stays single-player.
 
 ## Available now — local firm apprenticeship
 
-- Seven isometric rooms: the main office, Jim and Linda's offices, the
+- Nine isometric locations: the main office, Jim and Linda's offices, the
+  Associates' Floor, Juris Avenue, the
   conference room, apartment, courtroom, and **The Sidebar** lounge.
 - **Derek Balam, Bailiff**: a uniformed courtroom NPC with a badge and
   conversation. The Honorable A.I. sleeps in a high-backed judicial chair behind
@@ -47,10 +48,17 @@ and room chat are the next major work. The local release stays single-player.
   commons, evidence/writing tables and an AI & agents table. Topic drafts save
   in the current browser. No shared messages, live agents, other-player
   presence, or network transport exists. Drafts will never auto-send later.
-- 171 ethics questions: 20 California, 33 New York, 69 US MPRE-style,
-  28 England & Wales SQE-style and all 21 original dilemmas. Question packs
-  open directly from Firm jurisdictions. Source-review limits are recorded in
-  the [catalog](docs/JURISDICTIONS.md); references remain available on the shelf.
+- 196 ethics questions: 20 California, 33 New York, 25 Canada, 69 US MPRE-style,
+  28 England & Wales SQE-style and all 21 original dilemmas. New attorneys start
+  on the originals; question packs open directly from Firm jurisdictions.
+  Source-review limits are recorded in the [catalog](docs/JURISDICTIONS.md);
+  references remain available on the shelf.
+- **Juris Avenue:** a walkable street joining the law office, the apartments,
+  the courthouse and The Sidebar, shared online. Travel stays as a shortcut.
+- Wardrobe jewelry and accessories, formal wear behind the Wardrobe Rack, an
+  earned barrister's wig, an office espresso machine, adoptable apartment pets,
+  a paid arcade cabinet, a streak gold multiplier and an impaired-at-work
+  Ethics penalty (0.8.0).
 - Firm jurisdiction requests save locally and can become a player-reviewed
   GitHub issue draft. They are not a public request queue or approved packs.
 - Gold, upgrades, reward accessories, Ethics consequences and **full-reset
@@ -72,18 +80,19 @@ systems), select dated primary sources, author original dilemmas, review the
 answer key and test feedback before marking a pack available. Expand beyond this
 incomplete snapshot as LegalQuants join or identify missing jurisdictions.
 The present question packs remain distinct from full jurisdiction-specific firm curricula.
-Canada now has a local test pack; practitioner approval and a full continuing-matter curriculum remain pending.
+Canada is now a playable question pack; practitioner approval of its answer key and a full continuing-matter curriculum remain pending.
 
-## Planned — Canada: professional responsibility and practice skills
+## In progress — Canada: professional responsibility and practice skills
 
-**Status: local test implemented; Canadian practitioner review pending.** The
-pilot adds 25 multiple-choice questions and five email assignments to BarMail,
-with a [complete review package](canada-test/review.html) and
+**Status: 25 questions playable as a full pack (0.8.0); Canadian practitioner
+review of the answer key pending.** The pack adds 25 multiple-choice questions
+and five email assignments to BarMail, with a
+[complete review package](canada-test/review.html) and
 [HTML overview](canada-test/overview.html). It uses Ontario, British Columbia
 and Saskatchewan settings, explicit roles and forums, and linked primary sources.
-It remains an unreviewed pilot, not comprehensive Canadian coverage or a public
-release. Test responses have no Ethics, gold or streak effects and stay outside
-mixed practice. The continuing-matter engine remains future work.
+Questions pay gold, cost Ethics and join mixed practice like every pack; the
+inbox labels the review status. The email assignments remain ungraded. The
+continuing-matter engine remains future work.
 
 - **25 multiple-choice ethics questions in the local test:** across the
   proposal's five topics—Ontario staffing and professional roles; BC referrals,

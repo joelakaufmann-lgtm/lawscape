@@ -14,6 +14,16 @@ export const WHISKEY_SLOW_MS = 40_000;
 export const MONEYBAGS_SAFE_GOLD = 6_000;
 export const MONEYBAGS_ETHICS_DAMAGE = 99;
 export const MONEYBAGS_GRACE_PURCHASES = 2;
+export const ARCADE_PLAY_COST = 5;
+export const ARCADE_ROUNDS_PER_PLAY = 3;
+export const ESPRESSO_ETHICS_RESTORE = 5;
+export const ESPRESSO_COOLDOWN_MS = 90_000;
+export const DRUNK_AT_WORK_ETHICS_DAMAGE = 10;
+// Arriving impaired at the firm or the courthouse costs Ethics; home, the
+// street and The Sidebar never do.
+export const DRUNK_PENALTY_ZONES = ['office', 'corner_office', 'linda_office', 'conference_room', 'associates', 'courtroom'];
+export const STREAK_GOLD_STEP = 0.1;
+export const STREAK_GOLD_CAP = 1.5;
 export const LAWYER_ASSISTANCE_PHONE = '866-828-0022';
 export const LAWYER_ASSISTANCE_URL = 'https://nvbar.org/for-lawyers/resources/wellbeing/lcl/';
 
@@ -38,6 +48,12 @@ export function rileyHintEligible(upgrades) {
 export function wrongAnswerDamage(wrongStreak, rileyHired = false) {
   const damage = wrongStreak >= 4 ? 60 : wrongStreak >= 2 ? 45 : 30;
   return rileyHired ? Math.ceil(damage / 2) : damage;
+}
+
+// Consecutive correct answers multiply question gold: x1.0, x1.1 … capped at
+// x1.5 from the sixth answer in a row. Rounded so 1.2 is 1.2, not 1.2000000000000002.
+export function streakMultiplier(streak) {
+  return Math.min(STREAK_GOLD_CAP, Math.round((1 + STREAK_GOLD_STEP * Math.max(0, streak - 1)) * 100) / 100);
 }
 
 export function moneybagsAuditTriggered(purchasesAfterTheft) {
